@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -33,12 +33,9 @@ def _local_reference() -> datetime:
         return datetime.now().astimezone()
 
 NOT_YET_IMPLEMENTED = {
-    "add": "Phase 1",
-    "calendars": "Phase 1",
     "account": "Phase 1b",
     "sync": "Phase 1",
     "watch": "Phase 1",
-    "doctor": "Phase 1",
 }
 
 
@@ -85,6 +82,147 @@ def cmd_agenda(args) -> int:
     for event in agenda["events"]:
         print(_fmt_event_line(event))
     return 0
+
+
+def _iso8601_to_timedelta(text: str):
+    import re
+    from datetime import timedelta
+
+    m = re.fullmatch(r"(-)?P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?", text)
+    if not m:
+        raise ValueError(f"not an ISO 8601 duration: {text}")
+    sign = -1 if m.group(1) else 1
+    days, hours, minutes, seconds = (int(g or 0) for g in m.groups()[1:])
+    return sign * timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+
+
+def _build_ics(result: dict):
+    import icalendar
+    import uuid
+    from datetime import date as date_cls, datetime as dt_cls
+    from zoneinfo import ZoneInfo
+
+    cal = icalendar.Calendar()
+    cal.add("prodid", "-//Omagenda//EN")
+    cal.add("version", "2.0")
+
+    event = icalendar.Event()
+    uid = f"{uuid.uuid4()}@omagenda"
+    event.add("uid", uid)
+    event.add("summary", result["title"] or "Untitled")
+    now = dt_cls.now().astimezone()
+    event.add("dtstamp", now)
+    event.add("created", now)
+    event.add("sequence", 0)
+    if result["location"]:
+        event.add("location", result["location"])
+
+    if result["allDay"]:
+        start = date_cls.fromisoformat(result["start"])
+        end = date_cls.fromisoformat(result.get("end") or result["start"])
+        if end <= start:
+            end = start + timedelta(days=1)
+        event.add("dtstart", start)
+        event.add("dtend", end)
+    else:
+        tz = ZoneInfo(result["tz"]) if result["tz"] else None
+        start = dt_cls.fromisoformat(result["start"])
+        end = dt_cls.fromisoformat(result["end"])
+        if tz:
+            start, end = start.replace(tzinfo=tz), end.replace(tzinfo=tz)
+        event.add("dtstart", start)
+        event.add("dtend", end)
+
+    if result["rrule"]:
+        parts = dict(p.split("=", 1) for p in result["rrule"].split(";"))
+        event.add("rrule", parts)
+
+    for alarm in result["alarms"]:
+        valarm = icalendar.Alarm()
+        valarm.add("action", "DISPLAY")
+        valarm.add("description", result["title"] or "Reminder")
+        valarm.add("trigger", _iso8601_to_timedelta(alarm))
+        event.add_component(valarm)
+
+    cal.add_component(event)
+    return cal, uid
+
+
+def cmd_calendars(args) -> int:
+    from omagenda.vdir import discover_calendars
+    from omagenda.doctor import read_config
+
+    calendars = discover_calendars()
+    config = read_config()
+    if args.json:
+        print(json.dumps({"calendars": calendars, "defaultCalendar": config.get("default_calendar")}))
+        return 0
+    if not calendars:
+        print("No calendars found. Create one under ~/.local/share/calendars/<name>/.")
+        return 0
+    default = config.get("default_calendar")
+    for cal in calendars:
+        marker = " (default)" if cal["id"] == default else ""
+        ro = " [read-only]" if cal["readOnly"] else ""
+        print(f"{cal['id']:20s} {cal['name']:20s} {cal['color']}{ro}{marker}")
+    return 0
+
+
+def cmd_add(args) -> int:
+    from omagenda.parse import parse_event
+    from omagenda.vdir import discover_calendars, write_event_ics
+    from omagenda.doctor import read_config
+    from omagenda.index import index as reindex
+
+    reference = _local_reference()
+    calendars = discover_calendars()
+    if not calendars:
+        return _fail("no calendars found under the vdir; create one under ~/.local/share/calendars/<name>/ first")
+    known = [c["id"] for c in calendars]
+    result = parse_event(args.sentence, reference=reference, known_calendars=known)
+
+    target_id = args.calendar or result["calendar"] or read_config().get("default_calendar") or calendars[0]["id"]
+    target = next((c for c in calendars if c["id"] == target_id), None)
+    if target is None:
+        return _fail(f"no calendar named '{target_id}' (have: {', '.join(known)})")
+    if target["readOnly"]:
+        return _fail(f"'{target_id}' is read-only")
+
+    cal, uid = _build_ics(result)
+
+    if args.dry_run:
+        payload = {"wouldWrite": True, "calendar": target["id"], "uid": uid, "event": result}
+        if args.json:
+            print(json.dumps(payload))
+        else:
+            when = result["start"] if result["allDay"] else f"{result['start']}-{result['end'][11:]}"
+            print(f"Would add '{result['title']}' to {target['id']}: {when} (dry run, not written)")
+        return 0
+
+    path = write_event_ics(target["path"], cal, uid=uid)
+    reindex()
+    if args.json:
+        print(json.dumps({"file": str(path), "calendar": target["id"], "event": result}))
+    else:
+        print(f"Added '{result['title']}' to {target['id']} ({path.name})")
+    for warning in result["warnings"]:
+        print(f"  ! {warning}")
+    return 0
+
+
+def cmd_doctor(args) -> int:
+    from omagenda.doctor import run
+
+    report = run()
+    if args.json:
+        print(json.dumps(report))
+        return 0
+    all_ok = True
+    for name, check in report.items():
+        marker = "ok" if check["ok"] else "!!"
+        all_ok = all_ok and check["ok"]
+        print(f"[{marker}] {name}: {check['detail']}")
+    return 0 if all_ok else 1
 
 
 def cmd_parse(args) -> int:
@@ -152,6 +290,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_parse.add_argument("sentence")
     p_parse.add_argument("--json", action="store_true")
     p_parse.set_defaults(func=cmd_parse)
+
+    p_add = sub.add_parser("add", help="parse a sentence and write the event")
+    p_add.add_argument("sentence")
+    p_add.add_argument("--calendar", default=None)
+    p_add.add_argument("--dry-run", action="store_true")
+    p_add.add_argument("--json", action="store_true")
+    p_add.set_defaults(func=cmd_add)
+
+    p_calendars = sub.add_parser("calendars", help="vdir discovery, colors, sets")
+    p_calendars.add_argument("--json", action="store_true")
+    p_calendars.set_defaults(func=cmd_calendars)
+
+    p_doctor = sub.add_parser("doctor", help="dependencies, vdir, sync tool, keyring, plugin enabled")
+    p_doctor.add_argument("--json", action="store_true")
+    p_doctor.set_defaults(func=cmd_doctor)
 
     for name, phase in NOT_YET_IMPLEMENTED.items():
         placeholder = sub.add_parser(name, help=f"not yet implemented ({phase})")
