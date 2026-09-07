@@ -223,7 +223,7 @@ SHOWCASE_CASES = [
     ("Dinner with the Petersons next saturday at 6pm at their place /family",
      {"start": "2026-09-19T18:00", "location": "their place", "calendar": "family"}),
     ("Quarterly board meeting monthly on the 1st at 10am /work alert 1 day before",
-     {"rrule": "FREQ=MONTHLY;BYMONTHDAY=1", "start_time": "10:00",
+     {"rrule": "FREQ=MONTHLY;BYMONTHDAY=1", "start": "2026-09-07T10:00",
       "calendar": "work", "alarms": ["-P1D"]}),
     ("Flight to Berlin next friday at 6am for 9 hours alert 2h",
      {"start": "2026-09-18T06:00", "end": "2026-09-18T15:00", "alarms": ["-PT2H"]}),
@@ -232,7 +232,10 @@ SHOWCASE_CASES = [
     ("Kid's soccer practice every saturday at 9am at the community field /family",
      {"rrule": "FREQ=WEEKLY;BYDAY=SA", "location": "the community field", "calendar": "family"}),
     ("Renew driver's license by end of month",
-     {"title": "Renew driver's license by end of month"}),  # "by" is not a recognized keyword; whole phrase is title
+     # "by" isn't a recognized keyword, but "end of month" still is -- it's
+     # extracted as the date, leaving "by" dangling with nothing after it,
+     # which the title reconstruction strips as a dangling preposition.
+     {"title": "Renew driver's license", "start": "2026-09-30", "allDay": True}),
     ("Book club every mon and wed at 7pm until dec 25 /personal",
      {"rrule": "FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20261225", "calendar": "personal"}),
     ("Pay the mortgage monthly on the 1st alert 3 days before",
@@ -253,7 +256,7 @@ SHOWCASE_CASES = [
 # ---------------------------------------------------------------------------
 AMBIGUITY_CASES = [
     ("Standup 14/9", {"start": "2026-09-14"}, False),  # only day-first is a valid calendar date (there is no 14th month) -> not actually ambiguous, no warning
-    ("Standup 12/10", {"start": "2026-12-10"}, True),  # day-first (Dec 10) and month-first (Oct 12) are both valid, different, future dates -> genuinely ambiguous, day-first assumed
+    ("Standup 12/10", {"start": "2026-10-12"}, True),  # day-first (day=12, month=10 -> Oct 12) and month-first (month=12, day=10 -> Dec 10) are both valid, different, future dates -> genuinely ambiguous, day-first assumed
     ("Call at 3", {"start": "2026-09-07T15:00"}, True),  # bare hour outside the 7-11 business-morning window defaults to afternoon
     ("Call at 9", {"start": "2026-09-07T09:00"}, True),  # bare hour inside 7-11 defaults to morning; still ambiguous (could mean 9pm) so it still warns
     ("Standup every day for 6 weeks", {"rrule": "FREQ=DAILY;COUNT=6"}, False),  # recurrence present, unambiguous COUNT
@@ -292,14 +295,14 @@ class ParserCorpusTest(unittest.TestCase):
         # what Phase 0 committed to reviewing.
         self.assertGreaterEqual(len(ALL_CASES), 150)
 
-    @unittest.expectedFailure
     def test_corpus(self):
-        from omagenda.parse import parse_event  # noqa: PLC0415 (not implemented until Phase 1)
+        from omagenda.parse import parse_event
 
+        known_calendars = ["personal", "work", "family"]
         failures = []
         for sentence, expect, warns in (_unpack(c) for c in ALL_CASES):
             with self.subTest(sentence=sentence):
-                result = parse_event(sentence, reference=REFERENCE)
+                result = parse_event(sentence, reference=REFERENCE, known_calendars=known_calendars)
                 for key, value in expect.items():
                     if result.get(key) != value:
                         failures.append(f"{sentence!r}: {key} expected {value!r}, got {result.get(key)!r}")

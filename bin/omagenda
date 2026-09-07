@@ -16,8 +16,21 @@ import json
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+
+def _local_reference() -> datetime:
+    """`datetime.now()` in a real named IANA zone, not a bare UTC-offset
+    tzinfo -- `.astimezone()` alone gives the latter, which has no `.key`
+    for the parser's "local zone" default to read."""
+    try:
+        target = Path("/etc/localtime").resolve()
+        name = str(target.relative_to("/usr/share/zoneinfo"))
+        return datetime.now(ZoneInfo(name))
+    except (OSError, ValueError):
+        return datetime.now().astimezone()
 
 NOT_YET_IMPLEMENTED = {
     "add": "Phase 1",
@@ -74,6 +87,33 @@ def cmd_agenda(args) -> int:
     return 0
 
 
+def cmd_parse(args) -> int:
+    from omagenda.parse import parse_event
+    from omagenda.vdir import discover_calendars
+
+    reference = _local_reference()
+    known = [c["id"] for c in discover_calendars()]
+    result = parse_event(args.sentence, reference=reference, known_calendars=known)
+    result["ok"] = True
+    if args.json:
+        print(json.dumps(result))
+        return 0
+    print(f"{result['title']}")
+    when = result["start"] if result["allDay"] else f"{result['start']} - {result.get('end', '')}"
+    print(f"  when: {when}")
+    if result["calendar"]:
+        print(f"  calendar: {result['calendar']}")
+    if result["location"]:
+        print(f"  location: {result['location']}")
+    if result["rrule"]:
+        print(f"  repeats: {result['rrule']}")
+    if result["alarms"]:
+        print(f"  alarms: {', '.join(result['alarms'])}")
+    for warning in result["warnings"]:
+        print(f"  ! {warning}")
+    return 0
+
+
 def cmd_next(args) -> int:
     from omagenda.index import build_agenda
 
@@ -108,14 +148,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_next.add_argument("--json", action="store_true")
     p_next.set_defaults(func=cmd_next)
 
+    p_parse = sub.add_parser("parse", help="parsed event, no write")
+    p_parse.add_argument("sentence")
+    p_parse.add_argument("--json", action="store_true")
+    p_parse.set_defaults(func=cmd_parse)
+
     for name, phase in NOT_YET_IMPLEMENTED.items():
         placeholder = sub.add_parser(name, help=f"not yet implemented ({phase})")
         placeholder.add_argument("rest", nargs=argparse.REMAINDER)
         placeholder.set_defaults(func=None, phase=phase, name=name)
-
-    p_parse = sub.add_parser("parse", help="not yet implemented (Phase 1)")
-    p_parse.add_argument("rest", nargs=argparse.REMAINDER)
-    p_parse.set_defaults(func=None, phase="Phase 1", name="parse")
 
     return parser
 
