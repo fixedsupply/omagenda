@@ -34,7 +34,6 @@ def _local_reference() -> datetime:
 
 NOT_YET_IMPLEMENTED = {
     "account": "Phase 1b",
-    "sync": "Phase 1",
     "watch": "Phase 1",
 }
 
@@ -225,6 +224,26 @@ def cmd_doctor(args) -> int:
     return 0 if all_ok else 1
 
 
+def cmd_sync(args) -> int:
+    from omagenda.sync import sync_all
+    from omagenda.index import index as reindex
+
+    results = sync_all()
+    reindex()
+    if args.json:
+        print(json.dumps(results))
+        return 0
+    if not results:
+        print("No accounts configured (see docs/sync-setup.md).")
+        return 0
+    all_ok = True
+    for account_id, result in results.items():
+        marker = "ok" if result["ok"] else "!!"
+        all_ok = all_ok and result["ok"]
+        print(f"[{marker}] {account_id}: {result['detail']}")
+    return 0 if all_ok else 1
+
+
 def cmd_parse(args) -> int:
     from omagenda.parse import parse_event
     from omagenda.vdir import discover_calendars
@@ -305,6 +324,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_doctor = sub.add_parser("doctor", help="dependencies, vdir, sync tool, keyring, plugin enabled")
     p_doctor.add_argument("--json", action="store_true")
     p_doctor.set_defaults(func=cmd_doctor)
+
+    p_sync = sub.add_parser("sync", help="runs pimsync/vdirsyncer or bridges if configured, then reindexes")
+    p_sync.add_argument("--json", action="store_true")
+    p_sync.set_defaults(func=cmd_sync)
 
     for name, phase in NOT_YET_IMPLEMENTED.items():
         placeholder = sub.add_parser(name, help=f"not yet implemented ({phase})")
