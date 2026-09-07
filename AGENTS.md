@@ -62,7 +62,7 @@ Deliver, committing after each:
 
 Done when: `omagenda account add google` on the PM's machine round-trips: an event created by Quick Add appears in Google within one sync, an edit on the phone appears in the panel within one sync, and the conflict path produces a `.conflict.ics` plus a notification. `omagenda account add icloud` produces a pimsync config that syncs the PM's family calendar.
 
-## Phase 2 — Up Next pill and DayTicker panel
+## Phase 2 — Up Next pill and agenda panel
 
 Read list: `ARCHITECTURE.md` §3, §4, §8, §9; then, whole: `/usr/share/omarchy/shell/plugins/panels/weather/BarWidget.qml`, `/usr/share/omarchy/shell/Ui/BarWidget.qml`, `/usr/share/omarchy/shell/Ui/PanelHero.qml`, `/usr/share/omarchy/shell/Ui/PanelSectionHeader.qml`; in ranges as needed: `/usr/share/omarchy/shell/plugins/panels/weather/Panel.qml` (open/close/keys/FileView/Process sections), `/usr/share/omarchy/shell/plugins/panels/clock/Panel.qml` (grid and today marking), `/usr/share/omarchy/shell/plugins/panels/clock/Model.js`, `/usr/share/omarchy/shell/Commons/Style.qml` (property list only), `/usr/share/omarchy/shell/Ui/Panel.qml`, `/usr/share/omarchy/shell/Ui/PopupCard.qml` (header only), `~/.config/omarchy/plugins/njpatel.omapager/Widget.qml` (visibility logic only).
 

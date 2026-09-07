@@ -12,7 +12,7 @@ omagenda/
   preview.png              # 16:9 screenshot used by plugin directories
   qml/
     BarWidget.qml          # Up Next pill; hosts Panel via Loader (pattern: panels/weather/BarWidget.qml)
-    Panel.qml              # DayTicker panel (pattern: panels/weather/Panel.qml, panels/clock/Panel.qml)
+    Panel.qml              # agenda panel (pattern: panels/weather/Panel.qml, panels/clock/Panel.qml)
     QuickAdd.qml           # overlay (pattern: plugins/reminders/ReminderFlow.qml)
     Service.qml            # headless: starts `omagenda watch`, owns the index FileView, exposes IPC
     Model.js               # pure functions: formatting, countdown, ticker layout, token highlighting

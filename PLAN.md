@@ -8,7 +8,7 @@ Status: planning, 2026-09-07. Product manager: Calvin Symes. Design and taste: C
 
 ## 1. The thesis in three sentences
 
-Fantastical earned its reputation before it was a full calendar app: version 1 was a menu-bar mini window and a text field that turned "Lunch with Sarah tomorrow at 1pm" into an event. Omarchy 4 now has exactly the place where that belongs, a single long-running shell with bar widgets, popup panels, and hotkey-summoned overlays, and nobody has built it. Omagenda is the calendar *layer* of the Omarchy desktop, not another calendar *window*: an Up Next pill in the bar, a keyboard-driven DayTicker panel, and a global-hotkey Quick Add that parses natural language and writes real `.ics` files.
+Fantastical earned its reputation before it was a full calendar app: version 1 was a menu-bar mini window and a text field that turned "Lunch with Sarah tomorrow at 1pm" into an event. Omarchy 4 now has exactly the place where that belongs, a single long-running shell with bar widgets, popup panels, and hotkey-summoned overlays, and nobody has built it. Omagenda is the calendar *layer* of the Omarchy desktop, not another calendar *window*: an Up Next pill in the bar, a keyboard-driven agenda panel, and a global-hotkey Quick Add that parses natural language and writes real `.ics` files.
 
 ## 2. Why not another calendar app
 
@@ -30,6 +30,10 @@ The gap is precise: **nothing in the shell can create an event, and nothing anyw
 
 One-line pitch for the README: *"Type a sentence, get an event. What's next, always in the bar. Themed like the rest of your desktop, stored as plain `.ics` files you own."*
 
+## 3a. Naming and Fantastical
+
+"Fantastical" and "DayTicker" are Flexibits' names. Omagenda uses the former once, descriptively, in the README ("inspired by Fantastical's original menu-bar app") with a note that Omagenda is not affiliated with or endorsed by Flexibits, and never in the product name, plugin id, tagline, or keywords. Our surfaces are the *pill*, the *agenda panel* with its *ticker strip*, and *Quick Add*. No Flexibits icons, screenshots, marketing copy, or code are reused anywhere.
+
 ## 4. Design principles (the taste bar)
 
 These are the tiebreakers for any decision the implementer faces.
@@ -47,9 +51,9 @@ These are the tiebreakers for any decision the implementer faces.
 
 | Fantastical | Verdict | Omagenda translation |
 |---|---|---|
-| Menu bar mini window | **Keep, this is the product** | Up Next pill in the bar + DayTicker panel anchored to it, also summoned by hotkey (`omarchy-shell shell toggle <id>`) |
+| Menu bar mini window | **Keep, this is the product** | Up Next pill in the bar + agenda panel anchored to it, also summoned by hotkey (`omarchy-shell shell toggle <id>`) |
 | Natural language event entry with live highlighting | **Keep, this is the product** | Quick Add overlay (like the Reminders and Emoji overlays), global hotkey, tokens light up in the accent color as you type, preview card shows the parsed event |
-| DayTicker (horizontal day strip + list below) | Keep | Seven-day strip of date pills with event dots, agenda for the selected day beneath it |
+| DayTicker (horizontal day strip + list below) | Keep, renamed | Seven-day "ticker" strip of date pills with event dots, agenda for the selected day beneath it |
 | Up Next with countdown | Keep | Pill text: `Standup · 12m`; header of the panel: hero with title, time, and Join |
 | Calendar Sets | Keep, simplified | Named sets in `shell.json`; switch with number keys in the panel or `omagenda set work`; optional per-set default calendar for Quick Add |
 | Conference call detection and Join | Keep | Regex over location, description, `CONFERENCE`, and `X-GOOGLE-CONFERENCE` for Meet, Zoom, Teams, Webex, Jitsi, Whereby; Join opens the browser and appears on the notification |
@@ -71,7 +75,7 @@ These are the tiebreakers for any decision the implementer faces.
 - Left click: open the panel. Right click: Quick Add. Middle click: sync now. Scroll: nothing, on purpose.
 - Sits to the left or right of the clock in whichever section the user prefers; never replaces the clock, so it composes with the stock clock, tmn73's, or a clone.
 
-### 6.2 DayTicker panel
+### 6.2 agenda panel
 
 Composition, top to bottom, following `panels/weather/Panel.qml` and `panels/clock/Panel.qml`:
 
@@ -146,7 +150,7 @@ Why this split: Apple and every self-hosted service speak CalDAV, and pimsync al
 
 ## 8. Scope
 
-**v1 must**: vdir reader with recurrence expansion; agenda index; Up Next pill; DayTicker panel with keyboard navigation; Quick Add with live highlighting and deterministic parser; write `.ics`; `omagenda` CLI with `--json`; Google bridge with two-way sync; iCloud and generic CalDAV through a pimsync config written by `omagenda account add`; alarms via notifications; Join detection; theme-native colors; `doctor`; README with screenshots; `omarchy plugin validate` clean.
+**v1 must**: vdir reader with recurrence expansion; agenda index; Up Next pill; agenda panel with keyboard navigation; Quick Add with live highlighting and deterministic parser; write `.ics`; `omagenda` CLI with `--json`; Google bridge with two-way sync; iCloud and generic CalDAV through a pimsync config written by `omagenda account add`; alarms via notifications; Join detection; theme-native colors; `doctor`; README with screenshots; `omarchy plugin validate` clean.
 
 **v1 should**: Microsoft bridge; calendar sets; templates; ICS subscriptions; OmaCal read-only merge; `SKILL.md`.
 
@@ -161,7 +165,7 @@ Prices are Anthropic API rates at 2026-09-07 (Claude Code usage credits bill at 
 | 0 | Repo scaffold, manifest, parser grammar doc, 150-sentence test corpus, fixtures | Sonnet 5 (or Grok) | 3–6 |
 | 1 | Python core: vdir, recurrence, index, CLI, parser green, pimsync configuration for iCloud/CalDAV | Sonnet 5; escalate the parser to Opus 5 only if it stalls | 10–20 |
 | 1b | Google bridge: OAuth, incremental two-way sync, JSON↔VEVENT, keyring | Sonnet 5 for the mapping, Opus 5 for the sync state machine if it stalls | 10–18 |
-| 2 | QML: Up Next pill + DayTicker panel, keyboard nav, theme-native | Opus 5 | 15–30 |
+| 2 | QML: Up Next pill + agenda panel, keyboard nav, theme-native | Opus 5 | 15–30 |
 | 3 | QML: Quick Add overlay with live highlighting, templates | Opus 5 | 10–20 |
 | 4 | `watch` alarms, Join, sets, doctor, README, screenshots, publish | Sonnet 5 | 5–10 |
 | 5 | Microsoft bridge on the Phase 1b interface | Sonnet 5 | 8–15 |
