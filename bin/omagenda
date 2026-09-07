@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -34,7 +36,6 @@ def _local_reference() -> datetime:
 
 NOT_YET_IMPLEMENTED = {
     "account": "Phase 1b",
-    "watch": "Phase 1",
 }
 
 
@@ -83,18 +84,6 @@ def cmd_agenda(args) -> int:
     return 0
 
 
-def _iso8601_to_timedelta(text: str):
-    import re
-    from datetime import timedelta
-
-    m = re.fullmatch(r"(-)?P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?", text)
-    if not m:
-        raise ValueError(f"not an ISO 8601 duration: {text}")
-    sign = -1 if m.group(1) else 1
-    days, hours, minutes, seconds = (int(g or 0) for g in m.groups()[1:])
-    return sign * timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
-
-
 def _build_ics(result: dict):
     import icalendar
     import uuid
@@ -140,7 +129,8 @@ def _build_ics(result: dict):
         valarm = icalendar.Alarm()
         valarm.add("action", "DISPLAY")
         valarm.add("description", result["title"] or "Reminder")
-        valarm.add("trigger", _iso8601_to_timedelta(alarm))
+        from omagenda.alarms import parse_trigger
+        valarm.add("trigger", parse_trigger(alarm))
         event.add_component(valarm)
 
     cal.add_component(event)
@@ -222,6 +212,80 @@ def cmd_doctor(args) -> int:
         all_ok = all_ok and check["ok"]
         print(f"[{marker}] {name}: {check['detail']}")
     return 0 if all_ok else 1
+
+
+def _acquire_watch_lock():
+    """A single `watch` instance at a time, released automatically if the
+    process dies (flock, not a PID file, so a crash never leaves a stale
+    lock behind)."""
+    import fcntl
+
+    from omagenda.index import resolve_state_dir
+
+    state_dir = resolve_state_dir()
+    state_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = state_dir / "watch.lock"
+    lock_file = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        return None
+    lock_file.write(str(os.getpid()))
+    lock_file.flush()
+    return lock_file
+
+
+def _wait_for_vdir_change(vdir_root, poll_seconds: int = 15) -> None:
+    """Block until the vdir changes, or `poll_seconds` pass. Prefers
+    inotifywait (inotify-tools); falls back to plain polling when it's
+    missing, per AGENTS.md's Phase 1 brief."""
+    import shutil
+    import time
+
+    inotifywait = shutil.which("inotifywait")
+    if inotifywait:
+        subprocess.run(
+            # close_write, not modify: a plain metadata touch or an
+            # in-progress write triggers neither MODIFY reliably nor what
+            # we actually want, which is "a file finished being written".
+            # Matches the event set Omarchy's own plugin-reload watcher
+            # uses (ps shows it live: inotifywait -e close_write,create,
+            # delete,move on ~/.config/omarchy/plugins).
+            [inotifywait, "-r", "-q", "-t", str(poll_seconds),
+             "-e", "close_write,create,delete,move", str(vdir_root)],
+            capture_output=True,
+        )
+    else:
+        time.sleep(poll_seconds)
+
+
+def cmd_watch(args) -> int:
+    from omagenda.alarms import check_and_fire
+    from omagenda.index import build_agenda, write_agenda
+    from omagenda.vdir import resolve_vdir_root
+
+    lock = _acquire_watch_lock()
+    if lock is None:
+        return _fail("another 'omagenda watch' is already running")
+
+    vdir_root = resolve_vdir_root()
+    print(f"omagenda watch: watching {vdir_root}", file=sys.stderr)
+    try:
+        while True:
+            # A single malformed .ics file (a half-finished sync write, a
+            # hand-edit gone wrong) must never take the whole long-running
+            # watcher down with it -- log it and keep watching, so the
+            # user's next fix or the next sync gets picked up normally.
+            try:
+                agenda = build_agenda(vdir_root, days=args.days)
+                write_agenda(agenda)
+                check_and_fire(agenda)
+            except Exception as exc:  # noqa: BLE001 -- see comment above
+                print(f"omagenda watch: reindex failed, will retry: {exc}", file=sys.stderr)
+            _wait_for_vdir_change(vdir_root, poll_seconds=args.poll_seconds)
+    except KeyboardInterrupt:
+        return 0
 
 
 def cmd_sync(args) -> int:
@@ -328,6 +392,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync = sub.add_parser("sync", help="runs pimsync/vdirsyncer or bridges if configured, then reindexes")
     p_sync.add_argument("--json", action="store_true")
     p_sync.set_defaults(func=cmd_sync)
+
+    p_watch = sub.add_parser("watch", help="long-running: reindex on vdir changes, fire alarms")
+    p_watch.add_argument("--days", type=int, default=14)
+    p_watch.add_argument("--poll-seconds", type=int, default=15)
+    p_watch.set_defaults(func=cmd_watch)
 
     for name, phase in NOT_YET_IMPLEMENTED.items():
         placeholder = sub.add_parser(name, help=f"not yet implemented ({phase})")

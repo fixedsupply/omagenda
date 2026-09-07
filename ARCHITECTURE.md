@@ -48,7 +48,7 @@ omagenda/
     sync-setup.md          # pimsync / vdirsyncer recipes for Fastmail, iCloud, Nextcloud, Google
 ```
 
-No build step. Installation is `omarchy plugin add <git-url>` plus `omarchy pkg add python-icalendar python-dateutil python-recurring-ical-events pimsync libsecret` (vdirsyncer is honored if already installed). `omagenda doctor` verifies all of it.
+No build step. Installation is `omarchy plugin add <git-url>` plus `omarchy pkg add python-icalendar python-dateutil python-recurring-ical-events pimsync libsecret inotify-tools` (vdirsyncer is honored if already installed). `inotify-tools` is optional -- `omagenda watch` falls back to a 15s poll without it, at the cost of latency and a little battery. `omagenda doctor` verifies all of it.
 
 ## 2. Manifest
 
