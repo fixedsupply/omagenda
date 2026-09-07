@@ -51,16 +51,28 @@ def _sync_ics(account: dict, vdir_root: Path) -> dict:
 
 
 def _sync_caldav(account: dict) -> dict:
+    from omagenda.accounts import pimsync_config_path
+
     tool = account.get("sync", "pimsync")
     binary = shutil.which(tool)
     if not binary:
         return {"ok": False, "detail": f"{tool} not found on PATH (omarchy pkg add {tool})"}
-    config_name = f"omagenda-{account['id']}"
+
+    config_path = pimsync_config_path(account["id"])
+    if not config_path.exists():
+        return {"ok": False, "detail": f"no pimsync config at {config_path}; run 'omagenda account add' again"}
+
     try:
-        # Placeholder invocation -- Phase 1b writes the real pimsync config
-        # and confirms this shape against `man pimsync` on a machine that
-        # has it installed.
-        result = subprocess.run([binary, "sync", config_name], capture_output=True, text=True, timeout=120)
+        # Verbatim against pimsync.conf(5) and pimsync(1): `pimsync -c
+        # <configfile> sync [pair...]`. accounts.generate_pimsync_config
+        # names the pair after the account id (sanitized), which is also
+        # the only pair this config file defines.
+        from omagenda.accounts import _safe_pair_name
+
+        result = subprocess.run(
+            [binary, "-c", str(config_path), "sync", _safe_pair_name(account["id"])],
+            capture_output=True, text=True, timeout=120,
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"ok": False, "detail": f"{tool} failed to run: {exc}"}
     if result.returncode != 0:
