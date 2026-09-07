@@ -189,9 +189,7 @@ Resolved 2026-09-07 by the product manager:
 
 Done: the Google Cloud project and OAuth client (2026-09-07), stored in `.env.local` for Phase 1b.
 
-Open for the PM, not blocking:
-
-- Decide whether to register the Microsoft Entra app now so Phase 5 can start without waiting, or leave it until that phase is actually reached.
+Decided 2026-09-07: wait on the Microsoft Entra app registration until Phase 5 is actually reached, rather than doing it now.
 
 ## 11. Risks
 
