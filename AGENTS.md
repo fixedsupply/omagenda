@@ -22,6 +22,21 @@ The whole project has roughly USD 75 of model credit, and the plan already excee
 - Python: standard library first, type hints, no classes where a function will do, `pathlib` for paths, `zoneinfo` for zones.
 - Every CLI command supports `--json` and exits non-zero with a one-line error on failure.
 
+## Development environment
+
+The target machine installs `python-icalendar`, `python-dateutil`, and
+`python-recurring-ical-events` as Arch packages (per `ARCHITECTURE.md` §1),
+which needs root. A development session without sudo access can instead run:
+
+```
+python3 -m venv .venv
+source .venv/bin/activate
+pip install icalendar python-dateutil recurring-ical-events
+```
+
+`.venv/` is gitignored. Activate it before running `python -m unittest` or
+the CLI directly; nothing about the shipped code depends on a venv existing.
+
 ## Phase 0 — scaffold and corpus
 
 Read list: `PLAN.md`, `ARCHITECTURE.md`, `/usr/share/omarchy/shell/README.md` (manifest section only), `/usr/share/omarchy/shell/plugins/README.md`.
