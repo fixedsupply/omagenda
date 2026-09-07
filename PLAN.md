@@ -187,10 +187,11 @@ Resolved 2026-09-07 by the product manager:
 5. **Clock relationship**: separate pill beside the stock clock; no clock-replacement variant.
 6. **Model routing**: the phase table in §9.
 
+Done: the Google Cloud project and OAuth client (2026-09-07), stored in `.env.local` for Phase 1b.
+
 Open for the PM, not blocking:
 
-- Create the Google Cloud project and OAuth client (and later submit for verification) before Phase 1b starts.
-- Decide whether to register the Microsoft app now so Phase 5 can start without waiting.
+- Decide whether to register the Microsoft Entra app now so Phase 5 can start without waiting, or leave it until that phase is actually reached.
 
 ## 11. Risks
 
