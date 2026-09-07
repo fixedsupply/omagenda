@@ -1,0 +1,5 @@
+# Local-only credentials for development. Google does not treat a desktop-app
+# client secret as confidential (ARCHITECTURE.md §11), but it stays out of
+# git history until the PM deliberately commits it into bridges/google.py --
+# see docs/google-cloud-setup.md §5.
+.env.local
