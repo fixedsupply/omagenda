@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "fixedsupply.omagenda",
+  "name": "Omagenda",
+  "version": "0.1.0",
+  "author": "Calvin Symes",
+  "license": "MIT",
+  "description": "Type a sentence, get an event. What's next, always in the bar.",
+  "kinds": ["bar-widget", "overlay", "service"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "barWidget": "qml/BarWidget.qml",
+    "overlay": "qml/QuickAdd.qml",
+    "service": "qml/Service.qml"
+  },
+  "barWidget": {
+    "displayName": "Omagenda",
+    "description": "Next event with countdown; click for the agenda",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "defaults": {
+      "leadMinutes": 30,
+      "alwaysShow": false,
+      "showCountdown": true,
+      "days": 7,
+      "activeSet": "",
+      "defaultCalendar": "",
+      "timeFormat": "system"
+    },
+    "schema": [
+      { "key": "leadMinutes", "type": "integer", "label": "Show the pill this many minutes before an event", "min": 0, "max": 240, "step": 5, "defaultValue": 30 },
+      { "key": "alwaysShow", "type": "boolean", "label": "Always show the pill", "defaultValue": false },
+      { "key": "showCountdown", "type": "boolean", "label": "Countdown in the pill", "defaultValue": true },
+      { "key": "days", "type": "integer", "label": "Days in the ticker", "min": 3, "max": 14, "step": 1, "defaultValue": 7 },
+      { "key": "defaultCalendar", "type": "string", "label": "Calendar Quick Add writes to" },
+      { "key": "timeFormat", "type": "enum", "label": "Clock", "options": ["system", "24h", "12h"], "defaultValue": "system" }
+    ]
+  }
+}

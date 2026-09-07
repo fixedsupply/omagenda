@@ -3,3 +3,5 @@
 # git history until the PM deliberately commits it into bridges/google.py --
 # see docs/google-cloud-setup.md §5.
 .env.local
+__pycache__/
+*.pyc

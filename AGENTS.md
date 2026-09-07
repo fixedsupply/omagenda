@@ -33,7 +33,7 @@ Deliver:
 - `tests/test_parse.py` with a 150-sentence table: sentence, reference date, expected fields. Include the ambiguous cases with their intended resolution and expected warnings. Tests may be skipped (`@unittest.expectedFailure`) until Phase 1.
 - `tests/fixtures/vdir/` sample calendars as described in `ARCHITECTURE.md` §9.
 
-Done when: `omarchy plugin validate .` is clean, `python -m unittest` runs, `node --test tests/` runs, and the corpus reviewer (the PM) has skimmed the sentences.
+Done when: `omarchy plugin validate .` is clean, `python -m unittest` runs, `node --test 'tests/**/*.test.js'` runs (a bare directory throws MODULE_NOT_FOUND on this machine's Node 26), and the corpus reviewer (the PM) has skimmed the sentences.
 
 ## Phase 1 — Python core
 

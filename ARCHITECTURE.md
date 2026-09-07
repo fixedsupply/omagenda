@@ -271,7 +271,7 @@ IPC: `Service.qml` registers `IpcHandler { target: "omagenda" }` with `toggle`, 
 
 ```
 python -m unittest discover -s tests -v          # Python
-node --test tests/                               # Model.js + qmlformat smoke
+node --test 'tests/**/*.test.js'                  # Model.js + qmlformat smoke (a bare directory throws MODULE_NOT_FOUND on Node 26)
 omarchy plugin validate .                        # manifest
 omarchy-shell shell rescanPlugins                # hot reload after edits under ~/.config/omarchy/plugins/
 journalctl --user -f _COMM=quickshell            # QML errors and console.log

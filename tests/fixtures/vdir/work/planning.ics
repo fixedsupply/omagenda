@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Omagenda//Fixtures//EN
+BEGIN:VEVENT
+UID:planning-fixture@omagenda
+DTSTAMP:20260901T000000Z
+DTSTART;TZID=America/Edmonton:20260909T140000
+DTEND;TZID=America/Edmonton:20260909T150000
+SUMMARY:Sprint planning
+LOCATION:https://meet.google.com/abc-defg-hij
+X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij
+ATTENDEE:mailto:alice@example.com
+ATTENDEE:mailto:bob@example.com
+END:VEVENT
+END:VCALENDAR
