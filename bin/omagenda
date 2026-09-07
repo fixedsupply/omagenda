@@ -6,17 +6,128 @@ in place without installation) and dispatches subcommands: agenda, next,
 parse, add, calendars, account, sync, index, watch, doctor. See
 ARCHITECTURE.md §1 and PLAN.md §6.4.
 
-Not yet implemented: Phase 1 (see AGENTS.md).
+Every command accepts --json for machine output and exits non-zero with a
+one-line message on stderr on failure.
 """
+from __future__ import annotations
+
+import argparse
+import json
 import sys
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+NOT_YET_IMPLEMENTED = {
+    "add": "Phase 1",
+    "calendars": "Phase 1",
+    "account": "Phase 1b",
+    "sync": "Phase 1",
+    "watch": "Phase 1",
+    "doctor": "Phase 1",
+}
+
+
+def _fail(message: str) -> int:
+    print(f"omagenda: {message}", file=sys.stderr)
+    return 1
+
+
+def _fmt_event_line(event: dict) -> str:
+    if event["allDay"]:
+        when = event["start"]
+    else:
+        start_time = event["start"][11:16]
+        end_time = event["end"][11:16] if event["end"][:10] == event["start"][:10] else event["end"]
+        when = f"{event['start'][:10]} {start_time}–{end_time}"
+    bits = [when, event["title"]]
+    if event["location"]:
+        bits.append(f"@ {event['location']}")
+    return "  ".join(bits)
+
+
+def cmd_index(args) -> int:
+    from omagenda.index import index
+
+    path = index(days=args.days)
+    if args.json:
+        print(json.dumps({"path": str(path)}))
+    else:
+        print(f"Wrote {path}")
+    return 0
+
+
+def cmd_agenda(args) -> int:
+    from omagenda.index import build_agenda
+
+    start = date.fromisoformat(args.date_from) if args.date_from else date.today()
+    agenda = build_agenda(days=args.days, start=start)
+    if args.json:
+        print(json.dumps(agenda))
+        return 0
+    if not agenda["events"]:
+        print("Nothing on the agenda.")
+        return 0
+    for event in agenda["events"]:
+        print(_fmt_event_line(event))
+    return 0
+
+
+def cmd_next(args) -> int:
+    from omagenda.index import build_agenda
+
+    agenda = build_agenda(days=7, start=date.today())
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    upcoming = [e for e in agenda["events"] if e["allDay"] or e["end"] >= now]
+    event = upcoming[0] if upcoming else None
+    if args.json:
+        print(json.dumps(event))
+        return 0
+    print(_fmt_event_line(event) if event else "Nothing upcoming.")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="omagenda")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_index = sub.add_parser("index", help="rebuild agenda.json from the vdir")
+    p_index.add_argument("--days", type=int, default=14)
+    p_index.add_argument("--json", action="store_true")
+    p_index.set_defaults(func=cmd_index)
+
+    p_agenda = sub.add_parser("agenda", help="what the panel shows")
+    p_agenda.add_argument("--days", type=int, default=14)
+    p_agenda.add_argument("--from", dest="date_from", default=None)
+    p_agenda.add_argument("--set", dest="calendar_set", default=None)
+    p_agenda.add_argument("--json", action="store_true")
+    p_agenda.set_defaults(func=cmd_agenda)
+
+    p_next = sub.add_parser("next", help="what the pill shows")
+    p_next.add_argument("--json", action="store_true")
+    p_next.set_defaults(func=cmd_next)
+
+    for name, phase in NOT_YET_IMPLEMENTED.items():
+        placeholder = sub.add_parser(name, help=f"not yet implemented ({phase})")
+        placeholder.add_argument("rest", nargs=argparse.REMAINDER)
+        placeholder.set_defaults(func=None, phase=phase, name=name)
+
+    p_parse = sub.add_parser("parse", help="not yet implemented (Phase 1)")
+    p_parse.add_argument("rest", nargs=argparse.REMAINDER)
+    p_parse.set_defaults(func=None, phase="Phase 1", name="parse")
+
+    return parser
+
 
 def main(argv: list[str]) -> int:
-    print("omagenda: not yet implemented (Phase 1, see AGENTS.md)", file=sys.stderr)
-    return 1
+    args = build_parser().parse_args(argv)
+    if args.func is None:
+        return _fail(f"'{args.name}' is not yet implemented ({args.phase}, see AGENTS.md)")
+    try:
+        return args.func(args)
+    except Exception as exc:  # noqa: BLE001 -- CLI boundary: report, don't traceback
+        return _fail(str(exc))
 
 
 if __name__ == "__main__":

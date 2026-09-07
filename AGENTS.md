@@ -29,13 +29,18 @@ The target machine installs `python-icalendar`, `python-dateutil`, and
 which needs root. A development session without sudo access can instead run:
 
 ```
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv ~/.venvs/omagenda
+source ~/.venvs/omagenda/bin/activate
 pip install icalendar python-dateutil recurring-ical-events
 ```
 
-`.venv/` is gitignored. Activate it before running `python -m unittest` or
-the CLI directly; nothing about the shipped code depends on a venv existing.
+**Create the venv outside the repo**, not as `.venv/` inside it, even
+though that would be gitignored: this repo doubles as the actual plugin
+folder (it gets symlinked into `~/.config/omarchy/plugins/`), and
+`omarchy plugin validate` rejects the whole plugin if it finds *any*
+symlink anywhere underneath it -- which a venv always has (`lib64 -> lib`).
+Activate the external venv before running `python -m unittest` or the CLI
+directly; nothing about the shipped code depends on a venv existing.
 
 ## Phase 0 — scaffold and corpus
 
