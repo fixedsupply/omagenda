@@ -304,7 +304,21 @@ def cmd_sync(args) -> int:
     for account_id, result in results.items():
         marker = "ok" if result["ok"] else "!!"
         all_ok = all_ok and result["ok"]
-        print(f"[{marker}] {account_id}: {result['detail']}")
+        if "calendars" in result:
+            print(f"[{marker}] {account_id}:")
+            for cal_id, counts in result["calendars"].items():
+                cal_marker = "ok" if counts.get("ok", False) else "!!"
+                if "detail" in counts:
+                    print(f"  [{cal_marker}] {cal_id}: {counts['detail']}")
+                else:
+                    summary = (f"pulled {counts['pulled']}, created {counts['createdRemote']}, "
+                               f"updated {counts['updated']}, deleted {counts['deletedLocal']}"
+                               + (f", {counts['conflicts']} conflict(s)" if counts["conflicts"] else ""))
+                    print(f"  [{cal_marker}] {cal_id}: {summary}")
+                    for error in counts.get("errors", []):
+                        print(f"      ! {error}")
+        else:
+            print(f"[{marker}] {account_id}: {result.get('detail', '')}")
     return 0 if all_ok else 1
 
 
