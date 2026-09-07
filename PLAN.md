@@ -121,50 +121,78 @@ omagenda doctor                                        # dependencies, vdir, syn
 
 `skill/SKILL.md` describing the CLI so a Claude Code session can answer "what's on Thursday" and "add lunch with Sarah tomorrow at 1" through `omagenda --json`. Installable by copying into `~/.claude/skills/omagenda`.
 
-## 7. Data and sync
+## 7. Data, accounts, and sync
 
-- **Store**: vdir layout, `~/.local/share/calendars/<calendar>/<uid>.ics`, with the conventional `displayname` and `color` files. This is what vdirsyncer, pimsync, and khal use. Omagenda writes new events there and reads everything there.
-- **Sync**: delegated. `omagenda sync` runs `pimsync sync` or `vdirsyncer sync` when either is configured, otherwise it only reindexes. `omagenda doctor` explains how to set one up and links to a short guide for Fastmail, iCloud, Nextcloud, and generic CalDAV (all work today with app passwords).
-- **ICS subscriptions**: read-only URLs listed in the config, fetched during sync into their own vdir folder marked read-only.
-- **OmaCal bridge** (optional adapter): when `omacal` is on `PATH`, `agenda` can merge `omacal events list --json`, and `add` can route through `omacal events create`, so OmaCal users get Quick Add without setting up a second sync. Read-only merge is cheap; write routing is a stretch goal.
-- **Google**: the honest position. pimsync's native OAuth is still on its roadmap, and vdirsyncer needs the user to create their own OAuth client. v1 therefore supports Google through either the OmaCal bridge or vdirsyncer with the user's own client, documented step by step. A first-party Google path is a v2 decision, see §10.
+Decided 2026-09-07: Google, Apple, and Microsoft compatibility are all in scope, in that priority order. The design keeps one principle fixed and lets the account types vary around it.
+
+**The vdir is still the truth.** Every account, whatever its origin, is mirrored into `~/.local/share/calendars/<account>/<calendar>/` as one `.ics` file per event, with the conventional `displayname` and `color` files. The pill, the panel, Quick Add, the CLI, and khal all read and write that directory and nothing else. Sync is the job of *bridges*, one per account type, run by `omagenda sync` and by `omagenda watch` on a timer.
+
+| Account type | How it syncs | Who does the work | Setup |
+|---|---|---|---|
+| **Google Calendar** | Google Calendar API v3, OAuth 2.0 loopback flow, incremental `syncToken`, ETag-conditional writes | Omagenda's own bridge (`omagenda/bridges/google.py`) | `omagenda account add google` opens the browser once; tokens go to the keyring |
+| **Apple iCloud** (incl. shared family calendars) | CalDAV at `caldav.icloud.com` with an app-specific password | pimsync (or vdirsyncer if already installed), configured for the user by Omagenda | `omagenda account add icloud` asks for Apple ID and app password, writes the pimsync config, stores the password in the keyring |
+| **Microsoft 365 / Outlook.com** | Microsoft Graph, OAuth 2.0 device-code or loopback flow, delta queries | Omagenda bridge (`omagenda/bridges/microsoft.py`), same interface as Google | `omagenda account add microsoft` |
+| **Fastmail, Nextcloud, Radicale, any CalDAV** | CalDAV | pimsync, configured by Omagenda | `omagenda account add caldav <url>` |
+| **ICS subscriptions** (holidays, sports, school) | HTTP fetch into a read-only calendar | Omagenda | `omagenda account add ics <url>` |
+| **OmaCal** (optional) | Merge `omacal events list --json` read-only | Omagenda | automatic when `omacal` is on `PATH` |
+
+Why this split: Apple and every self-hosted service speak CalDAV, and pimsync already does careful two-way CalDAV sync with conflict handling, so Omagenda should configure it rather than reimplement it. Google and Microsoft do not speak CalDAV usably (Google's CalDAV endpoint still needs OAuth and is second-class; Microsoft has none), so those two get purpose-built bridges that translate between the vendor JSON and `VEVENT`. Both bridges implement the same small interface (`ARCHITECTURE.md` §11) so a third one is a contribution-sized task.
+
+**Credentials.** OAuth tokens and app passwords go into the desktop keyring through `secret-tool` (libsecret), which Omarchy ships. If no keyring is available, `omagenda doctor` says so and the bridge falls back to a mode-0600 file under `~/.local/state/omagenda/`, clearly labeled.
+
+**Google client id.** The repo ships an OAuth client owned by the project (Google does not treat the installed-app client secret as confidential, and the calendar scope is what makes the app useful). Until the project passes Google's app verification, Google shows an "unverified app" interstitial and caps the app at 100 users. Two consequences for the PM: create the Google Cloud project and OAuth client before Phase 1b, and plan to submit for verification once the README, a privacy page, and a short demo video exist. A bring-your-own-client path stays documented for people who prefer it.
+
+**Microsoft app registration.** Free in Entra ID; a personal Microsoft account can register a multi-tenant public client with no secret. Work and school tenants may require an admin to consent, which the setup wizard explains rather than hides.
 
 ## 8. Scope
 
-**v1 must**: vdir reader with recurrence expansion; agenda index; Up Next pill; DayTicker panel with keyboard navigation; Quick Add with live highlighting and deterministic parser; write `.ics`; `omagenda` CLI with `--json`; sync delegation; alarms via notifications; Join detection; theme-native colors; `doctor`; README with screenshots; `omarchy plugin validate` clean.
+**v1 must**: vdir reader with recurrence expansion; agenda index; Up Next pill; DayTicker panel with keyboard navigation; Quick Add with live highlighting and deterministic parser; write `.ics`; `omagenda` CLI with `--json`; Google bridge with two-way sync; iCloud and generic CalDAV through a pimsync config written by `omagenda account add`; alarms via notifications; Join detection; theme-native colors; `doctor`; README with screenshots; `omarchy plugin validate` clean.
 
-**v1 should**: calendar sets; templates; OmaCal read-only merge; ICS subscriptions; `SKILL.md`.
+**v1 should**: Microsoft bridge; calendar sets; templates; ICS subscriptions; OmaCal read-only merge; `SKILL.md`.
 
-**Later**: editing in place (title, time) from the panel; Focus filters tied to workspaces; `VTODO` view; Google OAuth in-house; a `bar` kind that replaces the clock for users who want one pill.
+**Later**: editing in place (title, time) from the panel; Focus filters tied to workspaces; `VTODO` view; a `bar` kind that replaces the clock for users who want one pill.
 
 ## 9. Delivery plan and budget
 
-Prices are Anthropic API rates at 2026-09-07 (Claude Code usage credits bill at these rates): Fable 5.1 $10/$50 per million input/output tokens, Opus 5 $5/$25, Sonnet 5 $2/$10. The budget is CAD 116, roughly USD 85, minus what this planning session cost. Treat the figures below as an envelope, not a quote; check the console after each phase.
+Prices are Anthropic API rates at 2026-09-07 (Claude Code usage credits bill at these rates): Fable 5.1 $10/$50 per million input/output tokens, Opus 5 $5/$25, Sonnet 5 $2/$10. The budget is CAD 116, roughly USD 85, minus planning. Treat the figures as an envelope, not a quote; check the console after each phase.
 
 | Phase | Deliverable | Model | Envelope (USD) |
 |---|---|---|---|
-| 0 | Repo scaffold, manifest, parser grammar doc, 150-sentence test corpus | Sonnet 5 (or Grok) | 3–6 |
-| 1 | Python core: vdir reader, recurrence, index, CLI, parser with tests green | Sonnet 5; escalate the parser to Opus 5 only if it stalls | 10–20 |
-| 2 | QML: Up Next pill + DayTicker panel, keyboard nav, theme-native | Opus 5 (QML/Quickshell is niche, it must read and imitate first-party code) | 15–30 |
+| 0 | Repo scaffold, manifest, parser grammar doc, 150-sentence test corpus, fixtures | Sonnet 5 (or Grok) | 3–6 |
+| 1 | Python core: vdir, recurrence, index, CLI, parser green, pimsync configuration for iCloud/CalDAV | Sonnet 5; escalate the parser to Opus 5 only if it stalls | 10–20 |
+| 1b | Google bridge: OAuth, incremental two-way sync, JSON↔VEVENT, keyring | Sonnet 5 for the mapping, Opus 5 for the sync state machine if it stalls | 10–18 |
+| 2 | QML: Up Next pill + DayTicker panel, keyboard nav, theme-native | Opus 5 | 15–30 |
 | 3 | QML: Quick Add overlay with live highlighting, templates | Opus 5 | 10–20 |
 | 4 | `watch` alarms, Join, sets, doctor, README, screenshots, publish | Sonnet 5 | 5–10 |
+| 5 | Microsoft bridge on the Phase 1b interface | Sonnet 5 | 8–15 |
 
-Cut order if money runs short: templates, OmaCal bridge, ICS subscriptions, calendar sets, then alarms. The pill, the panel, and Quick Add are the product.
+Totals: USD 53–104 without Microsoft, 61–119 with it. **The honest reading is that Microsoft does not fit inside the current credits alongside everything else.** It is therefore Phase 5, built last on an interface the Google bridge has already proven, and it is the first thing to defer if the console says so. Because the PM's own calendars are Google and Apple, this order also means v1 is testable end to end on a real setup before any money goes to Microsoft.
+
+Cut order if money runs short: Microsoft bridge, templates, OmaCal merge, ICS subscriptions, calendar sets, then alarms. The pill, the panel, Quick Add, and Google plus iCloud sync are the product.
 
 Cost hygiene is spelled out in `AGENTS.md`: one phase per session, a fixed read list instead of exploring, logic in Python and `Model.js` where tests are cheap, QML kept thin.
 
-## 10. Decisions for the product manager
+## 10. Decisions log
 
-1. **Name.** "Omagenda" follows the community's Oma- convention (Omapager, Omafinance, OmaCal) and says what it is. No collisions found. Alternatives if you dislike it: "Upnext", "Ticker". Plugin id would be `fixedsupply.omagenda` unless you want a different namespace.
-2. **Repo.** Public from day one under github.com/fixedsupply, MIT license (matching every plugin in the ecosystem)? Or private until v1 works?
-3. **Google.** Accept the v1 position (OmaCal bridge or bring-your-own OAuth client) or make first-party Google a v1 requirement? The latter roughly doubles Phase 1 and adds a Google Cloud project to every user's setup.
-4. **Your own calendar.** Which backend do you actually use day to day (Google, iCloud, Fastmail, Nextcloud)? v1 will be tested against it first.
-5. **Clock relationship.** Keep Omagenda as a separate pill beside the stock clock (my recommendation, composes with everything), or also ship a clock-replacement variant like tmn73's?
-6. **Model routing.** Agree to the phase-to-model table above, or run everything on one model?
+Resolved 2026-09-07 by the product manager:
+
+1. **Name**: Omagenda. Plugin id `fixedsupply.omagenda`.
+2. **Repo and license**: public at github.com/fixedsupply/omagenda from day one, MIT (Omarchy itself and every plugin surveyed are MIT).
+3. **Accounts**: Google first-party, Apple through iCloud CalDAV, Microsoft through a Graph bridge; see §7 and the budget note in §9.
+4. **Reference setup for testing**: Google (personal) plus iCloud (shared family calendars). v1 is verified against both before release.
+5. **Clock relationship**: separate pill beside the stock clock; no clock-replacement variant.
+6. **Model routing**: the phase table in §9.
+
+Open for the PM, not blocking:
+
+- Create the Google Cloud project and OAuth client (and later submit for verification) before Phase 1b starts.
+- Decide whether to register the Microsoft app now so Phase 5 can start without waiting.
 
 ## 11. Risks
 
 - **Quickshell API drift.** Omarchy 4.0.x moves fast; the implementer must read the installed `/usr/share/omarchy/shell` on the target machine, not remembered APIs. Pin the tested Omarchy version in the README.
 - **Recurrence edge cases.** Exceptions (`EXDATE`, `RECURRENCE-ID`), floating times, and DST transitions are where calendar software dies. `python-recurring-ical-events` handles most of it; the test corpus must include the ugly cases.
+- **Two-way sync conflicts.** A Google event edited on the phone and in Quick Add between syncs. Rule: the server wins, the local copy is preserved as `<uid>.conflict.ics`, and a notification says so. Never silently drop either side.
+- **Google verification and the 100-user cap.** Real, dated, and on the PM's plate (see §7). Until then the README says so plainly.
 - **Parser ambiguity.** "at 3" (time or place?), "next Friday" (this week or next?), "in 2 weeks". Resolve with Fantastical's conventions, document them, and show the interpretation in the preview so the user always sees what will be written.
 - **Budget.** QML sessions are token-hungry because the agent reads large first-party files. The read list in `AGENTS.md` exists to stop exploration.

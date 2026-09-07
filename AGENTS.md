@@ -4,7 +4,7 @@ You are implementing Omagenda, an Omarchy shell plugin specified in `PLAN.md` (p
 
 ## Budget rules (non-negotiable)
 
-The whole project has roughly USD 75 of model credit. Sessions cost input tokens every turn, so:
+The whole project has roughly USD 75 of model credit, and the plan already exceeds it if every phase runs to the top of its envelope (`PLAN.md` §9). Sessions cost input tokens every turn, so:
 
 1. **One phase per session.** Finish a phase, commit, stop. Do not start the next phase in the same context.
 2. **Read only the read list for your phase** (below). Do not explore `/usr/share/omarchy/shell` beyond it. Do not `cat` files larger than 300 lines whole; read the ranges you need.
@@ -49,6 +49,19 @@ Deliver, in this order, committing after each:
 
 Done when: all Python tests green; `OMAGENDA_VDIR=tests/fixtures/vdir omagenda agenda --json` matches the schema; index of the fixture set runs under 300 ms; `omagenda doctor` on the PM's machine reports correctly.
 
+## Phase 1b — Google bridge and accounts
+
+Read list: `ARCHITECTURE.md` §5, §7, §11; `omagenda/vdir.py` and `omagenda/index.py` as written; Google Calendar API reference pages for `events.list` (sync tokens), `events.insert/patch/delete`, and `calendarList.list` (fetch only those pages, once). The PM supplies the OAuth client id and secret as `OMAGENDA_GOOGLE_CLIENT_ID` / `_SECRET` for development; they are committed into `omagenda/bridges/google.py` once the PM confirms the project's client.
+
+Deliver, committing after each:
+1. `accounts.py`: `omagenda account add|list|remove`, keyring via `secret-tool` with the file fallback, pimsync config generation for `icloud` and `caldav` types (verify against the pimsync man page installed locally: `man pimsync.conf`).
+2. `bridges/__init__.py` interface and the sync state store.
+3. `bridges/google.py`: authorize, list calendars, incremental pull, push with `If-Match`, conflict files.
+4. `sync.py` orchestration and `omagenda sync --json` reporting counts per calendar.
+5. Tests with recorded JSON fixtures (no network in tests): pull mapping both directions, recurring instances, cancelled events, a 412 conflict, a 410 full-resync.
+
+Done when: `omagenda account add google` on the PM's machine round-trips: an event created by Quick Add appears in Google within one sync, an edit on the phone appears in the panel within one sync, and the conflict path produces a `.conflict.ics` plus a notification. `omagenda account add icloud` produces a pimsync config that syncs the PM's family calendar.
+
 ## Phase 2 — Up Next pill and DayTicker panel
 
 Read list: `ARCHITECTURE.md` §3, §4, §8, §9; then, whole: `/usr/share/omarchy/shell/plugins/panels/weather/BarWidget.qml`, `/usr/share/omarchy/shell/Ui/BarWidget.qml`, `/usr/share/omarchy/shell/Ui/PanelHero.qml`, `/usr/share/omarchy/shell/Ui/PanelSectionHeader.qml`; in ranges as needed: `/usr/share/omarchy/shell/plugins/panels/weather/Panel.qml` (open/close/keys/FileView/Process sections), `/usr/share/omarchy/shell/plugins/panels/clock/Panel.qml` (grid and today marking), `/usr/share/omarchy/shell/plugins/panels/clock/Model.js`, `/usr/share/omarchy/shell/Commons/Style.qml` (property list only), `/usr/share/omarchy/shell/Ui/Panel.qml`, `/usr/share/omarchy/shell/Ui/PopupCard.qml` (header only), `~/.config/omarchy/plugins/njpatel.omapager/Widget.qml` (visibility logic only).
@@ -78,6 +91,14 @@ Done when: typing the ten showcase sentences in `docs/showcase.md` produces the 
 Read list: `PLAN.md` §6.5–§6.7, §8; `README.md` of `~/.config/omarchy/plugins/mohamedmansour.finance` as a model for tone and structure.
 
 Deliver: calendar sets (`1`–`9`, `omagenda set`), `docs/sync-setup.md`, `docs/omarchy-menu.jsonc`, `docs/bindings.lua`, `skill/SKILL.md`, `preview.png`, README with install, screenshots, keybindings, sync recipes, and a "works alongside renCal and OmaCal" section. Tag `v0.1.0`. Draft the listing text for omarchyplugins.com and a PR line for awesome-omarchy; the PM submits both.
+
+## Phase 5 — Microsoft bridge
+
+Read list: `ARCHITECTURE.md` §11, `omagenda/bridges/google.py` and its tests, Microsoft Graph reference for `calendarView/delta`, `events` create/update/delete, and the recurrence object (fetch once). The PM supplies the Entra app (client) id.
+
+Deliver: `bridges/microsoft.py` on the same interface, Windows-to-IANA zone table, recurrence mapping with read-only fallback for unsupported patterns, recorded-fixture tests mirroring the Google suite, `omagenda account add microsoft`.
+
+Done when: the Google acceptance test passes against an Outlook.com account. This phase is the first to defer if credits run short.
 
 ## Definition of done for the whole project
 
