@@ -220,7 +220,14 @@ class SyncAllIntegrationTest(unittest.TestCase):
             from unittest import mock
 
             with mock.patch("omagenda.sync.BRIDGE_MODULES", {"google": "omagenda.bridges.fake_google"}),                  mock.patch("omagenda.sync.resolve_vdir_root", return_value=Path(tmp)):
-                results = sync_all({"accounts": [{"id": "google-calvin", "type": "google"}]})
+                # state_dir has to be pinned too. Without it this wrote real
+                # sync state into ~/.local/state/omagenda -- it did exactly
+                # that once, because _sync_bridge accepted a state_dir and
+                # then never forwarded it to _sync_one_calendar.
+                results = sync_all({"accounts": [{"id": "google-calvin", "type": "google"}]},
+                                   state_dir=Path(tmp) / "state")
+
+            self.assertTrue((Path(tmp) / "state" / "sync" / "google-calvin" / "primary.json").exists())
 
         del sys.modules["omagenda.bridges.fake_google"]
 

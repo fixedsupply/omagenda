@@ -221,7 +221,7 @@ def _sync_bridge(account: dict, vdir_root: Path, state_dir=None) -> dict:
     for calendar in calendars:
         calendar_path = vdir_root / account["id"] / calendar.id
         try:
-            per_calendar[calendar.id] = _sync_one_calendar(bridge, account, calendar, calendar_path)
+            per_calendar[calendar.id] = _sync_one_calendar(bridge, account, calendar, calendar_path, state_dir=state_dir)
         except Exception as exc:  # noqa: BLE001 -- one broken calendar must not sink the others
             per_calendar[calendar.id] = {"ok": False, "detail": str(exc)}
 
@@ -241,7 +241,7 @@ def _merge_omacal(vdir_root: Path) -> dict | None:
     return {"ok": True, "detail": "omacal merge not yet wired into the vdir (read-only, Phase 4)"}
 
 
-def sync_all(config: dict | None = None) -> dict:
+def sync_all(config: dict | None = None, state_dir=None) -> dict:
     config = config if config is not None else read_config()
     vdir_root = resolve_vdir_root()
     results = {}
@@ -252,7 +252,7 @@ def sync_all(config: dict | None = None) -> dict:
         elif account_type in ("icloud", "caldav"):
             results[account["id"]] = _sync_caldav(account)
         elif account_type in ("google", "microsoft"):
-            results[account["id"]] = _sync_bridge(account, vdir_root)
+            results[account["id"]] = _sync_bridge(account, vdir_root, state_dir=state_dir)
         else:
             results[account.get("id", "?")] = {"ok": False, "detail": f"unknown account type '{account_type}'"}
 
