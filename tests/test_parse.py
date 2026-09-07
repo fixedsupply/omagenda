@@ -252,12 +252,12 @@ SHOWCASE_CASES = [
 # Ambiguity and warnings (nl_grammar.md "Ambiguity policy")
 # ---------------------------------------------------------------------------
 AMBIGUITY_CASES = [
-    ("Standup 14/9", {"start": "2026-09-14"}, True),  # locale-ambiguous numeric date, day-first assumed
-    ("Standup 9/14", {"start": "2026-09-14"}, True),  # month-first reading also plausible -> warns
-    ("Call at 3", {"start": "2026-09-07T15:00"}, True),  # bare hour, no am/pm, afternoon-biased
-    ("Call at 9", {"start": "2026-09-07T09:00"}, False),  # 9 with no marker but conventionally morning-hour range still resolved without ambiguity per the 1-11 rule window; documented exception
+    ("Standup 14/9", {"start": "2026-09-14"}, False),  # only day-first is a valid calendar date (there is no 14th month) -> not actually ambiguous, no warning
+    ("Standup 12/10", {"start": "2026-12-10"}, True),  # day-first (Dec 10) and month-first (Oct 12) are both valid, different, future dates -> genuinely ambiguous, day-first assumed
+    ("Call at 3", {"start": "2026-09-07T15:00"}, True),  # bare hour outside the 7-11 business-morning window defaults to afternoon
+    ("Call at 9", {"start": "2026-09-07T09:00"}, True),  # bare hour inside 7-11 defaults to morning; still ambiguous (could mean 9pm) so it still warns
     ("Standup every day for 6 weeks", {"rrule": "FREQ=DAILY;COUNT=6"}, False),  # recurrence present, unambiguous COUNT
-    ("Vacation for 2 weeks", {"allDay": False}, True),  # "for 2 weeks" with no recurrence token is an unusually long duration; warns rather than silently producing a 2-week-long timed event
+    ("Vacation for 2 weeks", {"allDay": True}, True),  # "weeks" isn't a supported duration unit (only minutes and hours are), so this falls back to a single all-day placeholder and warns rather than silently guessing a multi-week span
     ("Trip planning /xyz", {"calendar": None}, True),
     ("Book club every wed at 7pm until next year", {}, True),
     ("Pay the mortgage monthly on the 1st alert 3 days before", {}, True),
@@ -265,7 +265,7 @@ AMBIGUITY_CASES = [
     ("Meeting at 3", {"start": "2026-09-07T15:00"}, True),
     ("Sync at 3 at HQ", {"start": "2026-09-07T15:00", "location": "HQ"}, True),  # bare hour ambiguity persists even with a later location
     ("Call 5", {"title": "Call 5"}, False),  # bare digit with no time keyword nearby is not a time at all
-    ("Something on 31/11", {}, True),  # not a valid calendar date in either reading -> warns, no date resolved
+    ("Something on 31/11", {"title": "Something on 31/11"}, True),  # not a valid calendar date in either reading -> no date resolved, whole phrase falls back to the title
 ]
 
 ALL_CASES = (

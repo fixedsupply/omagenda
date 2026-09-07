@@ -21,7 +21,7 @@ General rules, before the per-category ones below:
 | `next <weekday>` | the occurrence **after** the coming one | Fantastical's rule: "next Friday" said on a Wednesday means the Friday after this one, not this Friday |
 | `on the 14th`, `the 14th` | the 14th of the reference month, or next month if that date has passed | ordinal-only dates |
 | `Sep 14`, `14 Sep`, `September 14` | that calendar date, this year, or next year if it has passed | month name or abbreviation, either order |
-| `14/9`, `9/14` | that calendar date, read in `LC_TIME` date order | ambiguous when both parts are ≤ 12 and `LC_TIME` doesn't disambiguate; emits a warning naming the interpretation used |
+| `14/9`, `9/14` | that calendar date, read in `LC_TIME` date order | genuinely ambiguous only when **both** the day-first and month-first readings are valid calendar dates (`12/10` could be Dec 10 or Oct 12); when one reading has a component over 12, the other reading is used with no warning (`14/9` can only be Sep 14) |
 | `2026-09-14` | that exact date | ISO form is never ambiguous |
 | `in 3 days` | reference date + 3 days | |
 | `in 2 weeks` | reference date + 14 days | |
@@ -40,7 +40,7 @@ General rules, before the per-category ones below:
 | `evening` | 19:00 | |
 | `tonight` | 20:00 | also implies today's date if no date token is present |
 | `1-2pm`, `1pm to 2pm`, `from 9 to 10:30` | a start and end time | sets both `start` and `end`; `for <duration>` is redundant and ignored with a warning if both are given and disagree |
-| `at 3` | 15:00 (afternoon-biased) if nothing after it reads as a place; otherwise the location rule wins | see Location below and the ambiguity note |
+| `at 3`, bare `at <hour>` generally | a business-hour default: 7–11 reads as morning, 12 as noon, 1–6 as afternoon, if nothing after it reads as a place; otherwise the location rule wins | always ambiguous and always warns, even inside 7–11 — the other reading (9am vs 9pm) is still a real possibility, the default is just the likelier one; see Location below and the ambiguity note |
 | no time token, and no `all day` | all-day event | |
 
 ## Duration
@@ -108,4 +108,4 @@ The parser never picks silently between two materially different readings. Inste
 1. It resolves to the reading documented above (the "biased" default), and
 2. adds a `warnings` entry naming the ambiguity and the choice made, so the overlay can show it and the user can correct it by typing more.
 
-This applies to: locale-ambiguous numeric dates (`14/9`), a bare `at <hour>` with no am/pm marker outside the 1–11 range read as afternoon, and a `for <n> <unit>` immediately after a recurrence phrase (COUNT) versus with no recurrence phrase (duration).
+This applies to: locale-ambiguous numeric dates where both readings are valid (`12/10`, but not `14/9` — see Dates above), any bare `at <hour>` with no am/pm marker regardless of which half of the day it defaults to, a `for <n> <unit>` immediately after a recurrence phrase (COUNT) versus with no recurrence phrase (duration), and a duration given in a unit the grammar doesn't define (only minutes and hours are; `for 2 weeks` falls back to a single all-day placeholder rather than a two-week-long timed event).
