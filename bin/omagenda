@@ -34,9 +34,7 @@ def _local_reference() -> datetime:
     except (OSError, ValueError):
         return datetime.now().astimezone()
 
-NOT_YET_IMPLEMENTED = {
-    "account": "Phase 1b",
-}
+NOT_YET_IMPLEMENTED: dict[str, str] = {}
 
 
 def _fail(message: str) -> int:
@@ -288,6 +286,94 @@ def cmd_watch(args) -> int:
         return 0
 
 
+def cmd_account_add(args) -> int:
+    from omagenda.accounts import add_account, generate_pimsync_config, store_secret
+
+    account: dict = {"id": args.id, "type": args.account_type}
+
+    if args.account_type == "google":
+        from omagenda.bridges.google import authorize, list_calendars
+
+        if args.email:
+            account["email"] = args.email
+        add_account(account)
+        print("Opening your browser to sign in to Google...")
+        authorize(account)
+        calendars = list_calendars(account)
+        print(f"Connected. {len(calendars)} calendar(s) available:")
+        for cal in calendars:
+            print(f"  {cal.id}  {cal.name}{'' if cal.writable else '  [read-only]'}")
+        print("All writable calendars will sync. Add 'calendars = [...]' in "
+              "~/.config/omagenda/config.toml to sync only specific ones.")
+
+    elif args.account_type == "icloud":
+        import getpass
+
+        if not args.username:
+            return _fail("icloud accounts need --username")
+        account["username"] = args.username
+        account["sync"] = "pimsync"
+        password = getpass.getpass("App-specific password (from appleid.apple.com): ")
+        add_account(account)
+        store_secret(args.id, password)
+        config_path = generate_pimsync_config(account)
+        print(f"Wrote {config_path}. Run 'omagenda sync' to sync for the first time.")
+
+    elif args.account_type == "caldav":
+        import getpass
+
+        if not args.url:
+            return _fail("caldav accounts need --url")
+        account["url"] = args.url
+        if args.username:
+            account["username"] = args.username
+        account["sync"] = "pimsync"
+        password = getpass.getpass("Password: ")
+        add_account(account)
+        store_secret(args.id, password)
+        config_path = generate_pimsync_config(account)
+        print(f"Wrote {config_path}. Run 'omagenda sync' to sync for the first time.")
+
+    elif args.account_type == "ics":
+        if not args.url:
+            return _fail("ics subscriptions need --url")
+        account["url"] = args.url
+        if args.color:
+            account["color"] = args.color
+        add_account(account)
+        print(f"Added. Run 'omagenda sync' to fetch it for the first time.")
+
+    else:
+        return _fail(f"unknown account type '{args.account_type}'")
+
+    return 0
+
+
+def cmd_account_list(args) -> int:
+    from omagenda.accounts import list_accounts
+
+    accounts = list_accounts()
+    if args.json:
+        print(json.dumps(accounts))
+        return 0
+    if not accounts:
+        print("No accounts configured.")
+        return 0
+    for account in accounts:
+        detail = account.get("email") or account.get("username") or account.get("url", "")
+        print(f"{account['id']:20s} {account['type']:10s} {detail}")
+    return 0
+
+
+def cmd_account_remove(args) -> int:
+    from omagenda.accounts import remove_account
+
+    if remove_account(args.id):
+        print(f"Removed '{args.id}'.")
+        return 0
+    return _fail(f"no account named '{args.id}'")
+
+
 def cmd_sync(args) -> int:
     from omagenda.sync import sync_all
     from omagenda.index import index as reindex
@@ -411,6 +497,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch.add_argument("--days", type=int, default=14)
     p_watch.add_argument("--poll-seconds", type=int, default=15)
     p_watch.set_defaults(func=cmd_watch)
+
+    p_account = sub.add_parser("account", help="account add|list|remove")
+    account_sub = p_account.add_subparsers(dest="account_action", required=True)
+
+    p_account_add = account_sub.add_parser("add", help="add google|icloud|caldav|ics")
+    p_account_add.add_argument("account_type", choices=["google", "icloud", "caldav", "ics"])
+    p_account_add.add_argument("--id", required=True, help="a short name for this account, e.g. 'family-icloud'")
+    p_account_add.add_argument("--email", default=None, help="google only, for your own reference")
+    p_account_add.add_argument("--username", default=None, help="icloud/caldav")
+    p_account_add.add_argument("--url", default=None, help="caldav/ics")
+    p_account_add.add_argument("--color", default=None, help="ics only, a theme color name")
+    p_account_add.set_defaults(func=cmd_account_add)
+
+    p_account_list = account_sub.add_parser("list", help="list configured accounts")
+    p_account_list.add_argument("--json", action="store_true")
+    p_account_list.set_defaults(func=cmd_account_list)
+
+    p_account_remove = account_sub.add_parser("remove", help="remove an account")
+    p_account_remove.add_argument("id")
+    p_account_remove.set_defaults(func=cmd_account_remove)
 
     for name, phase in NOT_YET_IMPLEMENTED.items():
         placeholder = sub.add_parser(name, help=f"not yet implemented ({phase})")
