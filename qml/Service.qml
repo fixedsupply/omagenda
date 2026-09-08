@@ -60,6 +60,9 @@ Item {
     return Model.paletteColor(root.palette, name, fallback)
   }
 
+  // "" when everything is fine; otherwise a sentence naming what to do.
+  readonly property string healthProblem: Model.healthProblem(lastError, eventCount)
+
   // ---- agenda.json --------------------------------------------------
   FileView {
     id: agendaFile
@@ -115,10 +118,26 @@ Item {
     onRunningChanged: root.watchRunning = running
     onExited: function(exitCode, exitStatus) {
       root.watchRunning = false
-      if (exitCode !== 0) root.lastError = "omagenda watch exited " + exitCode
+      if (exitCode !== 0 && root.lastError === "")
+        root.lastError = "omagenda watch exited " + exitCode
       // Back off rather than spin: a missing Python dependency would
       // otherwise restart in a tight loop for the life of the session.
       watchRestartTimer.restart()
+    }
+
+    // The watcher's own message is the useful one -- "No module named
+    // 'icalendar'" tells the user exactly what to install, where a bare
+    // exit code tells them nothing. Kept so the pill and panel can say it
+    // rather than rendering an empty agenda that looks like a free week.
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var message = text.trim()
+        if (message !== "") {
+          root.lastError = message
+          console.warn("omagenda:", message)
+        }
+      }
     }
   }
 
@@ -157,7 +176,8 @@ Item {
         events: root.eventCount,
         watchRunning: root.watchRunning,
         lastSync: root.agenda && root.agenda.lastSync ? root.agenda.lastSync : null,
-        error: root.lastError
+        error: root.lastError,
+        problem: root.healthProblem
       })
     }
   }

@@ -189,6 +189,32 @@ function pillText(agenda, now, options) {
   return showCountdown ? event.title + " · " + countdownText(event.start, now) : event.title
 }
 
+// A plugin that is enabled but broken must not look like a plugin with
+// nothing to report. When the watcher can't run -- overwhelmingly because
+// the calendar libraries aren't installed -- both surfaces say so instead
+// of rendering an empty, indistinguishable "nothing scheduled".
+function healthProblem(serviceError, eventCount) {
+  var error = String(serviceError || "")
+  if (!error) return ""
+  // An error while events are already on screen is worth reporting in the
+  // panel but not worth hijacking the bar, so callers decide what to do
+  // with it; this only names the problem.
+  if (/No module named/.test(error)) {
+    var match = error.match(/No module named '([^']+)'/)
+    var missing = match ? match[1] : "a Python module"
+    return "Omagenda needs " + missing + ": omarchy pkg add python-icalendar python-dateutil python-recurring-ical-events"
+  }
+  if (/watch exited/.test(error)) return "The Omagenda watcher stopped: run 'omagenda doctor' to see why"
+  return error
+}
+
+function pillProblemText(serviceError, eventCount) {
+  // Only take a bar slot for a problem when there is nothing else to show;
+  // a stale-but-populated agenda is still more useful than a warning.
+  if (eventCount > 0) return ""
+  return healthProblem(serviceError, eventCount) ? "󰃭 !" : ""
+}
+
 // ---------------------------------------------------------------------
 // Ticker strip
 // ---------------------------------------------------------------------
@@ -286,6 +312,8 @@ if (typeof module !== "undefined") {
     currentOrNextEvent: currentOrNextEvent,
     isRunning: isRunning,
     pillText: pillText,
+    healthProblem: healthProblem,
+    pillProblemText: pillProblemText,
     tickerDays: tickerDays,
     eventsForDate: eventsForDate,
     secondLine: secondLine,

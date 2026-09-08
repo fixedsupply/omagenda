@@ -38,12 +38,22 @@ BarWidget {
     setting("timeFormat", "system"),
     Qt.locale().timeFormat(Locale.ShortFormat).indexOf("AP") === -1)
 
-  readonly property string label: Model.pillText(agenda, now, {
+  readonly property string healthProblem: service ? service.healthProblem : ""
+
+  readonly property string eventLabel: Model.pillText(agenda, now, {
     leadMinutes: leadMinutes,
     alwaysShow: alwaysShow,
     showCountdown: showCountdown,
     timeFormat: timeFormat
   })
+
+  // An enabled-but-broken plugin must not look like a quiet one. When the
+  // watcher can't run and there is nothing to show anyway, the pill takes a
+  // slot for a single warning glyph so there is something to click.
+  readonly property string problemLabel: Model.pillProblemText(
+    service ? service.lastError : "", agenda && agenda.events ? agenda.events.length : 0)
+
+  readonly property string label: eventLabel !== "" ? eventLabel : problemLabel
 
   onMinuteTickChanged: now = new Date()
 
@@ -126,7 +136,7 @@ BarWidget {
     verticalPadding: 8.75
     // The panel is the detail view; a tooltip repeating the pill would be
     // noise on hover.
-    tooltipText: ""
+    tooltipText: root.eventLabel === "" ? root.healthProblem : ""
 
     onPressed: function(b) {
       if (b === Qt.RightButton || b === Qt.MiddleButton) root.sync()

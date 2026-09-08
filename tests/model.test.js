@@ -240,3 +240,24 @@ test("footerText reports the active set and last sync", () => {
   assert.equal(Model.footerText(AGENDA, "24h"), "Set: all · synced 13:45")
   assert.equal(Model.footerText({ activeSet: "work", lastSync: null }, "24h"), "Set: work")
 })
+
+// ---------------------------------------------------------------------
+test("a missing Python module becomes an actionable sentence", () => {
+  const text = Model.healthProblem("omagenda: No module named 'icalendar'", 0)
+  assert.match(text, /needs icalendar/)
+  assert.match(text, /omarchy pkg add/)
+})
+
+test("a bare watcher exit points at doctor", () => {
+  assert.match(Model.healthProblem("omagenda watch exited 1", 0), /doctor/)
+})
+
+test("no error means no problem to report", () => {
+  assert.equal(Model.healthProblem("", 0), "")
+  assert.equal(Model.pillProblemText("", 0), "")
+})
+
+test("a problem only takes a bar slot when there is nothing else to show", () => {
+  assert.notEqual(Model.pillProblemText("No module named 'icalendar'", 0), "")
+  assert.equal(Model.pillProblemText("No module named 'icalendar'", 5), "")
+})

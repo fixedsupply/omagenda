@@ -60,6 +60,7 @@ Panel {
   readonly property var heroEvent: Model.currentOrNextEvent(agenda, now)
   readonly property var selectedEvent: cursorIndex >= 0 && cursorIndex < dayEvents.length ? dayEvents[cursorIndex] : null
 
+  readonly property string healthProblem: service ? service.healthProblem : ""
   readonly property color foreground: bar ? bar.foreground : Color.popups.text
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
@@ -369,12 +370,28 @@ Panel {
 
             Text {
               textFormat: Text.PlainText
-              visible: root.dayEvents.length === 0
+              visible: root.dayEvents.length === 0 && root.healthProblem === ""
               width: parent.width
               text: "Nothing scheduled"
               color: Qt.darker(root.foreground, 1.4)
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
+              topPadding: Style.space(6)
+              bottomPadding: Style.space(6)
+            }
+
+            // A broken watcher renders an empty agenda that is
+            // indistinguishable from a free day, so say what is actually
+            // wrong and what to run about it.
+            Text {
+              textFormat: Text.PlainText
+              visible: root.healthProblem !== ""
+              width: parent.width
+              text: root.healthProblem
+              color: Color.urgent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              wrapMode: Text.WordWrap
               topPadding: Style.space(6)
               bottomPadding: Style.space(6)
             }
