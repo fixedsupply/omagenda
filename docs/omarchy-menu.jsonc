@@ -1,0 +1,36 @@
+// Omagenda entries for the Omarchy menu.
+//
+// Merge these keys into ~/.config/omarchy/extensions/omarchy-menu.jsonc.
+// The file hot-reloads on save. If you do not have one yet:
+//
+//   mkdir -p ~/.config/omarchy/extensions
+//   cp /usr/share/omarchy/config/omarchy/extensions/omarchy-menu.jsonc \
+//      ~/.config/omarchy/extensions/
+//
+// IDs are object keys and the parent is inferred from the dotted id, so
+// "calendar" becomes a root submenu holding the three rows below.
+{
+  "calendar": {"icon": "󰃭", "label": "Calendar", "description": "Omagenda"},
+
+  "calendar.add": {
+    "icon": "󰃭",
+    "label": "Quick add event",
+    "description": "Type a sentence, get an event",
+    "action": "omarchy-shell omagenda quickAdd",
+    "aliases": ["quickadd", "new event"]
+  },
+
+  "calendar.agenda": {
+    "icon": "󰸗",
+    "label": "Open agenda",
+    "action": "omarchy-shell shell summon fixedsupply.omagenda",
+    "aliases": ["agenda"]
+  },
+
+  "calendar.sync": {
+    "icon": "󰓦",
+    "label": "Sync now",
+    "description": "Omagenda syncs on its own; this is for impatience",
+    "action": "omarchy-shell omagenda sync"
+  }
+}

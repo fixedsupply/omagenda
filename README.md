@@ -2,8 +2,168 @@
 
 *Type a sentence, get an event. What's next, always in the bar.*
 
-An [Omarchy](https://omarchy.org) shell plugin that brings the two ideas that made Fantastical famous, the menu-bar mini window and natural-language event entry, to the Omarchy desktop. Events are plain `.ics` files in a vdir you own. Google and Microsoft sync through built-in bridges; Apple iCloud and any CalDAV server sync through pimsync, configured for you.
+An [Omarchy](https://omarchy.org) shell plugin that brings the two ideas
+that made Fantastical's original menu-bar app worth having — a small
+agenda you can summon, and event entry by typing a sentence — to the
+Omarchy desktop. Events are plain `.ics` files in a vdir you own.
 
-**Status: planning.** Read `PLAN.md` for the product and design, `ARCHITECTURE.md` for the technical contract, and `AGENTS.md` if you are implementing it.
+![The Omagenda pill and agenda panel](preview.png)
 
-License: MIT.
+Quick Add parses as you type, and shows you what it understood before you
+commit to it:
+
+![Quick Add parsing a sentence](docs/screenshots/quick-add.png)
+
+It takes its colours from your theme, because it reads the theme's own
+palette rather than shipping one:
+
+![The panel under Tokyo Night](docs/screenshots/panel-tokyo-night.png)
+
+## Install
+
+```bash
+omarchy pkg add python-icalendar python-dateutil python-recurring-ical-events inotify-tools
+omarchy plugin add https://github.com/fixedsupply/omagenda.git --enable --yes
+```
+
+The pill and the panel work at this point. The `omagenda` command does
+not yet, because nothing puts a plugin's `bin/` on your path; link it
+once:
+
+```bash
+ln -sf ~/.config/omarchy/plugins/fixedsupply.omagenda/bin/omagenda ~/.local/bin/omagenda
+```
+
+Then connect a calendar — Google, iCloud, any CalDAV server, or a
+read-only `.ics` subscription:
+
+```bash
+omagenda account add google
+```
+
+and check it landed:
+
+```bash
+omagenda doctor
+```
+
+Full recipes for each account type are in
+[docs/sync-setup.md](docs/sync-setup.md).
+
+## Keybindings
+
+Omagenda ships none, because a plugin should not take your keys without
+asking. Copy [docs/bindings.lua](docs/bindings.lua) into
+`~/.config/hypr/bindings.lua` for:
+
+| Keys | Does |
+|---|---|
+| `SUPER + CTRL + N` | Quick Add |
+| `SUPER + CTRL + ALT + N` | The agenda panel |
+
+`SUPER + CTRL + ALT + D` is the stock clock's calendar and is left alone.
+
+There are menu entries too, in
+[docs/omarchy-menu.jsonc](docs/omarchy-menu.jsonc).
+
+## The pill
+
+Sits beside the clock rather than replacing it. It shows what is running
+now, or what starts within the next half hour, with a countdown. The rest
+of the time it is a calendar icon — still there, still one click from the
+agenda.
+
+- **Click** opens the agenda panel.
+- **Right-click** syncs immediately.
+
+`Always show the next event` in the settings keeps the full text up
+regardless; `Hide the pill completely when nothing is coming up` gives
+back the space instead. Both are in the bar widget's settings, along with
+the lead time, the countdown, how many days the ticker covers, and 12-
+versus 24-hour time.
+
+## Quick Add
+
+Type the event the way you would say it:
+
+```
+lunch with Sam tomorrow at 1pm at Cafe Torino
+standup every weekday at 9:30
+dentist on 14/9 at 10am for 45m
+review 2-3pm /work
+```
+
+Recognised fragments light up as you type, and the line underneath shows
+exactly what will be written. Anything genuinely ambiguous — "next
+Friday" — is flagged rather than guessed at.
+
+- `Enter` saves. `Shift + Enter` saves and stays open for the next one.
+- `Tab` cycles which calendar it goes to, among those that can accept an
+  event.
+- A `/tag` in the sentence names a calendar directly.
+
+## The CLI
+
+Everything the panel does, `omagenda` does, and every command takes
+`--json`.
+
+```bash
+omagenda agenda --days 3          # what the panel shows
+omagenda next                     # what the pill shows
+omagenda parse "lunch tomorrow 1pm"   # interpret, write nothing
+omagenda add "lunch tomorrow 1pm"
+omagenda calendars                # ids, colours, which are read-only
+omagenda calendars --set-default work
+omagenda sync
+omagenda doctor
+```
+
+There is a Claude Code skill in [skill/SKILL.md](skill/SKILL.md); copy it
+to `~/.claude/skills/omagenda` and an agent session can answer "what's on
+Thursday" and add events the same way the panel does.
+
+## How it works
+
+`~/.local/share/calendars` is the truth. One `.ics` file per event, in
+the conventional [vdir](https://vdirsyncer.pimutils.org/en/stable/vdir.html)
+layout, alongside `displayname` and `color`. The pill, the panel, Quick
+Add, the CLI, and anything else that speaks vdir — `khal`, for instance —
+all read and write that directory and nothing else.
+
+A background watcher reindexes when a file changes and syncs every five
+minutes, and within about ten seconds of a change you make. Google syncs
+through a built-in bridge; iCloud and other CalDAV servers sync through
+[pimsync](https://pimsync.whynothugo.nl/), configured for you by
+`omagenda account add`.
+
+Your credentials live in the system keyring, never in a config file.
+
+## Works alongside renCal and OmaCal
+
+Omagenda is not a calendar window and does not want to be one. If you use
+renCal or OmaCal for the month grid,
+keep them — Omagenda adds the bar pill, the hotkey, and the sentence,
+which is the part none of them do. When `omacal` is on your `PATH`,
+Omagenda reads its events too.
+
+## Requirements
+
+Omarchy 4.0.x, and the Python packages in the install line above.
+
+`inotify-tools` is optional but worth having. Without it the watcher
+cannot tell a file change from a timer tick, so an event you add reaches
+the server on the next five-minute sync instead of within seconds.
+
+Run `omagenda doctor` if anything looks wrong; it names what is missing
+and the command that fixes it.
+
+## Not affiliated with Flexibits
+
+Fantastical is a Flexibits product and the name is theirs. It is
+mentioned here once, descriptively, to say where the idea came from.
+Omagenda is an independent project, contains no Flexibits code, icons, or
+assets, and is not endorsed by them.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
