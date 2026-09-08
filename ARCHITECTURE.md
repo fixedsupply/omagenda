@@ -181,6 +181,20 @@ and its own state file, so they do not interact. Raising it past the
 default buys little (12 calendars: 148s serial, 46s at six workers, 38s
 at twelve) and costs the server more connections.
 
+`omagenda watch` also watches its own source, and exits when it changes.
+
+Quickshell adopts long-running `Process` objects across a config reload
+-- deliberately, so that reloading a shell does not kill the commands it
+is running. For a plugin the consequence is that `omarchy restart shell`
+leaves the *old* watcher running the *old* code indefinitely, with
+nothing to indicate it: the panel updates, the pill updates, and the
+Python behind them is whatever was on disk when the process started.
+Python has already imported those modules, so the running process can
+never pick up new code; the only correct move is to stand down and let
+`Service.qml`'s restart timer start a replacement. Expect the changeover
+to take under a minute -- up to one poll interval to notice, plus the
+service's ten-second restart delay, plus any sync already in flight.
+
 Local deletions are judged against a snapshot of the vdir taken *before*
 the pull writes anything. The pull is what would otherwise destroy the
 evidence: a delete made shortly after a create used to vanish, because

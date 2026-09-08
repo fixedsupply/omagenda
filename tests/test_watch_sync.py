@@ -7,6 +7,7 @@ and by `omagenda watch` on a timer"; only the reindex half was built.
 """
 import importlib.machinery
 import importlib.util
+import os
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -89,3 +90,55 @@ class SyncOnceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SourceFingerprintTest(unittest.TestCase):
+    """The watcher stands down when its own code changes.
+
+    Quickshell adopts long-running Process objects across a config
+    reload, on purpose, so that reloading a shell does not kill the
+    commands it is running. For a plugin that means `omarchy restart
+    shell` leaves the OLD watcher running the OLD code indefinitely, with
+    nothing to indicate it. This cost three false negatives in one
+    afternoon: a sync fix was verified as "not working" three times
+    against a watcher that had never loaded it.
+    """
+
+    def test_the_script_and_the_package_are_both_covered(self):
+        paths = cli._source_paths()
+        names = {p.name for p in paths}
+        self.assertIn("omagenda", names | {p.name for p in paths})
+        self.assertIn("sync.py", names)
+        self.assertIn("index.py", names)
+        self.assertTrue(any(p.name == "omagenda" for p in paths),
+                        "the CLI script itself must be watched too")
+
+    def test_the_fingerprint_is_stable_when_nothing_changes(self):
+        self.assertEqual(cli._source_fingerprint(), cli._source_fingerprint())
+
+    def test_a_touched_source_file_changes_the_fingerprint(self):
+        before = cli._source_fingerprint()
+        target = next(p for p in cli._source_paths() if p.name == "sync.py")
+        original = target.stat()
+        try:
+            os.utime(target, ns=(original.st_atime_ns, original.st_mtime_ns + 1_000_000_000))
+            self.assertNotEqual(cli._source_fingerprint(), before)
+        finally:
+            os.utime(target, ns=(original.st_atime_ns, original.st_mtime_ns))
+        self.assertEqual(cli._source_fingerprint(), before)
+
+    def test_a_missing_file_counts_as_changed(self):
+        # A plugin update caught mid-write: better to restart than to run
+        # on half a tree.
+        before = cli._source_fingerprint()
+        with unittest.mock.patch.object(
+                cli, "_source_paths",
+                return_value=cli._source_paths() + [Path("/nonexistent/module.py")]):
+            self.assertNotEqual(cli._source_fingerprint(), before)
+
+    def test_the_fingerprint_records_size_as_well_as_time(self):
+        # An edit that lands inside the same mtime granularity still has
+        # to be caught.
+        entry = cli._source_fingerprint()[0]
+        self.assertEqual(len(entry), 3)
+        self.assertIsInstance(entry[2], int)

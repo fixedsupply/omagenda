@@ -313,6 +313,31 @@ def _wait_for_vdir_change(vdir_root, poll_seconds: int = 15) -> bool:
     return False
 
 
+def _source_paths() -> list[Path]:
+    """This script plus every module of the package it actually imported.
+
+    Resolved through the loaded package rather than guessed from a path,
+    so it stays correct however the CLI was reached -- the plugin folder
+    and ~/.local/bin/omagenda are both symlinks into the repo.
+    """
+    import omagenda
+
+    paths = [Path(__file__).resolve()]
+    paths += sorted(Path(omagenda.__file__).resolve().parent.rglob("*.py"))
+    return paths
+
+
+def _source_fingerprint() -> tuple:
+    out = []
+    for path in _source_paths():
+        try:
+            stat = path.stat()
+            out.append((str(path), stat.st_mtime_ns, stat.st_size))
+        except OSError:
+            out.append((str(path), 0, 0))  # a file mid-update counts as changed
+    return tuple(out)
+
+
 DEFAULT_SYNC_INTERVAL = 300
 SYNC_SETTLE = 10
 
@@ -384,8 +409,23 @@ def cmd_watch(args) -> int:
               f"{'disabled' if has_accounts else 'no accounts configured'})",
               file=sys.stderr)
 
+    # Quickshell adopts long-running Process objects across a config
+    # reload -- deliberately, so reloading your shell doesn't kill the
+    # commands it is running. The consequence for a plugin is that
+    # updating its code leaves the *old* watcher running the *old* code,
+    # indefinitely, with nothing to suggest anything is wrong. Python has
+    # already imported these modules, so this process can never pick the
+    # new code up; the only correct move is to stand down and let the
+    # service's restart timer start a replacement that will.
+    fingerprint = _source_fingerprint()
+
     try:
         while True:
+            if _source_fingerprint() != fingerprint:
+                print("omagenda watch: plugin code changed on disk, exiting so "
+                      "the shell restarts me with it", file=sys.stderr)
+                return 0
+
             # A single malformed .ics file (a half-finished sync write, a
             # hand-edit gone wrong) must never take the whole long-running
             # watcher down with it -- log it and keep watching, so the
