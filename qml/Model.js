@@ -208,6 +208,20 @@ function healthProblem(serviceError, eventCount) {
   return error
 }
 
+// The pill is also the only way into the panel, so a pill that vanishes
+// takes the panel with it -- and with no keybinding shipped yet, that
+// left the plugin unreachable for most of the day and looking broken
+// besides. Idle now keeps the calendar glyph: a square slot, still
+// clickable, without a permanent sentence in the bar's centre. Anyone who
+// preferred the disappearing act sets collapseWhenIdle.
+var CALENDAR_GLYPH = "󰃭"
+
+function pillOccupies(label, opened, collapseWhenIdle) {
+  if (opened) return true          // never strand an open panel
+  if (label !== "") return true
+  return !collapseWhenIdle
+}
+
 function pillProblemText(serviceError, eventCount) {
   // Only take a bar slot for a problem when there is nothing else to show;
   // a stale-but-populated agenda is still more useful than a warning.
@@ -423,6 +437,8 @@ if (typeof module !== "undefined") {
     pillText: pillText,
     healthProblem: healthProblem,
     pillProblemText: pillProblemText,
+    pillOccupies: pillOccupies,
+    CALENDAR_GLYPH: CALENDAR_GLYPH,
     tickerDays: tickerDays,
     eventsForDate: eventsForDate,
     secondLine: secondLine,

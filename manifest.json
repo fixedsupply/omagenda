@@ -28,7 +28,8 @@
       "days": 7,
       "activeSet": "",
       "defaultCalendar": "",
-      "timeFormat": "system"
+      "timeFormat": "system",
+      "collapseWhenIdle": false
     },
     "schema": [
       {
@@ -43,8 +44,14 @@
       {
         "key": "alwaysShow",
         "type": "boolean",
-        "label": "Always show the pill",
+        "label": "Always show the next event, even when it is hours away",
         "defaultValue": false
+      },
+      {
+        "key": "collapseWhenIdle",
+        "type": "boolean",
+        "label": "Hide the pill completely when nothing is coming up",
+        "description": "Off by default: the pill keeps a calendar icon so the agenda stays one click away."
       },
       {
         "key": "showCountdown",

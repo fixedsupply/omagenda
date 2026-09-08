@@ -33,6 +33,7 @@ BarWidget {
 
   readonly property int leadMinutes: parseInt(setting("leadMinutes", 30), 10)
   readonly property bool alwaysShow: setting("alwaysShow", false) === true
+  readonly property bool collapseWhenIdle: setting("collapseWhenIdle", false) === true
   readonly property bool showCountdown: setting("showCountdown", true) === true
   readonly property string timeFormat: Model.resolveTimeFormat(
     setting("timeFormat", "system"),
@@ -94,15 +95,21 @@ BarWidget {
     if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
   }
 
-  // Out of the bar entirely when there is nothing to report, unless the
-  // panel is open (leaving no way back to it) or the user pinned the slot.
+  // Idle keeps the calendar glyph rather than disappearing. The pill is
+  // the only way into the panel, so a pill that vanishes takes the panel
+  // with it -- for most of a normal day the plugin was simply gone from
+  // the bar, which reads as broken rather than as quiet. The glyph is a
+  // square slot and one character, which is a far smaller claim on the
+  // bar's centre than a permanent sentence. `collapseWhenIdle` restores
+  // the disappearing act for anyone who wants it.
   //
   // Collapsing the width to zero is what takes the slot back, NOT `visible`
   // on this root: hiding the root leaves the bar holding a stale position
   // for it, and the pill then paints over its neighbour (it drew straight
   // through the clock). njpatel.omapager, the other widget that comes and
   // goes, collapses its width for the same reason.
-  readonly property bool revealed: label !== "" || opened
+  readonly property bool revealed: Model.pillOccupies(label, opened, collapseWhenIdle)
+  readonly property bool glyphOnly: revealed && label === ""
   implicitWidth: revealed ? button.implicitWidth : 0
   implicitHeight: button.implicitHeight
 
@@ -129,8 +136,8 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.vertical ? "" : root.label
-    labelVisible: !root.vertical && root.revealed
+    text: root.vertical || root.glyphOnly ? "" : root.label
+    labelVisible: !root.vertical && !root.glyphOnly && root.revealed
     hasVisualContent: root.revealed
     horizontalMargin: 8.75
     verticalPadding: 8.75
@@ -143,10 +150,11 @@ BarWidget {
       else root.togglePanel()
     }
 
-    // A vertical bar has no room for a sentence, so the pill collapses to
-    // the calendar glyph and the panel carries the detail.
+    // The glyph stands in for the sentence twice over: on a vertical bar,
+    // which has no room for one, and when idle, where there is none to
+    // write. Either way the panel carries the detail.
     Text {
-      visible: root.vertical && root.label !== ""
+      visible: root.glyphOnly || (root.vertical && root.label !== "")
       anchors.centerIn: parent
       textFormat: Text.PlainText
       text: "󰃭"

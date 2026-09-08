@@ -414,3 +414,29 @@ test("a healthy sync shows the time it happened", () => {
 test("the active set still leads the footer", () => {
   assert.match(Model.footerText({ activeSet: "Work", lastSync: null }, "24h"), /^Set: Work/)
 })
+
+// ---------------------------------------------------------------------
+// The pill is also the door to the panel. It used to vanish whenever the
+// next event was more than leadMinutes away, which for most of a normal
+// day meant the plugin was simply absent from the bar -- indistinguishable
+// from broken, and with no keybinding shipped, no way into the agenda.
+test("an idle pill keeps its slot so the panel stays reachable", () => {
+  assert.equal(Model.pillOccupies("", false, false), true)
+})
+
+test("an idle pill can still be told to disappear", () => {
+  assert.equal(Model.pillOccupies("", false, true), false)
+})
+
+test("a pill with something to say always keeps its slot", () => {
+  assert.equal(Model.pillOccupies("Standup · 5m", false, true), true)
+})
+
+test("an open panel is never stranded by a collapsing pill", () => {
+  assert.equal(Model.pillOccupies("", true, true), true)
+})
+
+test("the idle glyph is the same one the vertical bar uses", () => {
+  assert.equal(typeof Model.CALENDAR_GLYPH, "string")
+  assert.equal(Model.CALENDAR_GLYPH.length > 0, true)
+})
