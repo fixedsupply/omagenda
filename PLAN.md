@@ -159,6 +159,38 @@ means Quick Add writes to a local or iCloud calendar rather than to
 Google. It also moves Google verification from "nice, removes a warning"
 to "the only route to writing to Google for these users".
 
+**What other people will hit, which is not what the maintainer hit.**
+The Google bridge is built and works; the secret-iCal fallback was needed
+for one specific reason that most users won't share. Three different
+situations, worth keeping straight:
+
+| Who | What happens today | Fix |
+|---|---|---|
+| Ordinary Google account | OAuth works, after clicking past an "unverified app" warning that looks alarming | verification removes the warning |
+| Anyone, once 100 people have connected | The 101st user is refused outright | verification lifts the cap |
+| Account on Advanced Protection | Hard-blocked, no click-through | verification, and even then it is Google's call |
+
+The middle row is the one that decides whether this can be published.
+Google caps an unverified project at 100 users *in total*, so a plugin
+listed on omarchyplugins.com would work for its first hundred adopters
+and then start failing for everyone after, with an error none of them can
+do anything about. That is not a warning to document; it is a release
+blocker.
+
+Verification for this scope is paperwork, not a paid audit: `calendar` is
+a *sensitive* scope, not a *restricted* one, so it needs a homepage on a
+domain the project controls, a privacy policy on that domain, a demo video
+of the consent flow, and Google's review. Days to weeks, no fee. The
+alternative for the privacy-minded is documented bring-your-own-client,
+where a user makes their own Google Cloud project and is the only user of
+it -- no cap, at the cost of a twenty-step setup most people won't do.
+
+So the release sequence is: verification submitted before the plugin is
+listed anywhere public, bring-your-own-client documented as the escape
+hatch, and the secret-iCal subscription kept as the always-works,
+read-only path for Advanced Protection users and anyone who would rather
+not grant write access at all.
+
 **Credentials.** OAuth tokens and app passwords go into the desktop keyring through `secret-tool` (libsecret), which Omarchy ships. If no keyring is available, `omagenda doctor` says so and the bridge falls back to a mode-0600 file under `~/.local/state/omagenda/`, clearly labeled.
 
 **Google client id.** The repo ships an OAuth client owned by the project (Google does not treat the installed-app client secret as confidential, and the calendar scope is what makes the app useful). Until the project passes Google's app verification, Google shows an "unverified app" interstitial and caps the app at 100 users. Two consequences for the PM: create the Google Cloud project and OAuth client before Phase 1b, and plan to submit for verification once the README, a privacy page, and a short demo video exist. A bring-your-own-client path stays documented for people who prefer it.
