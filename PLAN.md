@@ -240,6 +240,17 @@ Done: the Google Cloud project and OAuth client (2026-09-07), stored in `.env.lo
 
 Decided 2026-09-07: wait on the Microsoft Entra app registration until Phase 5 is actually reached, rather than doing it now.
 
+**Blocking public release (raised 2026-09-08): submit the Google Cloud
+project for verification.** An unverified project is capped at 100 users
+in total, so a plugin listed on omarchyplugins.com would work for its
+first hundred adopters and then refuse everyone after, with an error none
+of them can act on. Verification also removes the "unverified app" warning
+every user currently clicks past, and is the only route by which an
+Advanced Protection account (the maintainer's own) can ever connect. It is
+paperwork rather than a paid audit for this scope: a homepage on a domain
+the project controls, a privacy policy on it, a demo video of the consent
+flow, and Google's review. See §7.
+
 ## 11. Risks
 
 - **Quickshell API drift.** Omarchy 4.0.x moves fast; the implementer must read the installed `/usr/share/omarchy/shell` on the target machine, not remembered APIs. Pin the tested Omarchy version in the README.
