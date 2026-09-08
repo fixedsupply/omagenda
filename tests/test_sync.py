@@ -10,6 +10,7 @@ by hand; this test file exists so it can't happen silently again.)
 """
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -184,3 +185,75 @@ class GuardTest(unittest.TestCase):
         with WithVdir():
             pass
         self.assertEqual((os.environ.get("OMAGENDA_VDIR"), os.environ.get("OMAGENDA_STATE")), before)
+
+
+class SyncLockTest(unittest.TestCase):
+    """Two syncs must not run over each other.
+
+    `omagenda watch` syncs on its own now, so a hand-run `omagenda sync`
+    is a second writer into the same folders. The two collided in
+    practice: one chmodded a read-only calendar back to 0555 while the
+    other was still writing into it, and that calendar failed with a
+    permission error on its own temp file.
+    """
+
+    def test_a_second_sync_waits_rather_than_racing(self):
+        import threading
+
+        from omagenda.sync import _sync_lock
+
+        with WithVdir():
+            order = []
+            released = threading.Event()
+
+            def holder():
+                with _sync_lock():
+                    order.append("first-in")
+                    released.wait(2)
+                    order.append("first-out")
+
+            thread = threading.Thread(target=holder)
+            thread.start()
+            while "first-in" not in order:
+                time.sleep(0.01)
+            released.set()
+            with _sync_lock(timeout=5):
+                order.append("second-in")
+            thread.join()
+
+        self.assertEqual(order, ["first-in", "first-out", "second-in"],
+                         "the second sync must not start until the first finishes")
+
+    def test_waiting_gives_up_eventually(self):
+        import threading
+
+        from omagenda.sync import _sync_lock
+
+        with WithVdir():
+            holding = threading.Event()
+            release = threading.Event()
+
+            def holder():
+                with _sync_lock():
+                    holding.set()
+                    release.wait(5)
+
+            thread = threading.Thread(target=holder)
+            thread.start()
+            holding.wait(2)
+            try:
+                with self.assertRaises(TimeoutError):
+                    with _sync_lock(timeout=0.3):
+                        pass
+            finally:
+                release.set()
+                thread.join()
+
+    def test_a_normal_sync_takes_and_releases_the_lock(self):
+        from omagenda.sync import _sync_lock
+
+        with WithVdir():
+            sync_all({"accounts": []})
+            # If the lock leaked, this would block until the timeout.
+            with _sync_lock(timeout=1):
+                pass

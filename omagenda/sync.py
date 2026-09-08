@@ -22,10 +22,12 @@ from __future__ import annotations
 
 import hashlib
 import concurrent.futures
+import contextlib
 import json
 import os
 import re
 import shutil
+import time
 import subprocess
 import tempfile
 import urllib.error
@@ -201,13 +203,30 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
     # 1. Pull.
     pull_result = bridge.pull(account, calendar, state.cursor)
     for change in pull_result.changed:
-        _overwrite_ics(calendar_path / f"{change.uid}.ics", change.ics_bytes)
+        digest = hashlib.sha256(change.ics_bytes).hexdigest()
+        entry = state.items.get(change.uid)
+        # A "changed" event whose bytes are what we already hold is not a
+        # change, and rewriting it costs more than the write: every touched
+        # file wakes the watcher, invalidates that file's index-cache entry,
+        # and buys a re-parse of a file that did not move.
+        #
+        # This is not a rare case. Google answers 410 Gone for some
+        # subscribed calendars' sync tokens every time -- its US holidays
+        # calendar does -- handing back a token it will reject again on the
+        # next call, so every sync is a full resync of a few hundred events
+        # that have not changed since the calendar was published. Left
+        # alone that rewrote 317 identical files every five minutes.
+        if entry is not None and entry.get("localHash") == digest \
+                and (calendar_path / f"{change.uid}.ics").exists():
+            counts["unchanged"] = counts.get("unchanged", 0) + 1
+        else:
+            _overwrite_ics(calendar_path / f"{change.uid}.ics", change.ics_bytes)
+            counts["pulled"] += 1
         state.items[change.uid] = {
             "remoteId": change.ref.remote_id,
             "etag": change.ref.etag,
-            "localHash": hashlib.sha256(change.ics_bytes).hexdigest(),
+            "localHash": digest,
         }
-        counts["pulled"] += 1
     for uid in pull_result.deleted_uids:
         (calendar_path / f"{uid}.ics").unlink(missing_ok=True)
         state.items.pop(uid, None)
@@ -426,7 +445,49 @@ def _record_sync(results: dict, state_dir=None) -> None:
     os.replace(tmp, path)
 
 
+@contextlib.contextmanager
+def _sync_lock(state_dir=None, timeout: float = 240.0):
+    """Serialise syncs across processes.
+
+    `omagenda watch` syncs on its own now, so a hand-run `omagenda sync`
+    is a second writer into the same folders -- and the two collided
+    exactly as you would expect: one chmodded a read-only calendar back
+    to 0555 while the other was still writing into it, and that calendar
+    failed with a permission error on its own temp file. Waiting is the
+    right answer rather than refusing, because a manual sync is almost
+    always someone wanting it to happen *now*, and the wait is bounded by
+    how long a sync takes.
+    """
+    import fcntl
+
+    from omagenda.index import resolve_state_dir
+
+    base = Path(state_dir).expanduser() if state_dir else resolve_state_dir()
+    base.mkdir(parents=True, exist_ok=True)
+    handle = open(base / "sync.lock", "w")
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        "another sync has been running for over "
+                        f"{int(timeout)}s; check 'omagenda doctor'") from None
+                time.sleep(0.25)
+        yield
+    finally:
+        handle.close()  # closing releases the flock
+
+
 def sync_all(config: dict | None = None, state_dir=None) -> dict:
+    with _sync_lock(state_dir):
+        return _sync_all_locked(config, state_dir)
+
+
+def _sync_all_locked(config: dict | None, state_dir) -> dict:
     config = config if config is not None else read_config()
     vdir_root = resolve_vdir_root()
     results = {}

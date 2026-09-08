@@ -539,3 +539,85 @@ class DeleteVersusEchoTest(unittest.TestCase):
         self.assertEqual(counts["deletedLocal"], 0)
         self.assertEqual(bridge.push_delete_calls, [])
         self.assertTrue((path / "remote-1.ics").exists())
+
+
+class UnchangedPullTest(unittest.TestCase):
+    """A pulled event whose bytes match what is already on disk is not
+    rewritten.
+
+    Google answers 410 Gone for some subscribed calendars' sync tokens
+    every single time -- its US holidays calendar does, handing back a
+    token it rejects again on the next call -- so every sync is a full
+    resync of a few hundred unchanged events. Rewriting them wakes the
+    watcher and throws away that file's index-cache entry, buying a
+    re-parse of a file that never moved.
+    """
+
+    EVENT = (b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:holiday-1\r\n"
+             b"DTSTART;VALUE=DATE:20261225\r\nSUMMARY:Christmas\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+
+    def _pull(self, path, root, ics=None):
+        bridge = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="holiday-1", ics_bytes=ics or self.EVENT,
+            ref=RemoteRef(remote_id="holiday-1", etag="etag-1"))])])
+        return _sync_one_calendar(bridge, {"id": "acct"},
+                                  RemoteCalendar(id="cal-1", name="Holidays"),
+                                  path, state_dir=root / "state")
+
+    def _fresh(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        path = root / "acct" / "cal-1"
+        path.mkdir(parents=True)
+        return root, path
+
+    def test_the_first_pull_writes(self):
+        root, path = self._fresh()
+        counts = self._pull(path, root)
+        self.assertEqual(counts["pulled"], 1)
+        self.assertTrue((path / "holiday-1.ics").exists())
+
+    def test_an_identical_second_pull_does_not_rewrite(self):
+        root, path = self._fresh()
+        self._pull(path, root)
+        before = (path / "holiday-1.ics").stat().st_mtime_ns
+
+        counts = self._pull(path, root)
+
+        self.assertEqual(counts["pulled"], 0)
+        self.assertEqual(counts["unchanged"], 1)
+        self.assertEqual((path / "holiday-1.ics").stat().st_mtime_ns, before,
+                         "the file must not be touched at all")
+
+    def test_a_genuinely_changed_event_is_still_written(self):
+        root, path = self._fresh()
+        self._pull(path, root)
+        changed = self.EVENT.replace(b"Christmas", b"Christmas Day")
+
+        counts = self._pull(path, root, ics=changed)
+
+        self.assertEqual(counts["pulled"], 1)
+        self.assertIn(b"Christmas Day", (path / "holiday-1.ics").read_bytes())
+
+    def test_the_skip_checks_the_file_and_not_only_the_hash(self):
+        # The hash alone would say "already have it" for a file that is no
+        # longer there, so the check tests both. Here the pull does write
+        # it -- and then the deletion the user made wins, per
+        # DeleteVersusEchoTest, which is why this asserts the push rather
+        # than a file on disk. The two rules meet exactly here.
+        root, path = self._fresh()
+        self._pull(path, root)
+        (path / "holiday-1.ics").unlink()
+
+        bridge = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="holiday-1", ics_bytes=self.EVENT,
+            ref=RemoteRef(remote_id="holiday-1", etag="etag-1"))])])
+        counts = _sync_one_calendar(bridge, {"id": "acct"},
+                                    RemoteCalendar(id="cal-1", name="Holidays"),
+                                    path, state_dir=root / "state")
+
+        self.assertEqual(counts["pulled"], 1, "the hash matched but the file was gone")
+        self.assertEqual(counts["deletedLocal"], 1)
+        self.assertEqual([r.remote_id for r in bridge.push_delete_calls], ["holiday-1"])
+        self.assertFalse((path / "holiday-1.ics").exists())
