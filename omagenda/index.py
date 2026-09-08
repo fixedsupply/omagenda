@@ -86,6 +86,14 @@ def _alarms(event) -> list[str]:
     return out
 
 
+def _one_line(value) -> str:
+    """Calendar text is free-form and routinely arrives with newlines in
+    it -- a venue address entered as three lines is the common case -- so
+    every field that renders on one row gets collapsed to one line here,
+    once, rather than at each of the places that display it."""
+    return " ".join(str(value or "").split())
+
+
 def _sort_key(item: dict):
     start = item["start"]
     date_part = start[:10]
@@ -94,18 +102,69 @@ def _sort_key(item: dict):
     return (date_part, is_timed, time_part)
 
 
+def _cache_path(state_dir=None) -> Path:
+    state_dir = Path(state_dir).expanduser() if state_dir else resolve_state_dir()
+    return state_dir / "index-cache.json"
+
+
+def _load_cache(state_dir=None) -> dict:
+    try:
+        return json.loads(_cache_path(state_dir).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_cache(cache: dict, state_dir=None) -> None:
+    path = _cache_path(state_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".index-cache-", suffix=".json.tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+
+
+def _cache_key(ics_path: Path, start: date, days: int) -> str:
+    """A file's contribution only changes when the file or the window
+    does, and both are cheap to check. A real subscription is one 5 MB
+    file holding years of history: parsing it costs seconds, while
+    expanding the fortnight out of it costs almost nothing, so re-parsing
+    it on every vdir change was the whole cost of an index."""
+    stat = ics_path.stat()
+    return f"{ics_path}|{stat.st_mtime_ns}|{stat.st_size}|{start.isoformat()}|{days}"
+
+
 def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = None,
-                  active_set: str = "", last_sync: str | None = None) -> dict:
+                  active_set: str = "", last_sync: str | None = None, state_dir=None,
+                  use_cache: bool = True) -> dict:
     start = start or date.today()
     end_span = timedelta(days=days)
     calendars = vdir.discover_calendars(vdir_root)
 
+    cache = _load_cache(state_dir) if use_cache else {}
+    fresh_cache: dict = {}
+
     events: list[dict] = []
     for cal in calendars:
         for ics_path in vdir.list_ics_files(cal["path"]):
+            try:
+                key = _cache_key(ics_path, start, days)
+            except OSError:
+                continue
+            cached = cache.get(key)
+            if cached is not None:
+                fresh_cache[key] = cached
+                events.extend(cached)
+                continue
+
+            file_events: list[dict] = []
             raw_calendar = vdir.read_ics_file(ics_path)
             raw_components = list(raw_calendar.walk("VEVENT"))
             if not raw_components:
+                fresh_cache[key] = []
                 continue
             recurring = _is_recurring_file(raw_components)
             base_uid = str(raw_components[0].get("UID", ics_path.stem))
@@ -121,15 +180,15 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
                 occ_id = f"{cal['id']}/{base_uid}"
                 if recurring:
                     occ_id += f"/{_iso(dtstart)}"
-                events.append({
+                file_events.append({
                     "id": occ_id,
                     "calendar": cal["id"],
-                    "title": str(occ.get("SUMMARY", "")),
+                    "title": _one_line(occ.get("SUMMARY", "")),
                     "start": _iso(dtstart),
                     "end": _iso(dtend),
                     "allDay": all_day,
                     "sourceTz": _source_tz(dtstart),
-                    "location": str(occ.get("LOCATION", "")) or "",
+                    "location": _one_line(occ.get("LOCATION", "")),
                     "description": str(occ.get("DESCRIPTION", "")) or "",
                     "url": str(occ.get("URL", "")) or "",
                     "conference": conference.detect(occ),
@@ -138,6 +197,12 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
                     "alarms": _alarms(occ),
                     "file": str(ics_path),
                 })
+
+            fresh_cache[key] = file_events
+            events.extend(file_events)
+
+    if use_cache:
+        _save_cache(fresh_cache, state_dir)
 
     events.sort(key=_sort_key)
 
@@ -170,5 +235,5 @@ def write_agenda(agenda: dict, state_dir=None) -> Path:
 
 
 def index(vdir_root=None, state_dir=None, days: int = DEFAULT_DAYS) -> Path:
-    agenda = build_agenda(vdir_root, days=days)
+    agenda = build_agenda(vdir_root, days=days, state_dir=state_dir)
     return write_agenda(agenda, state_dir)

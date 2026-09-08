@@ -284,7 +284,14 @@ Sample data for development lives in `tests/fixtures/vdir/` (three calendars, re
 
 ## 10. Performance and safety budgets
 
-- `omagenda index` for a two-week window over 2,000 events: under 300 ms.
+- `omagenda index` for a two-week window over 2,000 events: under 300 ms
+  once warm. A real Google subscription is a single .ics of years of
+  history (6,915 events / 5 MB on the PM's account), and parsing that file
+  costs ~4.7 s while expanding a fortnight out of it costs ~0.5 s -- so
+  index.py keeps a cache keyed by each file's path, mtime, size, and the
+  requested window. Cold, or on the first index after the date rolls over,
+  that file is reparsed; warm, the whole index is ~2 ms. `watch` reindexes
+  on every vdir change, so warm is the case that matters.
 - `omagenda parse`: under 50 ms including interpreter start; the overlay debounces at 60 ms and cancels the previous process if still running.
 - Panel open to first paint: under 100 ms; the index is already in memory in `Service.qml`.
 - The plugin never runs `sudo`, never writes outside `~/.local/share/calendars`, `~/.local/state/omagenda`, and `~/.config/omagenda`, and never phones home. Subscriptions fetch only the URLs the user wrote in their config.

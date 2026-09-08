@@ -317,9 +317,14 @@ def cmd_account_add(args) -> int:
 
         if args.email:
             account["email"] = args.email
-        add_account(account)
+        # Authorize BEFORE persisting. Saving first left a broken account
+        # behind whenever consent failed -- which it does every time on an
+        # account enrolled in Advanced Protection -- and every later
+        # `omagenda sync` then reported an error for an account that had
+        # never worked and could not be retried without removing it first.
         print(f"Adding '{account_id}'. Opening your browser to sign in to Google...")
         authorize(account)
+        add_account(account)
         calendars = list_calendars(account)
         print(f"Connected. {len(calendars)} calendar(s) available:")
         for cal in calendars:
