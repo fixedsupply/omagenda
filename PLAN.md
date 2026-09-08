@@ -240,7 +240,20 @@ Done: the Google Cloud project and OAuth client (2026-09-07), stored in `.env.lo
 
 Decided 2026-09-07: wait on the Microsoft Entra app registration until Phase 5 is actually reached, rather than doing it now.
 
-**Blocking public release (raised 2026-09-08): submit the Google Cloud
+**Decided 2026-09-08: ship to trusted reviewers under the 100-user cap,
+register a domain and verify only if the plugin proves viable.** Google
+requires the homepage and privacy policy to live on a domain the project
+owns -- GitHub Pages, Vercel and similar are rejected by reviewers who
+have tried -- so verification has a real if small floor of about a domain
+a year. That is not worth paying before anyone has used the thing. Until
+then: the README says plainly that Google sign-in is capped and shows an
+unverified-app warning, the read-only iCal subscription stays the path
+that always works for everyone, and nothing in the code assumes which way
+this goes -- `OMAGENDA_GOOGLE_CLIENT_ID`/`_SECRET` already let a user
+point at their own project, and verification later changes no code at all,
+only the state of the Cloud project.
+
+**Blocking wider release (raised 2026-09-08): submit the Google Cloud
 project for verification.** An unverified project is capped at 100 users
 in total, so a plugin listed on omarchyplugins.com would work for its
 first hundred adopters and then refuse everyone after, with an error none
