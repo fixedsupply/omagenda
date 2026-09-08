@@ -54,7 +54,15 @@ BarWidget {
   readonly property string problemLabel: Model.pillProblemText(
     service ? service.lastError : "", agenda && agenda.events ? agenda.events.length : 0)
 
-  readonly property string label: eventLabel !== "" ? eventLabel : problemLabel
+  // An expired sign-in never resolves itself, so unlike a transient
+  // watcher error it earns a permanent mark on the pill: the glyph with a
+  // bang, whatever else is going on. Without it the bar looks entirely
+  // healthy while nothing has synced for a week.
+  readonly property bool signInExpired: Model.needsReauth(agenda)
+
+  readonly property string label: signInExpired
+    ? (eventLabel !== "" ? eventLabel + " !" : Model.CALENDAR_GLYPH + " !")
+    : (eventLabel !== "" ? eventLabel : problemLabel)
 
   onMinuteTickChanged: now = new Date()
 
@@ -143,7 +151,8 @@ BarWidget {
     verticalPadding: 8.75
     // The panel is the detail view; a tooltip repeating the pill would be
     // noise on hover.
-    tooltipText: root.eventLabel === "" ? root.healthProblem : ""
+    tooltipText: root.signInExpired ? Model.syncProblem(root.agenda)
+                                    : (root.eventLabel === "" ? root.healthProblem : "")
 
     onPressed: function(b) {
       if (b === Qt.RightButton || b === Qt.MiddleButton) root.sync()

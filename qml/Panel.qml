@@ -61,6 +61,7 @@ Panel {
   readonly property var selectedEvent: cursorIndex >= 0 && cursorIndex < dayEvents.length ? dayEvents[cursorIndex] : null
 
   readonly property string healthProblem: service ? service.healthProblem : ""
+  readonly property string syncProblem: Model.syncProblem(agenda)
   readonly property color foreground: bar ? bar.foreground : Color.popups.text
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
@@ -276,6 +277,38 @@ Panel {
                 Quickshell.execDetached(["xdg-open", root.heroEvent.conference.url])
                 root.close()
               }
+            }
+          }
+
+          // ---- an expired sign-in, said once and said first ------------
+          //
+          // Above the ticker rather than down with the day's events,
+          // because it is not a fact about a day: nothing on the account
+          // is syncing, and nothing will until the user runs the command.
+          // The agenda underneath still renders, and is still worth
+          // reading, but it is now a snapshot rather than the truth.
+          Rectangle {
+            width: parent.width
+            visible: root.syncProblem !== ""
+            height: visible ? reauthText.implicitHeight + Style.space(16) : 0
+            radius: Style.cornerRadius
+            color: Qt.rgba(Color.urgent.r, Color.urgent.g, Color.urgent.b, 0.12)
+            border.width: Math.max(1, Style.space(1))
+            border.color: Qt.rgba(Color.urgent.r, Color.urgent.g, Color.urgent.b, 0.5)
+
+            Text {
+              id: reauthText
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: Style.space(8)
+              anchors.rightMargin: Style.space(8)
+              textFormat: Text.PlainText
+              text: root.syncProblem
+              color: Color.urgent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              wrapMode: Text.WordWrap
             }
           }
 

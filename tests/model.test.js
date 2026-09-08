@@ -440,3 +440,33 @@ test("the idle glyph is the same one the vertical bar uses", () => {
   assert.equal(typeof Model.CALENDAR_GLYPH, "string")
   assert.equal(Model.CALENDAR_GLYPH.length > 0, true)
 })
+
+// ---------------------------------------------------------------------
+// An expired sign-in. A Google OAuth client in Testing mode expires its
+// refresh tokens weekly, and the raw failure is "HTTP Error 400: Bad
+// Request" -- which says nothing about what broke or what to run.
+test("an expired sign-in names the account and the command", () => {
+  const text = Model.syncProblem({
+    needsReauth: ["google"],
+    syncRemedy: "Reconnect with: omagenda account add google --id google"
+  })
+  assert.match(text, /sign-in for 'google' has expired/)
+  assert.match(text, /omagenda account add google/)
+})
+
+test("a healthy agenda reports no sync problem", () => {
+  assert.equal(Model.syncProblem({ needsReauth: [], syncRemedy: "" }), "")
+  assert.equal(Model.syncProblem({}), "")
+  assert.equal(Model.syncProblem(null), "")
+})
+
+test("several expired accounts are named together", () => {
+  const text = Model.syncProblem({ needsReauth: ["google", "work"], syncRemedy: "" })
+  assert.match(text, /google, work/)
+})
+
+test("needsReauth is only true when an account actually needs it", () => {
+  assert.equal(Model.needsReauth({ needsReauth: ["google"] }), true)
+  assert.equal(Model.needsReauth({ needsReauth: [] }), false)
+  assert.equal(Model.needsReauth(null), false)
+})

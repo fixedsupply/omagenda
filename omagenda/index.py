@@ -184,8 +184,14 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
         record = read_last_sync(state_dir)
         last_sync = record.get("at")
         sync_ok = record.get("ok", True)
+        # Survives the sync that found it: an expired sign-in stays broken
+        # until the user acts, so the panel has to keep saying so.
+        needs_reauth = record.get("needsReauth") or []
+        sync_remedy = record.get("remedy", "")
     else:
         sync_ok = True
+        needs_reauth = []
+        sync_remedy = ""
 
     cache = _load_cache(state_dir) if use_cache else {}
     fresh_cache: dict = {}
@@ -271,6 +277,8 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
         "range": {"from": start.isoformat(), "to": (start + end_span).isoformat()},
         "lastSync": last_sync,
         "syncOk": sync_ok,
+        "needsReauth": needs_reauth,
+        "syncRemedy": sync_remedy,
         "activeSet": active_set,
         "calendars": [{k: v for k, v in c.items()} for c in calendars],
         "events": events,

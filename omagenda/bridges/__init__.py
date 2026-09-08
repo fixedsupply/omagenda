@@ -91,6 +91,26 @@ class ConflictError(Exception):
     matches the one the caller pushed against."""
 
 
+class AuthExpiredError(Exception):
+    """The stored credentials no longer work and no retry will help --
+    the user has to sign in again.
+
+    Distinct from every other sync failure because the remedy is
+    different: a network error resolves itself, this one waits for the
+    user forever. It carries the exact command that fixes it, because
+    the raw form of this failure ("HTTP Error 400: Bad Request") tells
+    nobody what to do, and a Google OAuth client left in Testing mode
+    expires its refresh tokens every seven days, so this is a weekly
+    event rather than an exotic one.
+    """
+
+    def __init__(self, account_id: str, remedy: str, detail: str = ""):
+        self.account_id = account_id
+        self.remedy = remedy
+        self.detail = detail
+        super().__init__(f"{account_id}: sign-in expired. {remedy}")
+
+
 # ---------------------------------------------------------------------
 # Sync state store
 # ---------------------------------------------------------------------

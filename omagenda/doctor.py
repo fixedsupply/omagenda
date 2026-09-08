@@ -105,11 +105,36 @@ def _section_name(layout: dict, target_entry: dict) -> str:
     return "?"
 
 
+def _check_sign_in() -> dict:
+    """Whether the last sync found the stored credentials still good.
+
+    Read from what sync recorded rather than by calling the server, so
+    `doctor` stays offline and instant. A Google OAuth client left in
+    Testing mode expires its refresh tokens every seven days, which makes
+    an expired sign-in the single most likely thing to be wrong here.
+    """
+    from omagenda.sync import read_last_sync
+
+    record = read_last_sync()
+    if not record:
+        return {"ok": True, "detail": "no sync has run yet"}
+    expired = record.get("needsReauth") or []
+    if expired:
+        return {"ok": False,
+                "detail": f"sign-in expired for {', '.join(expired)}. {record.get('remedy', '')}"}
+    if not record.get("ok", True):
+        return {"ok": False,
+                "detail": f"last sync at {record.get('at', '?')} reported problems with "
+                          f"{', '.join(record.get('problems', [])) or 'an account'}"}
+    return {"ok": True, "detail": f"last synced {record.get('at', '?')}"}
+
+
 def run() -> dict:
     config = read_config()
     return {
         "packages": _check_packages(),
         "vdir": _check_vdir(),
+        "signIn": _check_sign_in(),
         "syncTool": _check_sync_tool(config),
         "keyring": _check_keyring(),
         "pluginEnabled": _check_plugin_enabled(),

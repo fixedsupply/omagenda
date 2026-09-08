@@ -619,6 +619,12 @@ def cmd_sync(args) -> int:
                         print(f"      ! {error}")
         else:
             print(f"[{marker}] {account_id}: {result.get('detail', '')}")
+
+        if result.get("needsReauth"):
+            # Said again, plainly, after the per-calendar noise: this is
+            # the one failure that will not fix itself.
+            print(f"\n  {result.get('summary', 'Sign-in expired')}.")
+            print(f"  {result.get('detail', '')}\n")
     return 0 if all_ok else 1
 
 

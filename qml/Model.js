@@ -222,6 +222,26 @@ function pillOccupies(label, opened, collapseWhenIdle) {
   return !collapseWhenIdle
 }
 
+// An expired sign-in is the one sync failure the user has to act on, and
+// the only one that never resolves itself, so it outranks everything else
+// the panel might report. A Google OAuth client left in Testing mode
+// expires its refresh tokens weekly, which makes this routine rather than
+// exotic -- and its raw form, "HTTP Error 400: Bad Request", tells nobody
+// what to do.
+function syncProblem(agenda) {
+  if (!agenda) return ""
+  var accounts = agenda.needsReauth || []
+  if (accounts.length === 0) return ""
+  var who = accounts.length === 1
+    ? "Omagenda's sign-in for '" + accounts[0] + "' has expired"
+    : "Omagenda's sign-in has expired for " + accounts.join(", ")
+  return agenda.syncRemedy ? who + ". " + agenda.syncRemedy : who
+}
+
+function needsReauth(agenda) {
+  return !!(agenda && agenda.needsReauth && agenda.needsReauth.length > 0)
+}
+
 function pillProblemText(serviceError, eventCount) {
   // Only take a bar slot for a problem when there is nothing else to show;
   // a stale-but-populated agenda is still more useful than a warning.
@@ -438,6 +458,8 @@ if (typeof module !== "undefined") {
     healthProblem: healthProblem,
     pillProblemText: pillProblemText,
     pillOccupies: pillOccupies,
+    syncProblem: syncProblem,
+    needsReauth: needsReauth,
     CALENDAR_GLYPH: CALENDAR_GLYPH,
     tickerDays: tickerDays,
     eventsForDate: eventsForDate,

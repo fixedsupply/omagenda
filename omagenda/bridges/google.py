@@ -37,7 +37,8 @@ from datetime import datetime, timedelta, timezone
 
 from omagenda import vdir
 from omagenda.accounts import get_secret, store_secret
-from omagenda.bridges import ConflictError, PullChange, PullResult, RemoteCalendar, RemoteRef
+from omagenda.bridges import (AuthExpiredError, ConflictError, PullChange, PullResult,
+                              RemoteCalendar, RemoteRef)
 
 TYPE = "google"
 
@@ -104,6 +105,26 @@ def _api_request(method: str, url: str, access_token: str, body: dict | None = N
 # ---------------------------------------------------------------------
 # OAuth: PKCE + loopback redirect (ARCHITECTURE.md §11)
 # ---------------------------------------------------------------------
+def _authed_request(account: dict, method: str, url: str, body: dict | None = None,
+                    extra_headers: dict | None = None):
+    """One request carrying the account's access token, retried once with
+    a fresh token if the server says the one used is no longer good.
+
+    The token is cached for its lifetime, so the moment a grant is
+    revoked -- or a cached token outlives its welcome -- surfaces here as
+    a 401 rather than at the point the token was fetched. Retrying with a
+    fresh token either succeeds or fails at the refresh, which is where
+    an expired sign-in gets named properly.
+    """
+    try:
+        return _api_request(method, url, _get_access_token(account), body, extra_headers)
+    except ApiError as exc:
+        if exc.status != 401:
+            raise
+    forget_access_token(account["id"])
+    return _api_request(method, url, _get_access_token(account), body, extra_headers)
+
+
 def _pkce_pair() -> tuple[str, str]:
     verifier = base64.urlsafe_b64encode(secrets.token_bytes(40)).rstrip(b"=").decode("ascii")
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
@@ -238,23 +259,47 @@ def _fetch_access_token(account: dict) -> tuple[str, float]:
     }).encode("utf-8")
     request = urllib.request.Request(TOKEN_URL, data=body, method="POST",
                                       headers={"Content-Type": "application/x-www-form-urlencoded"})
-    with urllib.request.urlopen(request, timeout=15) as response:
-        payload = json_module.loads(response.read())
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json_module.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        raise _token_error(account, exc) from None
     return payload["access_token"], float(payload.get("expires_in", 3600))
+
+
+# Google's own names for "these credentials are finished". invalid_grant
+# is overwhelmingly the one that will be seen: it covers an expired
+# Testing-mode refresh token, a revoked grant, and a changed password.
+_DEAD_CREDENTIAL_ERRORS = {"invalid_grant", "unauthorized_client", "invalid_client"}
+
+
+def _token_error(account: dict, exc: urllib.error.HTTPError) -> Exception:
+    try:
+        body = json_module.loads(exc.read())
+    except Exception:  # noqa: BLE001 -- a non-JSON body is just no extra detail
+        body = {}
+    finally:
+        exc.close()  # an HTTPError holds an open response until told otherwise
+    code = body.get("error", "")
+    if exc.code in (400, 401) and code in _DEAD_CREDENTIAL_ERRORS:
+        return AuthExpiredError(
+            account["id"],
+            remedy=f"Reconnect with: omagenda account add google --id {account['id']}",
+            detail=body.get("error_description", code))
+    return RuntimeError(f"Google refused the token request ({exc.code} {code or exc.reason})")
 
 
 # ---------------------------------------------------------------------
 # list_calendars
 # ---------------------------------------------------------------------
 def list_calendars(account: dict) -> list[RemoteCalendar]:
-    token = _get_access_token(account)
     calendars: list[RemoteCalendar] = []
     page_token = None
     while True:
         url = f"{API_BASE}/users/me/calendarList"
         if page_token:
             url += f"?pageToken={urllib.parse.quote(page_token)}"
-        _, payload, _ = _api_request("GET", url, token)
+        _, payload, _ = _authed_request(account, "GET", url)
         for item in payload.get("items", []):
             calendars.append(RemoteCalendar(
                 id=item["id"],
@@ -439,7 +484,6 @@ def _wrap_calendar(vevent_lines: list[str]) -> bytes:
 # pull
 # ---------------------------------------------------------------------
 def pull(account: dict, calendar: RemoteCalendar, cursor: str | None) -> PullResult:
-    token = _get_access_token(account)
     full_resync = False
     items: list[dict] = []
     next_cursor = cursor
@@ -455,7 +499,7 @@ def pull(account: dict, calendar: RemoteCalendar, cursor: str | None) -> PullRes
             if page_token:
                 params["pageToken"] = page_token
             url = f"{API_BASE}/calendars/{urllib.parse.quote(calendar.id)}/events?{urllib.parse.urlencode(params)}"
-            _, payload, _ = _api_request("GET", url, token)
+            _, payload, _ = _authed_request(account, "GET", url)
             items.extend(payload.get("items", []))
             page_token = payload.get("nextPageToken")
             if payload.get("nextSyncToken"):
@@ -527,9 +571,8 @@ def push_create(account: dict, calendar: RemoteCalendar, ics_bytes: bytes) -> Re
     import icalendar
 
     event = next(iter(icalendar.Calendar.from_ical(ics_bytes).walk("VEVENT")))
-    token = _get_access_token(account)
     url = f"{API_BASE}/calendars/{urllib.parse.quote(calendar.id)}/events"
-    _, payload, headers = _api_request("POST", url, token, body=_local_event_to_google_body(event))
+    _, payload, headers = _authed_request(account, "POST", url, body=_local_event_to_google_body(event))
     return RemoteRef(remote_id=payload["id"], etag=payload.get("etag"))
 
 
@@ -537,11 +580,10 @@ def push_update(account: dict, calendar: RemoteCalendar, ics_bytes: bytes, ref: 
     import icalendar
 
     event = next(iter(icalendar.Calendar.from_ical(ics_bytes).walk("VEVENT")))
-    token = _get_access_token(account)
     url = f"{API_BASE}/calendars/{urllib.parse.quote(calendar.id)}/events/{urllib.parse.quote(ref.remote_id)}"
     headers = {"If-Match": ref.etag} if ref.etag else {}
     try:
-        _, payload, _ = _api_request("PUT", url, token, body=_local_event_to_google_body(event), extra_headers=headers)
+        _, payload, _ = _authed_request(account, "PUT", url, body=_local_event_to_google_body(event), extra_headers=headers)
     except ApiError as exc:
         if exc.status == 412:
             raise ConflictError(f"'{ref.remote_id}' changed on the server since it was last read") from exc
@@ -550,10 +592,9 @@ def push_update(account: dict, calendar: RemoteCalendar, ics_bytes: bytes, ref: 
 
 
 def push_delete(account: dict, calendar: RemoteCalendar, ref: RemoteRef) -> None:
-    token = _get_access_token(account)
     url = f"{API_BASE}/calendars/{urllib.parse.quote(calendar.id)}/events/{urllib.parse.quote(ref.remote_id)}"
     try:
-        _api_request("DELETE", url, token)
+        _authed_request(account, "DELETE", url)
     except ApiError as exc:
         if exc.status != 404:  # already gone is not an error
             raise

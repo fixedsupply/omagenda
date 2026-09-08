@@ -33,6 +33,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+from omagenda.bridges import AuthExpiredError
 from omagenda.doctor import read_config
 from omagenda.vdir import resolve_vdir_root
 
@@ -310,6 +311,12 @@ def _sync_bridge(account: dict, vdir_root: Path, state_dir=None) -> dict:
     bridge = importlib.import_module(module_path)
     try:
         calendars = _select_calendars(bridge, account)
+    except AuthExpiredError as exc:
+        # Kept whole rather than folded into the generic message. Every
+        # other failure here is worth a retry; this one waits for the
+        # user, so it has to say so and say what to run.
+        return {"ok": False, "needsReauth": True, "detail": f"{exc.remedy}",
+                "summary": f"Omagenda's sign-in for '{account['id']}' has expired"}
     except Exception as exc:  # noqa: BLE001 -- report, don't crash the whole sync run
         return {"ok": False, "detail": f"couldn't list calendars: {exc}"}
 
@@ -320,6 +327,8 @@ def _sync_bridge(account: dict, vdir_root: Path, state_dir=None) -> dict:
         calendar_path = vdir_root / account["id"] / calendar.id
         try:
             return _sync_one_calendar(bridge, account, calendar, calendar_path, state_dir=state_dir)
+        except AuthExpiredError as exc:
+            return {"ok": False, "needsReauth": True, "detail": exc.remedy}
         except Exception as exc:  # noqa: BLE001 -- one broken calendar must not sink the others
             return {"ok": False, "detail": str(exc)}
 
@@ -342,7 +351,15 @@ def _sync_bridge(account: dict, vdir_root: Path, state_dir=None) -> dict:
                 per_calendar[futures[future].id] = future.result()
 
     ordered = {c.id: per_calendar[c.id] for c in calendars if c.id in per_calendar}
-    return {"ok": all(c.get("ok", False) for c in ordered.values()), "calendars": ordered}
+    result = {"ok": all(c.get("ok", False) for c in ordered.values()), "calendars": ordered}
+    # One expired sign-in fails every calendar on the account, so report
+    # it once at the account rather than twelve times underneath it.
+    reauth = [c for c in ordered.values() if c.get("needsReauth")]
+    if reauth:
+        result["needsReauth"] = True
+        result["summary"] = f"Omagenda's sign-in for '{account['id']}' has expired"
+        result["detail"] = reauth[0]["detail"]
+    return result
 
 
 def _merge_omacal(vdir_root: Path) -> dict | None:
@@ -392,10 +409,18 @@ def read_last_sync(state_dir=None) -> dict:
 
 def _record_sync(results: dict, state_dir=None) -> None:
     problems = sorted(k for k, v in results.items() if not v.get("ok", False))
+    # An expired sign-in outlives the sync that discovered it and is the
+    # one failure the user must act on, so it is recorded by name and the
+    # panel can keep saying so until they do.
+    reauth = sorted(k for k, v in results.items() if v.get("needsReauth"))
     path = record_path(state_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"at": datetime.now().astimezone().isoformat(timespec="seconds"),
                "ok": not problems, "problems": problems}
+    if reauth:
+        payload["needsReauth"] = reauth
+        payload["remedy"] = next(v["detail"] for k, v in sorted(results.items())
+                                 if v.get("needsReauth"))
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload), encoding="utf-8")
     os.replace(tmp, path)
