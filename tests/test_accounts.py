@@ -144,5 +144,45 @@ class PimsyncConfigTest(unittest.TestCase):
             generate_pimsync_config({"id": "x", "type": "google"}, vdir_root=Path("/tmp"))
 
 
+class DerivedAccountIdTest(unittest.TestCase):
+    """`--id` is optional now, so the derived label is real behaviour.
+
+    bin/omagenda is a script, not an importable module, so it is exec'd
+    here -- which means giving it the `__file__` it reads at import time
+    to locate the package beside itself."""
+
+    def _load_cli(self):
+        import importlib.util
+
+        source_path = Path(__file__).parent.parent / "bin" / "omagenda"
+        spec = importlib.util.spec_from_loader("omagenda_cli", loader=None)
+        module = importlib.util.module_from_spec(spec)
+        module.__dict__["__file__"] = str(source_path)
+        exec(compile(source_path.read_text(), str(source_path), "exec"), module.__dict__)  # noqa: S102
+        return module
+
+    def _derive(self, account_type, email=None, username=None, existing=()):
+        module = self._load_cli()
+        with mock.patch("omagenda.accounts.list_accounts", return_value=[{"id": i} for i in existing]):
+            return module._default_account_id(account_type, email, username)
+
+    def test_email_local_part_names_the_account(self):
+        self.assertEqual(self._derive("google", email="symesc@gmail.com"), "google-symesc")
+
+    def test_username_is_used_when_there_is_no_email(self):
+        self.assertEqual(self._derive("icloud", username="calvin@icloud.com"), "icloud-calvin")
+
+    def test_type_alone_when_there_is_no_address(self):
+        self.assertEqual(self._derive("caldav"), "caldav")
+
+    def test_a_taken_name_gets_a_suffix_rather_than_colliding(self):
+        self.assertEqual(
+            self._derive("google", email="symesc@gmail.com", existing=("google-symesc",)),
+            "google-symesc-2")
+
+    def test_an_odd_address_still_yields_a_safe_label(self):
+        self.assertEqual(self._derive("google", email="first.last+tag@gmail.com"), "google-first-last-tag")
+
+
 if __name__ == "__main__":
     unittest.main()

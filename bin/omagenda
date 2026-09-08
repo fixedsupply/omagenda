@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import date, datetime, timedelta
@@ -286,10 +287,30 @@ def cmd_watch(args) -> int:
         return 0
 
 
+def _default_account_id(account_type: str, email: str | None, username: str | None) -> str:
+    """`--id` is only a local label, so requiring it for the common case is
+    friction for nothing. An address gives it a name worth having; without
+    one the type alone will do."""
+    from omagenda.accounts import list_accounts
+
+    handle = (email or username or "").split("@")[0].strip()
+    handle = re.sub(r"[^A-Za-z0-9_-]", "-", handle)
+    base = f"{account_type}-{handle}" if handle else account_type
+
+    taken = {a["id"] for a in list_accounts()}
+    if base not in taken:
+        return base
+    for n in range(2, 100):
+        if f"{base}-{n}" not in taken:
+            return f"{base}-{n}"
+    return base
+
+
 def cmd_account_add(args) -> int:
     from omagenda.accounts import add_account, generate_pimsync_config, store_secret
 
-    account: dict = {"id": args.id, "type": args.account_type}
+    account_id = args.id or _default_account_id(args.account_type, args.email, args.username)
+    account: dict = {"id": account_id, "type": args.account_type}
 
     if args.account_type == "google":
         from omagenda.bridges.google import authorize, list_calendars
@@ -297,7 +318,7 @@ def cmd_account_add(args) -> int:
         if args.email:
             account["email"] = args.email
         add_account(account)
-        print("Opening your browser to sign in to Google...")
+        print(f"Adding '{account_id}'. Opening your browser to sign in to Google...")
         authorize(account)
         calendars = list_calendars(account)
         print(f"Connected. {len(calendars)} calendar(s) available:")
@@ -315,7 +336,7 @@ def cmd_account_add(args) -> int:
         account["sync"] = "pimsync"
         password = getpass.getpass("App-specific password (from appleid.apple.com): ")
         add_account(account)
-        store_secret(args.id, password)
+        store_secret(account_id, password)
         config_path = generate_pimsync_config(account)
         print(f"Wrote {config_path}. Run 'omagenda sync' to sync for the first time.")
 
@@ -330,7 +351,7 @@ def cmd_account_add(args) -> int:
         account["sync"] = "pimsync"
         password = getpass.getpass("Password: ")
         add_account(account)
-        store_secret(args.id, password)
+        store_secret(account_id, password)
         config_path = generate_pimsync_config(account)
         print(f"Wrote {config_path}. Run 'omagenda sync' to sync for the first time.")
 
@@ -341,7 +362,7 @@ def cmd_account_add(args) -> int:
         if args.color:
             account["color"] = args.color
         add_account(account)
-        print(f"Added. Run 'omagenda sync' to fetch it for the first time.")
+        print(f"Added '{account_id}'. Run 'omagenda sync' to fetch it for the first time.")
 
     else:
         return _fail(f"unknown account type '{args.account_type}'")
@@ -503,7 +524,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_account_add = account_sub.add_parser("add", help="add google|icloud|caldav|ics")
     p_account_add.add_argument("account_type", choices=["google", "icloud", "caldav", "ics"])
-    p_account_add.add_argument("--id", required=True, help="a short name for this account, e.g. 'family-icloud'")
+    p_account_add.add_argument("--id", default=None,
+                               help="local label for this account; defaults to <type>-<handle from the address>")
     p_account_add.add_argument("--email", default=None, help="google only, for your own reference")
     p_account_add.add_argument("--username", default=None, help="icloud/caldav")
     p_account_add.add_argument("--url", default=None, help="caldav/ics")
