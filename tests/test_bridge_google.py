@@ -317,8 +317,8 @@ class AuthUrlTest(unittest.TestCase):
     def test_login_hint_is_included_when_an_email_is_known(self):
         from omagenda.bridges.google import build_auth_url
 
-        url = build_auth_url("http://127.0.0.1:1234/", "chal", "symesc@gmail.com")
-        self.assertIn("login_hint=symesc%40gmail.com", url)
+        url = build_auth_url("http://127.0.0.1:1234/", "chal", "you@example.com")
+        self.assertIn("login_hint=you%40example.com", url)
         self.assertIn("code_challenge=chal", url)
         self.assertIn("code_challenge_method=S256", url)
         self.assertIn("access_type=offline", url)

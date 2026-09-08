@@ -14,6 +14,25 @@ The whole project has roughly USD 75 of model credit, and the plan already excee
 6. **Commit small and often** with messages that say what changed and why. Never rewrite history.
 7. If a phase is running over its envelope, stop, commit what works, and write `STATUS.md` with what remains. Half a working phase committed beats a finished phase nobody can afford.
 
+## The maintainer's own calendar is not test data
+
+This repo is public and is meant for other people to install. The
+maintainer's machine has a real calendar on it with real appointments,
+including medical ones.
+
+- Never commit a screenshot of the live panel, the bar, or a full desktop.
+  Screenshots in `docs/screenshots/` are generated from invented demo
+  events, cropped to the plugin's own bounds, and nothing else may be in
+  frame.
+- Never paste real event titles, locations, attendees, or calendar URLs
+  into commit messages, docs, tests, or fixtures.
+- Never put a real email address in the repo. Tests use
+  `you@example.com`.
+- A secret iCal URL is a credential: it is prompted for, never passed as
+  an argument, and `account list` masks it.
+- To check behaviour against a large real calendar, measure it and report
+  the numbers -- do not copy its contents anywhere.
+
 ## Style rules
 
 - Match the first-party shell code in structure, naming, and comment voice. Comments explain *why*, in full sentences, like `plugins/panels/clock/Panel.qml`.

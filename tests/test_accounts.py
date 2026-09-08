@@ -167,7 +167,7 @@ class DerivedAccountIdTest(unittest.TestCase):
             return module._default_account_id(account_type, email, username)
 
     def test_email_local_part_names_the_account(self):
-        self.assertEqual(self._derive("google", email="symesc@gmail.com"), "google-symesc")
+        self.assertEqual(self._derive("google", email="you@example.com"), "google-you")
 
     def test_username_is_used_when_there_is_no_email(self):
         self.assertEqual(self._derive("icloud", username="calvin@icloud.com"), "icloud-calvin")
@@ -177,8 +177,8 @@ class DerivedAccountIdTest(unittest.TestCase):
 
     def test_a_taken_name_gets_a_suffix_rather_than_colliding(self):
         self.assertEqual(
-            self._derive("google", email="symesc@gmail.com", existing=("google-symesc",)),
-            "google-symesc-2")
+            self._derive("google", email="you@example.com", existing=("google-you",)),
+            "google-you-2")
 
     def test_an_odd_address_still_yields_a_safe_label(self):
         self.assertEqual(self._derive("google", email="first.last+tag@gmail.com"), "google-first-last-tag")
