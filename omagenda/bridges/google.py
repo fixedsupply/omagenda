@@ -26,12 +26,15 @@ import re
 import secrets
 import shutil
 import subprocess
+import functools
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta
+import zoneinfo
+from datetime import datetime, timedelta, timezone
 
+from omagenda import vdir
 from omagenda.accounts import get_secret, store_secret
 from omagenda.bridges import ConflictError, PullChange, PullResult, RemoteCalendar, RemoteRef
 
@@ -226,6 +229,7 @@ def list_calendars(account: dict) -> list[RemoteCalendar]:
                 id=item["id"],
                 name=item.get("summary", item["id"]),
                 writable=item.get("accessRole") in ("owner", "writer"),
+                color=vdir.map_color_to_theme(item.get("backgroundColor")),
             ))
         page_token = payload.get("nextPageToken")
         if not page_token:
@@ -239,24 +243,63 @@ def _escape_text(value: str) -> str:
     return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
+@functools.lru_cache(maxsize=None)
+def _is_iana_zone(name: str) -> bool:
+    """Google's `timeZone` is *usually* an IANA name, but calendars that
+    arrived by import carry whatever their source used -- "GMT-05:00" is
+    the one seen in the wild. That is not a zone any tzdata lookup
+    resolves, and worse, its colons break the ICS property it would be
+    written into, so it has to be recognised as unusable before it is
+    ever emitted."""
+    try:
+        zoneinfo.ZoneInfo(name)
+    except Exception:  # noqa: BLE001 -- any failure means "not usable as a TZID"
+        return False
+    return True
+
+
 def _google_time_to_ics(t: dict) -> tuple[str, str | None, bool]:
-    """Returns (value, tzid, all_day). Google gives an IANA `timeZone`
-    name directly (ARCHITECTURE.md §11: "keep them as TZID") -- the
-    dateTime's own embedded offset is redundant with it, so only the
-    naive wall-clock component is used."""
+    """Returns (value, tzid, all_day). When Google names a real IANA zone
+    it is kept as a TZID (ARCHITECTURE.md §11) and the dateTime's own
+    embedded offset is redundant, so only the naive wall-clock component
+    is used. When the name is absent or unusable, the offset is the only
+    trustworthy part, so the instant is normalised to UTC instead -- an
+    invented TZID would be worse than no TZID."""
     if "date" in t:
         return t["date"].replace("-", ""), None, True
-    match = re.match(r"(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})", t["dateTime"])
-    value = match.group(1).replace("-", "") + "T" + match.group(2).replace(":", "")
-    return value, t.get("timeZone"), False
+
+    raw = t["dateTime"]
+    tzid = t.get("timeZone")
+    if tzid and _is_iana_zone(tzid):
+        match = re.match(r"(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})", raw)
+        value = match.group(1).replace("-", "") + "T" + match.group(2).replace(":", "")
+        return value, tzid, False
+
+    moment = datetime.fromisoformat(raw)
+    if moment.tzinfo is None:
+        # Floating: no offset and no zone, so RFC 5545 local time. Left
+        # floating rather than guessed at.
+        return moment.strftime("%Y%m%dT%H%M%S"), None, False
+    return moment.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ"), None, False
+
+
+def _param_value(value: str) -> str:
+    """RFC 5545 3.1: a parameter value containing ':', ';' or ',' must be
+    quoted, or it terminates the parameter early and corrupts every
+    property that follows on the line."""
+    return f'"{value}"' if any(c in value for c in ':;,') else value
 
 
 def _dt_property_line(name: str, value: str, tzid: str | None, all_day: bool) -> str:
+    """The value arrives fully formed -- _google_time_to_ics decides
+    between a wall clock carrying a TZID, a UTC instant carrying its own
+    trailing Z, and a floating local time carrying neither -- so this
+    only frames it."""
     if all_day:
         return f"{name};VALUE=DATE:{value}"
     if tzid:
-        return f"{name};TZID={tzid}:{value}"
-    return f"{name}:{value}Z"
+        return f"{name};TZID={_param_value(tzid)}:{value}"
+    return f"{name}:{value}"
 
 
 def _conference_url(item: dict) -> str | None:

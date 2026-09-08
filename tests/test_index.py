@@ -253,3 +253,39 @@ class CurrentOrNextEventTest(unittest.TestCase):
 
     def test_nothing_left(self):
         self.assertIsNone(self._at("2026-09-08T23:00:00-06:00"))
+
+
+class MalformedFileTest(unittest.TestCase):
+    """A remote calendar can hand us a property no parser accepts. Losing
+    that one event is unavoidable; losing the whole agenda is not.
+
+    The case that prompted this was real: Google reported a `timeZone` of
+    "GMT-05:00" on an imported calendar, whose colons split the DTSTART
+    property in the wrong place and made every later read of the file
+    raise. See test_bridge_google.TimeZoneTest for the emitter fix.
+    """
+
+    BROKEN = (
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:broken\r\n"
+        "DTSTART;TZID=GMT-05:00:20260909T090000\r\nSUMMARY:Broken\r\n"
+        "END:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+
+    def test_one_bad_file_does_not_sink_the_agenda(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cal = root / "mixed"
+            cal.mkdir()
+            (cal / "broken.ics").write_text(self.BROKEN, encoding="utf-8")
+            (cal / "good.ics").write_text(
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:good\r\n"
+                "DTSTART;VALUE=DATE:20260909\r\nDTEND;VALUE=DATE:20260910\r\n"
+                "SUMMARY:Survivor\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+                encoding="utf-8")
+
+            agenda = build_agenda(root, days=7, start=date(2026, 9, 9),
+                                  state_dir=root / "state", use_cache=False)
+
+        titles = [e["title"] for e in agenda["events"]]
+        self.assertIn("Survivor", titles)
+        self.assertNotIn("Broken", titles)

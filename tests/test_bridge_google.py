@@ -1,6 +1,7 @@
 """Google bridge tests against recorded JSON shapes -- no real network.
 See AGENTS.md's Phase 1b brief: pull mapping both directions, recurring
 instances, cancelled events, a 412 conflict, a 410 full-resync."""
+import datetime
 import json
 import unittest
 import urllib.error
@@ -9,6 +10,7 @@ from unittest import mock
 import icalendar
 
 from omagenda.bridges import ConflictError, RemoteCalendar, RemoteRef
+from omagenda.bridges import google
 from omagenda.bridges.google import (
     ApiError,
     _local_event_to_google_body,
@@ -328,3 +330,54 @@ class AuthUrlTest(unittest.TestCase):
 
         url = build_auth_url("http://127.0.0.1:1234/", "chal", None)
         self.assertNotIn("login_hint", url)
+
+
+class TimeZoneTest(unittest.TestCase):
+    """Google's `timeZone` is usually an IANA name, but a calendar that
+    arrived by import carries whatever its source used. "GMT-05:00" was
+    the one seen in the wild, and writing it straight into a TZID
+    parameter corrupted the property: the colons terminate the parameter
+    early, so every later parse of that file read the value as
+    "00:20180112T090000" and raised.
+    """
+
+    def test_iana_zone_is_kept_as_a_tzid(self):
+        value, tzid, all_day = google._google_time_to_ics(
+            {"dateTime": "2026-09-09T09:00:00-06:00", "timeZone": "America/Edmonton"})
+        self.assertEqual((value, tzid, all_day), ("20260909T090000", "America/Edmonton", False))
+        self.assertEqual(google._dt_property_line("DTSTART", value, tzid, all_day),
+                         "DTSTART;TZID=America/Edmonton:20260909T090000")
+
+    def test_unusable_zone_falls_back_to_utc(self):
+        value, tzid, all_day = google._google_time_to_ics(
+            {"dateTime": "2018-01-12T09:00:00-05:00", "timeZone": "GMT-05:00"})
+        self.assertIsNone(tzid)
+        self.assertEqual(value, "20180112T140000Z")
+        self.assertEqual(google._dt_property_line("DTSTART", value, tzid, all_day),
+                         "DTSTART:20180112T140000Z")
+
+    def test_missing_zone_falls_back_to_utc(self):
+        value, tzid, _ = google._google_time_to_ics({"dateTime": "2026-09-09T09:00:00-06:00"})
+        self.assertIsNone(tzid)
+        self.assertEqual(value, "20260909T150000Z")
+
+    def test_all_day_is_untouched(self):
+        self.assertEqual(google._google_time_to_ics({"date": "2026-09-09"}),
+                         ("20260909", None, True))
+
+    def test_a_zone_needing_quotes_gets_them(self):
+        # No IANA name contains these, but the framing must be correct
+        # regardless of what reaches it.
+        self.assertEqual(google._dt_property_line("DTSTART", "20260909T090000", "A:B", False),
+                         'DTSTART;TZID="A:B":20260909T090000')
+
+    def test_the_emitted_line_survives_a_round_trip(self):
+        value, tzid, all_day = google._google_time_to_ics(
+            {"dateTime": "2018-01-12T09:00:00-05:00", "timeZone": "GMT-05:00"})
+        raw = ("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:x\r\n"
+               + google._dt_property_line("DTSTART", value, tzid, all_day)
+               + "\r\nSUMMARY:Imported\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+        parsed = icalendar.Calendar.from_ical(raw)
+        event = next(iter(parsed.walk("VEVENT")))
+        self.assertEqual(event["DTSTART"].dt,
+                         datetime.datetime(2018, 1, 12, 14, 0, tzinfo=datetime.timezone.utc))

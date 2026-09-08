@@ -30,6 +30,10 @@ class RemoteCalendar:
     id: str
     name: str
     writable: bool = True
+    # The remote's own colour, already mapped to a theme name. None when
+    # the remote offers none, which leaves vdir.discover_calendars to
+    # assign one round-robin as it does for any other calendar.
+    color: str | None = None
 
 
 @dataclass

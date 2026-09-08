@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -117,6 +118,54 @@ def _notify_conflict(uid: str, calendar_name: str) -> None:
                     f"your version was saved as {uid}.conflict.ics"], check=False)
 
 
+_UID_LINE = re.compile(rb"^UID:.*(?:\r?\n[ \t].*)*\r?\n", re.MULTILINE)
+
+
+def _rewrite_uid(content: bytes, new_uid: str) -> bytes:
+    """Replace every UID line, folded continuations included. A series and
+    its overrides all share one UID, so replacing them all is what keeps
+    the file coherent; a file with no UID at all is left alone rather
+    than guessed at."""
+    replaced, count = _UID_LINE.subn(f"UID:{new_uid}\r\n".encode(), content)
+    return replaced if count else content
+
+
+def _adopt_remote_uid(file_path: Path, content: bytes, remote_id: str):
+    """Take on the id the remote just assigned.
+
+    Google gives an event it has not seen before its own id, and every
+    later pull keys that event by that id -- not by the UID Omagenda
+    invented and sent. Leaving the local file under the invented UID
+    therefore means the next sync writes the server's copy alongside it,
+    and the appointment shows up twice, forever, with no way for the user
+    to tell which one is real.
+
+    So the moment a create succeeds, the local file takes the remote's
+    identity: renamed to the remote id and rewritten to carry it as the
+    UID. The next pull then overwrites that same file in place.
+    """
+    if not remote_id or remote_id == file_path.stem:
+        return file_path.stem, file_path, content
+    new_path = file_path.with_name(f"{remote_id}.ics")
+    new_content = _rewrite_uid(content, remote_id)
+    new_path.write_bytes(new_content)
+    if new_path != file_path:
+        file_path.unlink(missing_ok=True)
+    return remote_id, new_path, new_content
+
+
+def _write_vdir_metadata(calendar_path: Path, calendar) -> None:
+    """The vdir sidecar files. Without these a bridge calendar shows up in
+    the panel under its raw remote id -- readable for a local folder, but
+    "en.usa#holiday@group.v.calendar.google.com" for a Google one --
+    and every calendar looks writable, so Quick Add offers destinations
+    the remote will refuse."""
+    (calendar_path / "displayname").write_text(calendar.name, encoding="utf-8")
+    color = getattr(calendar, "color", None)
+    if color:
+        (calendar_path / "color").write_text(color, encoding="utf-8")
+
+
 def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, state_dir=None) -> dict:
     """The shared pull -> detect-local-changes -> push -> record algorithm
     (ARCHITECTURE.md §11), driven through the Bridge protocol so it works
@@ -124,6 +173,12 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
     from omagenda.bridges import ConflictError, RemoteRef, SyncState, state_path_for
 
     calendar_path.mkdir(parents=True, exist_ok=True)
+    # A calendar the remote won't accept writes to is left mode 0555, the
+    # same marker _sync_ics uses and the one discover_calendars tests for
+    # -- so the write bit has to be reopened before every sync, or the
+    # second sync of a read-only calendar fails on its own marker.
+    calendar_path.chmod(0o755)
+    _write_vdir_metadata(calendar_path, calendar)
     state_path = state_path_for(account["id"], calendar.id, state_dir)
     state = SyncState.load(state_path)
     counts = {"pulled": 0, "createdRemote": 0, "createdLocal": 0, "updated": 0, "deletedRemote": 0,
@@ -151,7 +206,12 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
     # correctly falls through as "unchanged" here.
     on_disk = {f.stem: f for f in calendar_path.glob("*.ics") if not f.name.endswith(".conflict.ics")}
 
-    for uid, file_path in on_disk.items():
+    # Renames from _adopt_remote_uid land here rather than in on_disk,
+    # which is being iterated; they are merged in before step 3, so a
+    # just-adopted uid is not mistaken for a local deletion.
+    adopted: dict[str, Path] = {}
+
+    for uid, file_path in list(on_disk.items()):
         content = file_path.read_bytes()
         local_hash = hashlib.sha256(content).hexdigest()
         entry = state.items.get(uid)
@@ -162,6 +222,9 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
             except Exception as exc:  # noqa: BLE001 -- one bad event must not stop the others
                 counts.setdefault("errors", []).append(f"create {uid}: {exc}")
                 continue
+            uid, file_path, content = _adopt_remote_uid(file_path, content, ref.remote_id)
+            local_hash = hashlib.sha256(content).hexdigest()
+            adopted[uid] = file_path
             state.items[uid] = {"remoteId": ref.remote_id, "etag": ref.etag, "localHash": local_hash}
             counts["createdRemote"] += 1
 
@@ -185,6 +248,7 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
             except Exception as exc:  # noqa: BLE001
                 counts.setdefault("errors", []).append(f"update {uid}: {exc}")
 
+    on_disk.update(adopted)
     deleted_by_pull = {c.uid for c in pull_result.changed} | set(pull_result.deleted_uids)
     for uid in [u for u in state.items if u not in on_disk and u not in deleted_by_pull]:
         entry = state.items[uid]
@@ -198,6 +262,8 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
 
     # 4. Record.
     state.save(state_path)
+    if not calendar.writable:
+        calendar_path.chmod(0o555)  # readOnly, per vdir.discover_calendars
     counts["ok"] = "errors" not in counts
     return counts
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -191,17 +192,34 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
                 continue
 
             file_events: list[dict] = []
-            raw_calendar = vdir.read_ics_file(ics_path)
-            raw_components = list(raw_calendar.walk("VEVENT"))
+            try:
+                raw_calendar = vdir.read_ics_file(ics_path)
+                raw_components = list(raw_calendar.walk("VEVENT"))
+            except Exception as exc:  # noqa: BLE001 -- see below
+                # One unreadable file must not cost the user their whole
+                # agenda. A remote calendar can carry a property no
+                # parser accepts, and the file is not ours to repair, so
+                # it is skipped, reported on stderr (which `watch` and
+                # the panel's health line already surface), and cached as
+                # empty so the cost is paid once per edit rather than
+                # once per index.
+                print(f"omagenda: skipping unreadable {ics_path}: {exc}", file=sys.stderr)
+                fresh_cache[key] = []
+                continue
             if not raw_components:
                 fresh_cache[key] = []
                 continue
             recurring = _is_recurring_file(raw_components)
             base_uid = str(raw_components[0].get("UID", ics_path.stem))
 
-            occurrences = recurring_ical_events.of(
-                raw_calendar, keep_recurrence_attributes=True
-            ).between(start, end_span)
+            try:
+                occurrences = recurring_ical_events.of(
+                    raw_calendar, keep_recurrence_attributes=True
+                ).between(start, end_span)
+            except Exception as exc:  # noqa: BLE001 -- as above
+                print(f"omagenda: skipping unexpandable {ics_path}: {exc}", file=sys.stderr)
+                fresh_cache[key] = []
+                continue
 
             for occ in occurrences:
                 dtstart = occ["DTSTART"].dt

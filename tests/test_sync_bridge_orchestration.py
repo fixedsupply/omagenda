@@ -1,12 +1,16 @@
 """Tests for sync.py's shared pull/detect/push/record algorithm
 (ARCHITECTURE.md §11), driven against a fake Bridge -- no real network,
 no real Google account needed to verify the orchestration itself."""
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
+import icalendar
+
 from omagenda.bridges import ConflictError, PullChange, PullResult, RemoteCalendar, RemoteRef
-from omagenda.sync import _select_calendars, _sync_one_calendar
+from omagenda.sync import _rewrite_uid, _select_calendars, _sync_one_calendar
+from omagenda.vdir import discover_calendars
 
 ACCOUNT = {"id": "google-calvin", "type": "google"}
 CALENDAR = RemoteCalendar(id="primary", name="Calvin", writable=True)
@@ -237,3 +241,151 @@ class SyncAllIntegrationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VdirMetadataTest(unittest.TestCase):
+    """A bridge calendar has a name and a colour on the remote and an
+    access role that says whether it takes writes. None of that reached
+    the vdir before, so a real Google account showed up in the panel as a
+    column of raw ids, all of them apparently writable -- which meant
+    Quick Add offered holiday feeds as destinations.
+    """
+
+    def _run(self, writable=True, color="green"):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        calendar = RemoteCalendar(id="cal-1", name="Holidays in Canada",
+                                  writable=writable, color=color)
+        bridge = FakeBridge()
+        path = root / "acct" / calendar.id
+        _sync_one_calendar(bridge, {"id": "acct"}, calendar, path,
+                           state_dir=root / "state")
+        return path
+
+    def test_display_name_and_colour_are_written(self):
+        path = self._run()
+        self.assertEqual((path / "displayname").read_text(), "Holidays in Canada")
+        self.assertEqual((path / "color").read_text(), "green")
+
+    def test_a_read_only_calendar_is_marked_read_only(self):
+        path = self._run(writable=False)
+        self.assertFalse(os.access(path, os.W_OK))
+
+    def test_a_writable_calendar_stays_writable(self):
+        self.assertTrue(os.access(self._run(writable=True), os.W_OK))
+
+    def test_no_colour_writes_no_colour_file(self):
+        self.assertFalse((self._run(color=None) / "color").exists())
+
+    def test_a_read_only_calendar_can_be_synced_twice(self):
+        # The 0555 marker is written by the first sync and would block the
+        # second one from writing into its own folder.
+        path = self._run(writable=False)
+        calendar = RemoteCalendar(id="cal-1", name="Holidays in Canada", writable=False)
+        _sync_one_calendar(FakeBridge(), {"id": "acct"},
+                           calendar, path, state_dir=path.parent.parent / "state")
+        self.assertFalse(os.access(path, os.W_OK))
+
+    def test_discovery_sees_the_name_and_the_read_only_flag(self):
+        self._run(writable=False)
+        path = self._run(writable=False)
+        found = {c["id"]: c for c in discover_calendars(path.parent.parent)}
+        entry = next(iter(found.values()))
+        self.assertEqual(entry["name"], "Holidays in Canada")
+        self.assertTrue(entry["readOnly"])
+
+
+class AdoptRemoteUidTest(unittest.TestCase):
+    """An event created in Omagenda used to come back from the next pull
+    as a second, separate event.
+
+    Omagenda invents a UID when it writes the .ics; Google ignores it on
+    insert and assigns its own event id, and every later pull keys the
+    event by that id. So the pull wrote the server's copy next to the
+    local one and the appointment appeared twice, permanently. The fix is
+    to take on the remote's id the moment the create succeeds.
+    """
+
+    LOCAL = (b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n"
+             b"UID:invented-1@omagenda\r\nDTSTART:20260909T160000Z\r\n"
+             b"DTEND:20260909T170000Z\r\nSUMMARY:Coffee\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+
+    def _calendar_dir(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return Path(tmp.name)
+
+    def test_create_renames_the_file_to_the_remote_id(self):
+        root = self._calendar_dir()
+        path = root / "acct" / "cal-1"
+        path.mkdir(parents=True)
+        (path / "invented-1@omagenda.ics").write_bytes(self.LOCAL)
+
+        calendar = RemoteCalendar(id="cal-1", name="Primary")
+        bridge = FakeBridge()
+        counts = _sync_one_calendar(bridge, {"id": "acct"}, calendar, path,
+                                    state_dir=root / "state")
+
+        self.assertEqual(counts["createdRemote"], 1)
+        self.assertFalse((path / "invented-1@omagenda.ics").exists())
+        self.assertTrue((path / "new-remote-id.ics").exists())
+
+    def test_the_uid_inside_the_file_is_rewritten_too(self):
+        root = self._calendar_dir()
+        path = root / "acct" / "cal-1"
+        path.mkdir(parents=True)
+        (path / "invented-1@omagenda.ics").write_bytes(self.LOCAL)
+
+        _sync_one_calendar(FakeBridge(), {"id": "acct"},
+                           RemoteCalendar(id="cal-1", name="Primary"), path,
+                           state_dir=root / "state")
+
+        event = next(iter(icalendar.Calendar.from_ical(
+            (path / "new-remote-id.ics").read_bytes()).walk("VEVENT")))
+        self.assertEqual(str(event["UID"]), "new-remote-id")
+
+    def test_a_pull_of_the_same_event_does_not_make_a_second_copy(self):
+        root = self._calendar_dir()
+        path = root / "acct" / "cal-1"
+        path.mkdir(parents=True)
+        (path / "invented-1@omagenda.ics").write_bytes(self.LOCAL)
+        calendar = RemoteCalendar(id="cal-1", name="Primary")
+
+        _sync_one_calendar(FakeBridge(), {"id": "acct"}, calendar, path,
+                           state_dir=root / "state")
+
+        # The server now hands the same event back under its own id.
+        served = self.LOCAL.replace(b"invented-1@omagenda", b"new-remote-id")
+        bridge = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="new-remote-id", ics_bytes=served,
+            ref=RemoteRef(remote_id="new-remote-id", etag="etag-2"))])])
+        _sync_one_calendar(bridge, {"id": "acct"}, calendar, path,
+                           state_dir=root / "state")
+
+        self.assertEqual(sorted(p.name for p in path.glob("*.ics")),
+                         ["new-remote-id.ics"])
+
+    def test_the_adopted_event_is_not_mistaken_for_a_local_deletion(self):
+        root = self._calendar_dir()
+        path = root / "acct" / "cal-1"
+        path.mkdir(parents=True)
+        (path / "invented-1@omagenda.ics").write_bytes(self.LOCAL)
+
+        bridge = FakeBridge()
+        _sync_one_calendar(bridge, {"id": "acct"},
+                           RemoteCalendar(id="cal-1", name="Primary"), path,
+                           state_dir=root / "state")
+
+        self.assertEqual(bridge.push_delete_calls, [])
+
+    def test_a_folded_uid_line_is_replaced_whole(self):
+        folded = (b"BEGIN:VEVENT\r\nUID:a-very-long-uid-that-the-server\r\n"
+                  b" -wrapped-across-lines\r\nSUMMARY:x\r\nEND:VEVENT\r\n")
+        self.assertEqual(
+            _rewrite_uid(folded, "short"),
+            b"BEGIN:VEVENT\r\nUID:short\r\nSUMMARY:x\r\nEND:VEVENT\r\n")
+
+    def test_a_file_with_no_uid_is_left_alone(self):
+        raw = b"BEGIN:VEVENT\r\nSUMMARY:x\r\nEND:VEVENT\r\n"
+        self.assertEqual(_rewrite_uid(raw, "short"), raw)
