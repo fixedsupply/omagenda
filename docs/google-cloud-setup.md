@@ -83,8 +83,13 @@ carries its own token, needs no OAuth, and is read-only:
 3. Copy the **Secret address in iCal format** (it ends in
    `/basic.ics`). Treat it like a password -- anyone with it can read that
    calendar.
-4. `omagenda account add ics --url '<that URL>' --id gcal-work --color blue`
+4. `omagenda account add ics --id gcal-work --color blue` -- it prompts for
+   the URL with the input hidden, so the token never reaches your shell
+   history. (`--url` still exists for scripts.)
 5. `omagenda sync`
+
+`omagenda account list` masks the URL down to its host for the same
+reason; `--json` still returns it in full.
 
 Repeat per calendar. Events appear in the bar and panel like any other;
 they simply can't be edited from Omagenda. Quick Add writes to a local

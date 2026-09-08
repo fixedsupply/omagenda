@@ -356,9 +356,17 @@ def cmd_account_add(args) -> int:
         print(f"Wrote {config_path}. Run 'omagenda sync' to sync for the first time.")
 
     elif args.account_type == "ics":
-        if not args.url:
-            return _fail("ics subscriptions need --url")
-        account["url"] = args.url
+        # A subscription URL carries its own access token -- it IS the
+        # credential -- so prompting keeps it out of shell history the same
+        # way the password prompts above do. --url stays for scripts.
+        import getpass
+
+        url = args.url or getpass.getpass("Secret iCal URL (input hidden): ").strip()
+        if not url:
+            return _fail("ics subscriptions need a URL")
+        if not url.startswith(("http://", "https://", "webcal://", "file://")):
+            return _fail("that doesn't look like a URL; expected one starting with https://")
+        account["url"] = url.replace("webcal://", "https://", 1)
         if args.color:
             account["color"] = args.color
         add_account(account)
@@ -368,6 +376,21 @@ def cmd_account_add(args) -> int:
         return _fail(f"unknown account type '{args.account_type}'")
 
     return 0
+
+
+def _mask_url(url: str) -> str:
+    """A subscription URL is a credential -- it grants read access to the
+    calendar to anyone holding it -- so `account list` shows enough to tell
+    two of them apart and no more. --json still returns it in full for
+    scripts that genuinely need it."""
+    if not url:
+        return ""
+    import urllib.parse
+
+    parsed = urllib.parse.urlparse(url)
+    if not parsed.netloc:
+        return "(hidden)"
+    return f"{parsed.scheme}://{parsed.netloc}/… (hidden)"
 
 
 def cmd_account_list(args) -> int:
@@ -381,7 +404,7 @@ def cmd_account_list(args) -> int:
         print("No accounts configured.")
         return 0
     for account in accounts:
-        detail = account.get("email") or account.get("username") or account.get("url", "")
+        detail = account.get("email") or account.get("username") or _mask_url(account.get("url", ""))
         print(f"{account['id']:20s} {account['type']:10s} {detail}")
     return 0
 
