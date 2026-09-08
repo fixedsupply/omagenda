@@ -95,6 +95,39 @@ Repeat per calendar. Events appear in the bar and panel like any other;
 they simply can't be edited from Omagenda. Quick Add writes to a local
 calendar or an iCloud one instead.
 
-Full read-write on such an account needs the app to pass Google
-verification, and even then it is Google's decision whether Advanced
-Protection admits it.
+### Getting writes back
+
+A read-only Google calendar is a permanent state, not a temporary one:
+the secret iCal address is a one-way feed and no setting turns it into a
+two-way sync. Writing to Google needs one of two things.
+
+**Verify the app.** Advanced Protection admits verified third-party apps
+to sensitive scopes; the block is on *unverified* ones. So verification
+lifts it. Verification needs a homepage and a privacy policy hosted on a
+domain the maintainer owns -- Google rejects GitHub Pages and Vercel
+subdomains for this -- plus a short screen recording of the consent flow.
+The Calendar scope is sensitive rather than restricted, so no paid
+security assessment is involved. Turnaround is days to a couple of weeks.
+Once it clears, `omagenda account add google` works normally on an
+Advanced Protection account and Quick Add writes straight to Google.
+
+**Or leave Advanced Protection.** An unverified app is admitted for up to
+100 users once the OAuth client is published, so an account not enrolled
+in Advanced Protection can connect today and click past the unverified
+warning. This weakens the account's protection against phishing and
+should be weighed on its own terms, not adopted just to unblock a
+calendar.
+
+Until either happens, Quick Add writes to a local calendar or an iCloud
+one. iCloud is the practical stand-in: it is CalDAV, Omagenda has full
+read-write on it, and events land on any iPhone or iPad signed into the
+same Apple ID.
+
+```
+omagenda account add icloud --id family --username you@icloud.com
+```
+
+It prompts for an app-specific password, generated at
+[appleid.apple.com](https://appleid.apple.com) under Sign-In and
+Security, and stores it in the system keyring rather than the config
+file.

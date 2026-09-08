@@ -357,6 +357,32 @@ function writableCalendars(agenda) {
   return out
 }
 
+// Why Tab did nothing, in the user's terms. Silence is the wrong answer:
+// with a single writable calendar the key appears broken, when in fact
+// there is simply nowhere else an event could go.
+function cycleUnavailableReason(agenda) {
+  var writable = writableCalendars(agenda)
+  if (writable.length > 1) return ""
+  var readOnly = ((agenda && agenda.calendars) || []).filter(function(c) { return c.readOnly })
+  if (writable.length === 1) {
+    if (readOnly.length === 0) return "'" + writable[0].id + "' is your only calendar"
+    var names = readOnly.map(function(c) { return c.id }).join(", ")
+    return "'" + writable[0].id + "' is the only calendar that can take events ("
+      + names + (readOnly.length === 1 ? " is" : " are") + " read-only)"
+  }
+  return "No calendar can take events; every one found is read-only"
+}
+
+// The footer only advertises keys that do something. Offering "TAB
+// CALENDAR" when there is one writable calendar teaches the user the
+// feature is broken; withdrawing it teaches them nothing false.
+function quickAddHints(agenda) {
+  var base = ["ENTER SAVE", "SHIFT+ENTER SAVE AND ADD ANOTHER"]
+  if (writableCalendars(agenda).length > 1) base.push("TAB CALENDAR")
+  base.push("ESC CANCEL")
+  return base.join(" \u00b7 ")
+}
+
 // Tab walks the writable calendars, starting from whichever is in play.
 function nextCalendarId(agenda, currentId) {
   var writable = writableCalendars(agenda)
@@ -399,6 +425,8 @@ if (typeof module !== "undefined") {
     highlightedHtml: highlightedHtml,
     previewLine: previewLine,
     writableCalendars: writableCalendars,
-    nextCalendarId: nextCalendarId
+    nextCalendarId: nextCalendarId,
+    cycleUnavailableReason: cycleUnavailableReason,
+    quickAddHints: quickAddHints
   }
 }

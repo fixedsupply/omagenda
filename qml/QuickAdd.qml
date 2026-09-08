@@ -65,7 +65,17 @@ Item {
 
   signal added(string title)
 
+  property string cycleNote: ""
+
   function cycleCalendar() {
+    var reason = Model.cycleUnavailableReason(root.agenda)
+    if (reason !== "") {
+      // Say why rather than appearing broken.
+      root.cycleNote = reason
+      cycleNoteTimer.restart()
+      return
+    }
+    root.cycleNote = ""
     var next = Model.nextCalendarId(root.agenda, root.effectiveCalendar)
     if (next !== "") root.targetCalendar = next
   }
@@ -73,6 +83,7 @@ Item {
   function open(dateKey) {
     root.prefillDate = dateKey || ""
     root.targetCalendar = ""
+    root.cycleNote = ""
     root.text = ""
     root.parsed = null
     root.parseError = ""
@@ -137,6 +148,13 @@ Item {
     } else {
       root.close()
     }
+  }
+
+  Timer {
+    id: cycleNoteTimer
+    interval: 4000
+    repeat: false
+    onTriggered: root.cycleNote = ""
   }
 
   Timer {
@@ -355,6 +373,17 @@ Item {
         Text {
           width: parent.width
           textFormat: Text.PlainText
+          visible: root.cycleNote !== ""
+          text: root.cycleNote
+          color: Qt.darker(root.foreground, 1.4)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          wrapMode: Text.WordWrap
+        }
+
+        Text {
+          width: parent.width
+          textFormat: Text.PlainText
           visible: root.effectiveCalendar !== ""
           text: "→ " + root.effectiveCalendar
                 + (root.parsed && root.parsed.calendar ? "  (from the sentence)" : "")
@@ -366,7 +395,7 @@ Item {
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: "ENTER SAVE · SHIFT+ENTER SAVE AND ADD ANOTHER · TAB CALENDAR · ESC CANCEL"
+          text: Model.quickAddHints(root.agenda)
           color: Qt.darker(root.foreground, 1.6)
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption

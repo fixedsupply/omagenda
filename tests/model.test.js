@@ -347,3 +347,43 @@ test("tab starts somewhere sensible when nothing is chosen yet", () => {
 test("tab does nothing when there is nowhere to write", () => {
   assert.equal(Model.nextCalendarId({ calendars: [{ id: "x", readOnly: true }] }, ""), "")
 })
+
+// ---------------------------------------------------------------------
+const MIXED_ONE_WRITABLE = {
+  calendars: [
+    { id: "gcal", name: "Google", color: "blue", readOnly: true },
+    { id: "personal", name: "Personal", color: "green", readOnly: false }
+  ],
+  events: []
+}
+
+test("tab explains itself when there is only one place to write", () => {
+  const reason = Model.cycleUnavailableReason(MIXED_ONE_WRITABLE)
+  assert.match(reason, /personal/)
+  assert.match(reason, /gcal is read-only/)
+})
+
+test("tab says nothing when cycling actually works", () => {
+  assert.equal(Model.cycleUnavailableReason(MIXED), "")
+})
+
+test("tab explains a vdir with nowhere to write at all", () => {
+  const reason = Model.cycleUnavailableReason({ calendars: [{ id: "gcal", readOnly: true }] })
+  assert.match(reason, /No calendar can take events/)
+})
+
+test("a single calendar with no subscriptions reads naturally", () => {
+  const reason = Model.cycleUnavailableReason({ calendars: [{ id: "personal", readOnly: false }] })
+  assert.equal(reason, "'personal' is your only calendar")
+})
+
+test("the footer withholds the tab hint when tab has nowhere to go", () => {
+  const hints = Model.quickAddHints(MIXED_ONE_WRITABLE)
+  assert.ok(!hints.includes("TAB"))
+  assert.ok(hints.includes("ENTER SAVE"))
+  assert.ok(hints.includes("ESC CANCEL"))
+})
+
+test("the footer offers the tab hint when there are two places to write", () => {
+  assert.ok(Model.quickAddHints(MIXED).includes("TAB CALENDAR"))
+})
