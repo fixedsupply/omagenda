@@ -47,11 +47,21 @@ def _sync_ics(account: dict, vdir_root: Path) -> dict:
     except (urllib.error.URLError, OSError, ValueError) as exc:
         return {"ok": False, "detail": f"fetch failed: {exc}"}
 
-    (folder / "displayname").write_text(account.get("id", url))
-    if account.get("color"):
-        (folder / "color").write_text(account["color"])
-    (folder / "subscription.ics").write_bytes(data)
-    folder.chmod(0o555)  # readOnly, per vdir.discover_calendars' os.access check
+    # The folder is left read-only so discover_calendars reports the
+    # subscription as such, which means every later refresh has to open
+    # the write bit again first. Overwriting an existing file happens to
+    # survive a read-only directory, but creating one does not -- so a
+    # single deleted file would otherwise wedge the subscription forever.
+    folder.chmod(0o755)
+    try:
+        (folder / "displayname").write_text(account.get("id", url))
+        if account.get("color"):
+            (folder / "color").write_text(account["color"])
+        (folder / "subscription.ics").write_bytes(data)
+    except OSError as exc:
+        return {"ok": False, "detail": f"couldn't write into {folder}: {exc}"}
+    finally:
+        folder.chmod(0o555)  # readOnly, per vdir.discover_calendars' os.access check
     return {"ok": True, "detail": f"fetched {len(data)} bytes into {folder}"}
 
 
@@ -247,14 +257,20 @@ def sync_all(config: dict | None = None, state_dir=None) -> dict:
     results = {}
     for account in config.get("accounts", []):
         account_type = account.get("type")
-        if account_type == "ics":
-            results[account["id"]] = _sync_ics(account, vdir_root)
-        elif account_type in ("icloud", "caldav"):
-            results[account["id"]] = _sync_caldav(account)
-        elif account_type in ("google", "microsoft"):
-            results[account["id"]] = _sync_bridge(account, vdir_root, state_dir=state_dir)
-        else:
-            results[account.get("id", "?")] = {"ok": False, "detail": f"unknown account type '{account_type}'"}
+        # A broken account reports itself and the run carries on; the
+        # bridge path already did this, and the others have exactly the
+        # same reason to (a read-only folder, an unreadable config).
+        try:
+            if account_type == "ics":
+                results[account["id"]] = _sync_ics(account, vdir_root)
+            elif account_type in ("icloud", "caldav"):
+                results[account["id"]] = _sync_caldav(account)
+            elif account_type in ("google", "microsoft"):
+                results[account["id"]] = _sync_bridge(account, vdir_root, state_dir=state_dir)
+            else:
+                results[account.get("id", "?")] = {"ok": False, "detail": f"unknown account type '{account_type}'"}
+        except Exception as exc:  # noqa: BLE001 -- see comment above
+            results[account.get("id", "?")] = {"ok": False, "detail": str(exc)}
 
     omacal_result = _merge_omacal(vdir_root)
     if omacal_result is not None:

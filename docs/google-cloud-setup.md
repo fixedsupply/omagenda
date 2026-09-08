@@ -58,3 +58,38 @@ Two separate steps, do them in order:
 `omagenda doctor` should report the client's current publishing status by calling `tokeninfo` against a stored token, so contributors don't have to guess why sign-in behaves differently on their machine.
 
 Sources checked 2026-09-07: [Google Cloud Console Help — Manage App Audience](https://support.google.com/cloud/answer/15549945), [Unverified apps](https://support.google.com/cloud/answer/7454865), [When verification is not needed](https://support.google.com/cloud/answer/13464323), [Sensitive scope verification](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification), [OAuth 2.0 for Desktop apps](https://developers.google.com/identity/protocols/oauth2/native-app).
+
+## If your account is on Advanced Protection
+
+Google's Advanced Protection Program blocks unverified third-party apps
+from sensitive scopes before the consent screen is ever shown. The sign-in
+ends with:
+
+```
+Access blocked: Omagenda is not approved by Advanced Protection
+Error 400: policy_enforced
+```
+
+Nothing in the OAuth setup above is wrong when this happens, and there is
+no flag that gets around it. Advanced Protection also disables app
+passwords, so Google's CalDAV endpoint is closed off as well.
+
+The route that still works is a per-calendar **secret iCal address**. It
+carries its own token, needs no OAuth, and is read-only:
+
+1. Google Calendar on the web, hover the calendar, three dots, **Settings
+   and sharing**.
+2. Scroll to **Integrate calendar**.
+3. Copy the **Secret address in iCal format** (it ends in
+   `/basic.ics`). Treat it like a password -- anyone with it can read that
+   calendar.
+4. `omagenda account add ics --url '<that URL>' --id gcal-work --color blue`
+5. `omagenda sync`
+
+Repeat per calendar. Events appear in the bar and panel like any other;
+they simply can't be edited from Omagenda. Quick Add writes to a local
+calendar or an iCloud one instead.
+
+Full read-write on such an account needs the app to pass Google
+verification, and even then it is Google's decision whether Advanced
+Protection admits it.

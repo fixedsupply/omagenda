@@ -142,6 +142,23 @@ Decided 2026-09-07: Google, Apple, and Microsoft compatibility are all in scope,
 
 Why this split: Apple and every self-hosted service speak CalDAV, and pimsync already does careful two-way CalDAV sync with conflict handling, so Omagenda should configure it rather than reimplement it. Google and Microsoft do not speak CalDAV usably (Google's CalDAV endpoint still needs OAuth and is second-class; Microsoft has none), so those two get purpose-built bridges that translate between the vendor JSON and `VEVENT`. Both bridges implement the same small interface (`ARCHITECTURE.md` §11) so a third one is a contribution-sized task.
 
+**Google accounts on Advanced Protection.** Discovered 2026-09-08 on the
+PM's own account. Google's Advanced Protection Program blocks *unverified*
+third-party apps from sensitive scopes outright: the consent screen never
+appears, and the OAuth flow ends in `Error 400: policy_enforced`. Advanced
+Protection also disables app passwords entirely, so the CalDAV fallback is
+closed on those accounts too. What still works is the per-calendar secret
+iCal URL, which carries its own token, needs no OAuth, and is read-only.
+
+So an Advanced Protection user's Google calendars are read-only in
+Omagenda until the app completes Google verification, and possibly after
+(verified apps are permitted under Advanced Protection, but that is
+Google's call, not something the plan can assume). This is not an edge
+case to note and forget -- it is the PM's own primary calendar, and it
+means Quick Add writes to a local or iCloud calendar rather than to
+Google. It also moves Google verification from "nice, removes a warning"
+to "the only route to writing to Google for these users".
+
 **Credentials.** OAuth tokens and app passwords go into the desktop keyring through `secret-tool` (libsecret), which Omarchy ships. If no keyring is available, `omagenda doctor` says so and the bridge falls back to a mode-0600 file under `~/.local/state/omagenda/`, clearly labeled.
 
 **Google client id.** The repo ships an OAuth client owned by the project (Google does not treat the installed-app client secret as confidential, and the calendar scope is what makes the app useful). Until the project passes Google's app verification, Google shows an "unverified app" interstitial and caps the app at 100 users. Two consequences for the PM: create the Google Cloud project and OAuth client before Phase 1b, and plan to submit for verification once the README, a privacy page, and a short demo video exist. A bring-your-own-client path stays documented for people who prefer it.

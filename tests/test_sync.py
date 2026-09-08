@@ -95,5 +95,43 @@ class SyncCaldavAndUnknownTest(unittest.TestCase):
             self.assertEqual({k: v for k, v in sync_all({}).items() if k != "omacal"}, {})
 
 
+class IcsResyncTest(unittest.TestCase):
+    """A subscription folder is left read-only on purpose, so refreshing it
+    has to reopen the write bit -- otherwise one missing file wedges the
+    subscription permanently."""
+
+    def _config(self):
+        return {"accounts": [
+            {"id": "gcal", "type": "ics", "url": f"file://{FIXTURE_ICS.resolve()}", "color": "blue"},
+        ]}
+
+    def test_repeated_sync_succeeds(self):
+        with WithVdir():
+            self.assertTrue(sync_all(self._config())["gcal"]["ok"])
+            self.assertTrue(sync_all(self._config())["gcal"]["ok"])
+
+    def test_sync_recovers_when_the_fetched_file_was_deleted(self):
+        with WithVdir() as vdir_root:
+            sync_all(self._config())
+            folder = vdir_root / "gcal"
+            folder.chmod(0o755)
+            (folder / "subscription.ics").unlink()
+            folder.chmod(0o555)
+
+            self.assertTrue(sync_all(self._config())["gcal"]["ok"])
+            self.assertTrue((folder / "subscription.ics").exists())
+            self.assertFalse(os.access(folder, os.W_OK))  # still marked read-only
+
+    def test_one_broken_account_does_not_sink_the_others(self):
+        with WithVdir():
+            config = {"accounts": [
+                {"id": "broken"},  # no type at all -- would raise on ["type"]
+                {"id": "gcal", "type": "ics", "url": f"file://{FIXTURE_ICS.resolve()}"},
+            ]}
+            results = sync_all(config)
+            self.assertFalse(results["broken"]["ok"])
+            self.assertTrue(results["gcal"]["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()
