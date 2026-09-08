@@ -221,3 +221,35 @@ class OneLineFieldsTest(unittest.TestCase):
             location = agenda["events"][0]["location"]
             self.assertNotIn("\n", location)
             self.assertEqual(location, "Gym - University District 4128 University Ave NW Calgary AB")
+
+
+class CurrentOrNextEventTest(unittest.TestCase):
+    """`omagenda next` is documented as "what the pill shows", so it has to
+    agree with qml/Model.js -- it did not, and returned an all-day event
+    that had started the day before."""
+
+    def _events(self):
+        return [
+            {"title": "Mom's Week", "allDay": True, "start": "2026-09-07", "end": "2026-09-14"},
+            {"title": "Tee time", "allDay": False,
+             "start": "2026-09-08T10:30:00-06:00", "end": "2026-09-08T14:30:00-06:00"},
+            {"title": "Class", "allDay": False,
+             "start": "2026-09-08T18:00:00-06:00", "end": "2026-09-08T19:00:00-06:00"},
+        ]
+
+    def _at(self, iso):
+        from datetime import datetime as dt
+        from omagenda.index import current_or_next_event
+        return current_or_next_event(self._events(), dt.fromisoformat(iso))
+
+    def test_all_day_events_are_never_the_answer(self):
+        self.assertEqual(self._at("2026-09-08T09:00:00-06:00")["title"], "Tee time")
+
+    def test_a_running_event_wins_over_a_later_one(self):
+        self.assertEqual(self._at("2026-09-08T11:00:00-06:00")["title"], "Tee time")
+
+    def test_the_next_one_once_the_first_has_ended(self):
+        self.assertEqual(self._at("2026-09-08T15:00:00-06:00")["title"], "Class")
+
+    def test_nothing_left(self):
+        self.assertIsNone(self._at("2026-09-08T23:00:00-06:00"))

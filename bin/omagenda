@@ -485,12 +485,10 @@ def cmd_parse(args) -> int:
 
 
 def cmd_next(args) -> int:
-    from omagenda.index import build_agenda
+    from omagenda.index import build_agenda, current_or_next_event
 
     agenda = build_agenda(days=7, start=date.today())
-    now = datetime.now().astimezone().isoformat(timespec="seconds")
-    upcoming = [e for e in agenda["events"] if e["allDay"] or e["end"] >= now]
-    event = upcoming[0] if upcoming else None
+    event = current_or_next_event(agenda["events"], _local_reference())
     if args.json:
         print(json.dumps(event))
         return 0

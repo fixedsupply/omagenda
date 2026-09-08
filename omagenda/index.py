@@ -102,6 +102,36 @@ def _sort_key(item: dict):
     return (date_part, is_timed, time_part)
 
 
+def current_or_next_event(events: list[dict], now: datetime) -> dict | None:
+    """Whatever is running, else the next thing to start. All-day events
+    are skipped deliberately: "Mom's Week" is true for seven days running,
+    so answering "what's next" with it is never the useful answer.
+
+    This mirrors qml/Model.js's currentOrNextEvent, because `omagenda next`
+    is documented as "what the pill shows" (PLAN.md §6.4) -- the two
+    disagreeing is a bug, and it was one: the CLI happily returned an
+    all-day event that had started the previous day.
+    """
+    running = None
+    upcoming = None
+    for event in events:
+        if event.get("allDay"):
+            continue
+        try:
+            start = datetime.fromisoformat(event["start"])
+            end = datetime.fromisoformat(event["end"])
+        except (KeyError, ValueError):
+            continue
+        if start.tzinfo is None:
+            start, end = start.replace(tzinfo=now.tzinfo), end.replace(tzinfo=now.tzinfo)
+        if start <= now < end:
+            if running is None or start < datetime.fromisoformat(running["start"]).replace(tzinfo=start.tzinfo):
+                running = event
+        elif start > now and (upcoming is None or start < datetime.fromisoformat(upcoming["start"]).replace(tzinfo=start.tzinfo)):
+            upcoming = event
+    return running or upcoming
+
+
 def _cache_path(state_dir=None) -> Path:
     state_dir = Path(state_dir).expanduser() if state_dir else resolve_state_dir()
     return state_dir / "index-cache.json"
