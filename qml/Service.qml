@@ -161,6 +161,33 @@ Item {
     onTriggered: root.minuteTick++
   }
 
+  // ---- Quick Add -------------------------------------------------------
+  // Hosted here rather than declared as an `overlay` kind in the manifest:
+  // the shell routes `summon <plugin id>` to the bar widget's panel unless
+  // the plugin declares overlay/panel/menu, and declaring one would have
+  // stolen `shell toggle` from the agenda panel (shell.qml's
+  // isBarWidgetPanelPlugin). Owning the surface here keeps both doors.
+  function quickAdd(dateKey) {
+    quickAddLoader.active = true
+    if (quickAddLoader.item) quickAddLoader.item.open(dateKey || "")
+  }
+
+  Loader {
+    id: quickAddLoader
+    active: false
+    source: Qt.resolvedUrl("QuickAdd.qml")
+    onLoaded: {
+      item.service = root
+      item.binPath = root.binPath
+      item.added.connect(function(title) {
+        Quickshell.execDetached([
+          "omarchy-notification-send", "-g", "󰃭", "Added to your calendar", title || "Event"
+        ])
+        root.reload()
+      })
+    }
+  }
+
   // ---- IPC -------------------------------------------------------------
   // `omarchy-shell shell toggle fixedsupply.omagenda` opens the agenda panel
   // (the bar-widget route). These are the plugin's own extra verbs, which is
@@ -171,6 +198,8 @@ Item {
 
     function sync(): void { root.sync() }
     function reload(): void { root.reload() }
+    function quickAdd(): void { root.quickAdd("") }
+    function quickAddOn(dateKey: string): void { root.quickAdd(dateKey) }
     function status(): string {
       return JSON.stringify({
         events: root.eventCount,

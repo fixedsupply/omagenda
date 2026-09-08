@@ -291,6 +291,62 @@ function footerText(agenda, timeFormat) {
 }
 
 // ---------------------------------------------------------------------
+// Quick Add
+// ---------------------------------------------------------------------
+function escapeHtml(text) {
+  return String(text === undefined || text === null ? "" : text)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+// The typed sentence with every fragment the parser recognised painted in
+// the accent colour, as Text.StyledText markup. The field is a plain Text
+// driven by key events rather than a TextInput (the reminders overlay does
+// the same), so there is no real caret fighting the markup -- the caret is
+// drawn as a character at the end.
+//
+// Spans arrive sorted and non-overlapping from parse.py; anything between
+// them is title text and stays in the foreground colour.
+function highlightedHtml(text, spans, accentColor, foregroundColor) {
+  var source = String(text || "")
+  var ordered = (spans || []).slice().sort(function(a, b) { return a.start - b.start })
+  var out = ""
+  var cursor = 0
+  for (var i = 0; i < ordered.length; i++) {
+    var span = ordered[i]
+    if (span.start < cursor || span.start > source.length) continue
+    out += '<font color="' + foregroundColor + '">' + escapeHtml(source.slice(cursor, span.start)) + "</font>"
+    out += '<font color="' + accentColor + '">' + escapeHtml(source.slice(span.start, span.end)) + "</font>"
+    cursor = Math.min(span.end, source.length)
+  }
+  out += '<font color="' + foregroundColor + '">' + escapeHtml(source.slice(cursor)) + "</font>"
+  return out
+}
+
+// The line under the field: what will actually be written, in the same
+// shape the agenda renders it, so the preview and the result agree.
+function previewLine(parsed, timeFormat) {
+  if (!parsed || !parsed.start) return ""
+  var bits = []
+  var startsAllDay = parsed.allDay === true
+
+  var d = toDate(parsed.start)
+  bits.push(WEEKDAY_LABELS[d.getDay()].charAt(0) + WEEKDAY_LABELS[d.getDay()].slice(1).toLowerCase()
+    + " " + d.getDate() + " " + MONTH_LABELS[d.getMonth()])
+
+  if (startsAllDay) bits.push("all day")
+  else bits.push(formatTime(parsed.start, timeFormat) + (parsed.end ? "–" + formatTime(parsed.end, timeFormat) : ""))
+
+  bits.push(parsed.title || "Untitled")
+  if (parsed.location) bits.push(parsed.location)
+  if (parsed.rrule) bits.push("repeats")
+  if (parsed.alarms && parsed.alarms.length) bits.push("reminder")
+  if (parsed.calendar) bits.push(parsed.calendar.charAt(0).toUpperCase() + parsed.calendar.slice(1))
+  return bits.join(" · ")
+}
+
+var MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+// ---------------------------------------------------------------------
 // Exports for node:test. QML loads this file with `import "Model.js"`,
 // which ignores module.exports entirely.
 // ---------------------------------------------------------------------
@@ -317,6 +373,9 @@ if (typeof module !== "undefined") {
     tickerDays: tickerDays,
     eventsForDate: eventsForDate,
     secondLine: secondLine,
-    footerText: footerText
+    footerText: footerText,
+    escapeHtml: escapeHtml,
+    highlightedHtml: highlightedHtml,
+    previewLine: previewLine
   }
 }

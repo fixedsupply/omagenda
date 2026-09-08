@@ -1,5 +1,6 @@
 """Account management tests: config.toml round-trip, keyring fallback,
 and pimsync config generation. See ARCHITECTURE.md §5 and §11."""
+import os
 import shutil
 import tempfile
 import unittest
@@ -186,3 +187,53 @@ class DerivedAccountIdTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WritableTargetTest(unittest.TestCase):
+    """`add` fell back to calendars[0], which on a real setup was a
+    read-only Google subscription sorting before the local calendar, so
+    every Quick Add failed with a calendar sitting right there that could
+    have taken the event."""
+
+    def _run_add(self, sentence, vdir_root):
+        import subprocess
+        import sys
+        from pathlib import Path as P
+
+        env = {**os.environ, "OMAGENDA_VDIR": str(vdir_root),
+               "OMAGENDA_STATE": str(vdir_root.parent / "state")}
+        cli = P(__file__).parent.parent / "bin" / "omagenda"
+        return subprocess.run([sys.executable, str(cli), "add", sentence, "--json"],
+                              capture_output=True, text=True, env=env)
+
+    def test_a_read_only_calendar_is_never_the_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vdir_root = Path(tmp) / "calendars"
+            # "aaa-readonly" sorts first, exactly like a real "gcal" did.
+            for name, writable in (("aaa-readonly", False), ("personal", True)):
+                d = vdir_root / name
+                d.mkdir(parents=True)
+                (d / "displayname").write_text(name)
+                if not writable:
+                    d.chmod(0o555)
+
+            result = self._run_add("Coffee today at 3pm", vdir_root)
+            try:
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('"calendar": "personal"', result.stdout)
+            finally:
+                (vdir_root / "aaa-readonly").chmod(0o755)
+
+    def test_all_read_only_says_so_plainly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vdir_root = Path(tmp) / "calendars"
+            d = vdir_root / "sub"
+            d.mkdir(parents=True)
+            (d / "displayname").write_text("sub")
+            d.chmod(0o555)
+            try:
+                result = self._run_add("Coffee today at 3pm", vdir_root)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("read-only", result.stderr)
+            finally:
+                d.chmod(0o755)

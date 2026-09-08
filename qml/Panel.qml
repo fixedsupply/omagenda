@@ -64,6 +64,10 @@ Panel {
   readonly property color foreground: bar ? bar.foreground : Color.popups.text
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
+  function dotColor(name) {
+    return service ? service.paletteColor(name, foreground) : foreground
+  }
+
   function calendarColor(event) {
     if (!event) return foreground
     return service
@@ -287,7 +291,14 @@ Panel {
               model: root.days
 
               delegate: Item {
+                id: dayCell
                 required property var modelData
+                readonly property var dotColors: {
+                  var out = []
+                  var names = modelData.dots || []
+                  for (var i = 0; i < names.length; i++) out.push(root.dotColor(names[i]))
+                  return out
+                }
                 width: (ticker.width - (root.days.length - 1) * Style.space(2)) / root.days.length
                 height: dayColumn.implicitHeight + Style.space(10)
 
@@ -330,14 +341,20 @@ Panel {
                     height: Style.space(4)
                     spacing: Style.space(2)
 
+                    // Colours are resolved here, in the day delegate, and
+                    // handed down already resolved. A Repeater delegate
+                    // nested inside another Repeater delegate cannot
+                    // reliably reach the file's `root` id -- doing so threw
+                    // "ReferenceError: root is not defined" on every repaint
+                    // -- and resolving once per day beats once per dot.
                     Repeater {
-                      model: modelData.dots
+                      model: dayCell.dotColors
                       delegate: Rectangle {
                         required property var modelData
                         width: Style.space(4)
                         height: Style.space(4)
                         radius: width / 2
-                        color: root.service ? root.service.paletteColor(modelData, root.foreground) : root.foreground
+                        color: modelData
                       }
                     }
                   }

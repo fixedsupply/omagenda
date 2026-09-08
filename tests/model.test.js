@@ -261,3 +261,61 @@ test("a problem only takes a bar slot when there is nothing else to show", () =>
   assert.notEqual(Model.pillProblemText("No module named 'icalendar'", 0), "")
   assert.equal(Model.pillProblemText("No module named 'icalendar'", 5), "")
 })
+
+// ---------------------------------------------------------------------
+// Quick Add
+const ACCENT = "#7aa2f7"
+const FG = "#c0caf5"
+
+test("highlighting paints recognised fragments and leaves the title alone", () => {
+  // "Lunch tomorrow at 1pm" -- spans cover "tomorrow" and "at 1pm"
+  const html = Model.highlightedHtml(
+    "Lunch tomorrow at 1pm",
+    [{ start: 6, end: 14, kind: "date" }, { start: 15, end: 21, kind: "time" }],
+    ACCENT, FG)
+  assert.match(html, new RegExp(`<font color="${FG}">Lunch </font>`))
+  assert.match(html, new RegExp(`<font color="${ACCENT}">tomorrow</font>`))
+  assert.match(html, new RegExp(`<font color="${ACCENT}">at 1pm</font>`))
+})
+
+test("highlighting with no spans is all foreground", () => {
+  const html = Model.highlightedHtml("Just a title", [], ACCENT, FG)
+  assert.equal(html, `<font color="${FG}">Just a title</font>`)
+})
+
+test("highlighting escapes markup so a typed angle bracket cannot inject", () => {
+  const html = Model.highlightedHtml('a <b>& c', [], ACCENT, FG)
+  assert.match(html, /a &lt;b&gt;&amp; c/)
+  assert.doesNotMatch(html, /<b>/)
+})
+
+test("highlighting survives a span running past the end of the text", () => {
+  // The field can shrink between a keystroke and the parse coming back.
+  const html = Model.highlightedHtml("Lun", [{ start: 0, end: 99, kind: "date" }], ACCENT, FG)
+  assert.match(html, new RegExp(`<font color="${ACCENT}">Lun</font>`))
+})
+
+test("preview line reads like the agenda row it will become", () => {
+  const parsed = {
+    title: "Lunch with Sarah", start: "2026-09-08T13:00", end: "2026-09-08T14:30",
+    allDay: false, location: "Cafe Linnea", calendar: "personal", rrule: null, alarms: ["-PT15M"]
+  }
+  assert.equal(Model.previewLine(parsed, "24h"),
+    "Tue 8 Sep · 13:00–14:30 · Lunch with Sarah · Cafe Linnea · reminder · Personal")
+})
+
+test("preview line for an all-day event says so", () => {
+  const parsed = { title: "Vacation", start: "2026-09-08", allDay: true, alarms: [] }
+  assert.equal(Model.previewLine(parsed, "24h"), "Tue 8 Sep · all day · Vacation")
+})
+
+test("preview line marks a repeating event", () => {
+  const parsed = { title: "Standup", start: "2026-09-08T09:00", end: "2026-09-08T09:15",
+                   allDay: false, rrule: "FREQ=DAILY", alarms: [] }
+  assert.match(Model.previewLine(parsed, "24h"), /repeats/)
+})
+
+test("preview line is empty until there is something to preview", () => {
+  assert.equal(Model.previewLine(null, "24h"), "")
+  assert.equal(Model.previewLine({}, "24h"), "")
+})

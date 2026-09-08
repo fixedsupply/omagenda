@@ -169,12 +169,22 @@ def cmd_add(args) -> int:
     known = [c["id"] for c in calendars]
     result = parse_event(args.sentence, reference=reference, known_calendars=known)
 
-    target_id = args.calendar or result["calendar"] or read_config().get("default_calendar") or calendars[0]["id"]
+    writable = [c for c in calendars if not c["readOnly"]]
+    # The fallback has to be a calendar that can actually be written to.
+    # Picking calendars[0] chose whatever sorted first, which on a real
+    # setup was a read-only Google subscription -- so every Quick Add
+    # failed with "'gcal' is read-only" while a perfectly good local
+    # calendar sat right there.
+    target_id = (args.calendar or result["calendar"] or read_config().get("default_calendar")
+                 or (writable[0]["id"] if writable else None))
+    if target_id is None:
+        return _fail("no writable calendar; every calendar found is read-only")
     target = next((c for c in calendars if c["id"] == target_id), None)
     if target is None:
         return _fail(f"no calendar named '{target_id}' (have: {', '.join(known)})")
     if target["readOnly"]:
-        return _fail(f"'{target_id}' is read-only")
+        writable_names = ", ".join(c["id"] for c in writable) or "none"
+        return _fail(f"'{target_id}' is read-only (writable: {writable_names})")
 
     cal, uid = _build_ics(result)
 
