@@ -163,6 +163,29 @@ Two homes, by ownership:
 ```toml
 vdir = "~/.local/share/calendars"
 default_calendar = "google-calvin/primary"   # set by `omagenda calendars --set-default`
+sync_interval = 300        # seconds between syncs in `omagenda watch`; 0 disables
+sync_workers = 8           # calendars synced at once (see below)
+
+
+`omagenda watch` runs the sync, not just the reindex: on `sync_interval`,
+and within `SYNC_SETTLE` seconds of a local change so a Quick Add reaches
+the server promptly rather than waiting out the full interval. A sync
+writes into the vdir it is watching, so the settle window is also what
+stops its own writes from scheduling the next sync forever.
+
+Sync is almost entirely time spent waiting on the server -- an
+incremental pull of a large calendar that returns *no changes at all*
+still takes Google the better part of ten seconds -- so calendars are
+synced concurrently, `sync_workers` at a time. Each owns its own folder
+and its own state file, so they do not interact. Raising it past the
+default buys little (12 calendars: 148s serial, 46s at six workers, 38s
+at twelve) and costs the server more connections.
+
+Local deletions are judged against a snapshot of the vdir taken *before*
+the pull writes anything. The pull is what would otherwise destroy the
+evidence: a delete made shortly after a create used to vanish, because
+the server echoed the newly created event back, the pull rewrote the file
+the user had just deleted, and the deletion was never sent.
 
 [[accounts]]
 id = "google-calvin"

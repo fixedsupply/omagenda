@@ -26,6 +26,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import threading
 import functools
 import time
 import urllib.error
@@ -196,7 +197,36 @@ def authorize(account: dict) -> None:
     store_secret(account["id"] + _TOKEN_SECRET_SUFFIX, refresh_token)
 
 
+# An access token is good for an hour, and every call that needed one
+# used to spend a full round trip to Google's token endpoint getting a
+# fresh one -- thirteen of them in a single sync of twelve calendars,
+# about seventeen seconds of pure waiting, and needless load on an
+# endpoint that is rate limited. Cached per process, which matters most
+# in `omagenda watch`, the process that syncs over and over.
+_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
+_TOKEN_LOCK = threading.Lock()
+_TOKEN_EARLY_EXPIRY = 300  # refresh early rather than race the expiry
+
+
 def _get_access_token(account: dict) -> str:
+    key = account["id"]
+    with _TOKEN_LOCK:
+        cached = _TOKEN_CACHE.get(key)
+        if cached and cached[1] > time.time():
+            return cached[0]
+    token, lifetime = _fetch_access_token(account)
+    with _TOKEN_LOCK:
+        _TOKEN_CACHE[key] = (token, time.time() + max(60, lifetime - _TOKEN_EARLY_EXPIRY))
+    return token
+
+
+def forget_access_token(account_id: str) -> None:
+    """Drop a cached token, so the next call gets a fresh one."""
+    with _TOKEN_LOCK:
+        _TOKEN_CACHE.pop(account_id, None)
+
+
+def _fetch_access_token(account: dict) -> tuple[str, float]:
     refresh_token = get_secret(account["id"] + _TOKEN_SECRET_SUFFIX)
     if not refresh_token:
         raise RuntimeError(f"no stored Google credentials for '{account['id']}'; run 'omagenda account add google' first")
@@ -209,7 +239,8 @@ def _get_access_token(account: dict) -> str:
     request = urllib.request.Request(TOKEN_URL, data=body, method="POST",
                                       headers={"Content-Type": "application/x-www-form-urlencoded"})
     with urllib.request.urlopen(request, timeout=15) as response:
-        return json_module.loads(response.read())["access_token"]
+        payload = json_module.loads(response.read())
+    return payload["access_token"], float(payload.get("expires_in", 3600))
 
 
 # ---------------------------------------------------------------------

@@ -238,7 +238,11 @@ test("formatTimeRange covers timed and all-day events", () => {
 
 test("footerText reports the active set and last sync", () => {
   assert.equal(Model.footerText(AGENDA, "24h"), "Set: all · synced 13:45")
-  assert.equal(Model.footerText({ activeSet: "work", lastSync: null }, "24h"), "Set: work")
+  // This once asserted a bare "Set: work". Staying silent about a sync
+  // that had never run is what let an event sit in the vdir unnoticed,
+  // so the absence is now stated outright.
+  assert.equal(Model.footerText({ activeSet: "work", lastSync: null }, "24h"),
+               "Set: work · not synced")
 })
 
 // ---------------------------------------------------------------------
@@ -386,4 +390,27 @@ test("the footer withholds the tab hint when tab has nowhere to go", () => {
 
 test("the footer offers the tab hint when there are two places to write", () => {
   assert.ok(Model.quickAddHints(MIXED).includes("TAB CALENDAR"))
+})
+
+// ---------------------------------------------------------------------
+// The footer's sync state. See tests/test_watch_sync.py for why: an
+// event added in Quick Add reached the panel and never the server, and
+// the footer said nothing either way.
+test("a never-synced agenda says so rather than staying quiet", () => {
+  assert.match(Model.footerText({ activeSet: "", lastSync: null }, "24h"), /not synced/)
+})
+
+test("a failing sync is named in the footer", () => {
+  const text = Model.footerText({ activeSet: "", lastSync: "2026-09-08T14:00:00", syncOk: false }, "24h")
+  assert.match(text, /sync failing/)
+})
+
+test("a healthy sync shows the time it happened", () => {
+  const text = Model.footerText({ activeSet: "", lastSync: "2026-09-08T14:05:00", syncOk: true }, "24h")
+  assert.match(text, /synced 14:05/)
+  assert.ok(!text.includes("not synced"))
+})
+
+test("the active set still leads the footer", () => {
+  assert.match(Model.footerText({ activeSet: "Work", lastSync: null }, "24h"), /^Set: Work/)
 })

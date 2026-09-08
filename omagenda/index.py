@@ -175,6 +175,18 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
     end_span = timedelta(days=days)
     calendars = vdir.discover_calendars(vdir_root)
 
+    if last_sync is None:
+        # The panel footer has always had a "synced HH:MM" slot; nothing
+        # ever filled it, so a sync that had never run looked exactly
+        # like one that had just succeeded. Read what sync recorded.
+        from omagenda.sync import read_last_sync
+
+        record = read_last_sync(state_dir)
+        last_sync = record.get("at")
+        sync_ok = record.get("ok", True)
+    else:
+        sync_ok = True
+
     cache = _load_cache(state_dir) if use_cache else {}
     fresh_cache: dict = {}
 
@@ -258,6 +270,7 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
         "generatedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
         "range": {"from": start.isoformat(), "to": (start + end_span).isoformat()},
         "lastSync": last_sync,
+        "syncOk": sync_ok,
         "activeSet": active_set,
         "calendars": [{k: v for k, v in c.items()} for c in calendars],
         "events": events,

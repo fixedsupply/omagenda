@@ -21,6 +21,8 @@ See ARCHITECTURE.md §7 and §11.
 from __future__ import annotations
 
 import hashlib
+import concurrent.futures
+import json
 import os
 import re
 import shutil
@@ -28,6 +30,7 @@ import subprocess
 import tempfile
 import urllib.error
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 from omagenda.doctor import read_config
@@ -184,6 +187,16 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
     counts = {"pulled": 0, "createdRemote": 0, "createdLocal": 0, "updated": 0, "deletedRemote": 0,
               "deletedLocal": 0, "conflicts": 0}
 
+    # Both captured before the pull writes anything, because the pull is
+    # what destroys the evidence. A delete made shortly after creating an
+    # event used to vanish: the create was pushed, Google reported it back
+    # as changed on the next pull, the pull rewrote the file the user had
+    # just deleted, and the deletion -- now invisible on disk -- was never
+    # sent. The event came back from the dead with no error anywhere.
+    known_before = set(state.items)
+    on_disk_before = {f.stem for f in calendar_path.glob("*.ics")
+                      if not f.name.endswith(".conflict.ics")}
+
     # 1. Pull.
     pull_result = bridge.pull(account, calendar, state.cursor)
     for change in pull_result.changed:
@@ -249,14 +262,24 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
                 counts.setdefault("errors", []).append(f"update {uid}: {exc}")
 
     on_disk.update(adopted)
-    deleted_by_pull = {c.uid for c in pull_result.changed} | set(pull_result.deleted_uids)
-    for uid in [u for u in state.items if u not in on_disk and u not in deleted_by_pull]:
-        entry = state.items[uid]
+    # A uid this sync already knew about, whose file the user removed
+    # before the pull ran. Judged on the pre-pull snapshot rather than on
+    # what is on disk now, so an event the pull happened to rewrite is
+    # still recognised as deleted. Events the pull itself removed were on
+    # disk beforehand, so they are correctly not in this set, and events
+    # the pull newly added were not known beforehand.
+    for uid in sorted(known_before - on_disk_before):
+        entry = state.items.get(uid)
+        if entry is None:
+            continue
         try:
             bridge.push_delete(account, calendar, RemoteRef(remote_id=entry["remoteId"], etag=entry.get("etag")))
         except Exception as exc:  # noqa: BLE001
             counts.setdefault("errors", []).append(f"delete {uid}: {exc}")
             continue
+        # If the pull resurrected the file, take it back out; the user's
+        # deletion is the newer intent.
+        (calendar_path / f"{uid}.ics").unlink(missing_ok=True)
         del state.items[uid]
         counts["deletedLocal"] += 1
 
@@ -293,15 +316,33 @@ def _sync_bridge(account: dict, vdir_root: Path, state_dir=None) -> dict:
     if not calendars:
         return {"ok": False, "detail": "no calendars selected (configure 'calendars' or grant write access to at least one)"}
 
-    per_calendar = {}
-    for calendar in calendars:
+    def one(calendar):
         calendar_path = vdir_root / account["id"] / calendar.id
         try:
-            per_calendar[calendar.id] = _sync_one_calendar(bridge, account, calendar, calendar_path, state_dir=state_dir)
+            return _sync_one_calendar(bridge, account, calendar, calendar_path, state_dir=state_dir)
         except Exception as exc:  # noqa: BLE001 -- one broken calendar must not sink the others
-            per_calendar[calendar.id] = {"ok": False, "detail": str(exc)}
+            return {"ok": False, "detail": str(exc)}
 
-    return {"ok": all(c.get("ok", False) for c in per_calendar.values()), "calendars": per_calendar}
+    # Nearly all of a sync is spent waiting on the server: an incremental
+    # pull of a large calendar that returns *no changes at all* still
+    # takes Google the better part of ten seconds. Done one after
+    # another, twelve calendars took two and a half minutes, which meant
+    # a Quick Add could sit that long before reaching the phone in your
+    # pocket. Each calendar owns its own folder and its own state file,
+    # so they overlap safely; the cap is a courtesy to the server rather
+    # than a limit of ours.
+    per_calendar = {}
+    if len(calendars) == 1:
+        per_calendar[calendars[0].id] = one(calendars[0])
+    else:
+        workers = min(_sync_workers(), len(calendars))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(one, c): c for c in calendars}
+            for future in concurrent.futures.as_completed(futures):
+                per_calendar[futures[future].id] = future.result()
+
+    ordered = {c.id: per_calendar[c.id] for c in calendars if c.id in per_calendar}
+    return {"ok": all(c.get("ok", False) for c in ordered.values()), "calendars": ordered}
 
 
 def _merge_omacal(vdir_root: Path) -> dict | None:
@@ -315,6 +356,49 @@ def _merge_omacal(vdir_root: Path) -> dict | None:
     if result.returncode != 0:
         return {"ok": False, "detail": f"omacal exited {result.returncode}"}
     return {"ok": True, "detail": "omacal merge not yet wired into the vdir (read-only, Phase 4)"}
+
+
+# How many calendars to sync at once. Six took 46s on a twelve-calendar
+# account and twelve took 38s, so the returns past this point are small
+# and the politeness cost is not: someone with fifty calendars should
+# not open fifty simultaneous connections. Raise it with `sync_workers`
+# in config.toml if your server doesn't mind.
+DEFAULT_SYNC_WORKERS = 8
+
+
+def _sync_workers() -> int:
+    try:
+        return max(1, int(read_config().get("sync_workers", DEFAULT_SYNC_WORKERS)))
+    except Exception:  # noqa: BLE001 -- a bad config value must not stop a sync
+        return DEFAULT_SYNC_WORKERS
+
+
+def record_path(state_dir=None) -> Path:
+    from omagenda.index import resolve_state_dir
+
+    base = Path(state_dir).expanduser() if state_dir else resolve_state_dir()
+    return base / "last-sync.json"
+
+
+def read_last_sync(state_dir=None) -> dict:
+    """When sync last ran and whether it worked. Absent until the first
+    run, which is itself the answer to "why has nothing reached the
+    server yet"."""
+    try:
+        return json.loads(record_path(state_dir).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _record_sync(results: dict, state_dir=None) -> None:
+    problems = sorted(k for k, v in results.items() if not v.get("ok", False))
+    path = record_path(state_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"at": datetime.now().astimezone().isoformat(timespec="seconds"),
+               "ok": not problems, "problems": problems}
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def sync_all(config: dict | None = None, state_dir=None) -> dict:
@@ -342,4 +426,5 @@ def sync_all(config: dict | None = None, state_dir=None) -> dict:
     if omacal_result is not None:
         results["omacal"] = omacal_result
 
+    _record_sync(results, state_dir)
     return results

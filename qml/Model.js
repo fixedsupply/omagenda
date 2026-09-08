@@ -285,9 +285,15 @@ function secondLine(event, agenda) {
 
 function footerText(agenda, timeFormat) {
   var set = (agenda && agenda.activeSet) || ""
-  var synced = agenda && agenda.lastSync ? formatTime(agenda.lastSync, timeFormat) : ""
   var left = "Set: " + (set || "all")
-  return synced ? left + " · synced " + synced : left
+  if (!agenda) return left
+  // A sync that has never run once read the same as one that had just
+  // succeeded, because nothing ever wrote lastSync. Both states are now
+  // named, since "my event never reached my phone" is only diagnosable
+  // if the panel admits which one it is.
+  if (agenda.syncOk === false) return left + " · sync failing"
+  if (!agenda.lastSync) return left + " · not synced"
+  return left + " · synced " + formatTime(agenda.lastSync, timeFormat)
 }
 
 // ---------------------------------------------------------------------

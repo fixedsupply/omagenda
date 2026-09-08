@@ -283,16 +283,18 @@ def _acquire_watch_lock():
     return lock_file
 
 
-def _wait_for_vdir_change(vdir_root, poll_seconds: int = 15) -> None:
-    """Block until the vdir changes, or `poll_seconds` pass. Prefers
-    inotifywait (inotify-tools); falls back to plain polling when it's
-    missing, per AGENTS.md's Phase 1 brief."""
+def _wait_for_vdir_change(vdir_root, poll_seconds: int = 15) -> bool:
+    """Block until the vdir changes, or `poll_seconds` pass. Returns True
+    if a change was actually seen. Prefers inotifywait (inotify-tools);
+    falls back to plain polling when it's missing, per AGENTS.md's Phase
+    1 brief -- that fallback can't tell the two apart, so it reports no
+    change and leaves the periodic sync to carry the load."""
     import shutil
     import time
 
     inotifywait = shutil.which("inotifywait")
     if inotifywait:
-        subprocess.run(
+        result = subprocess.run(
             # close_write, not modify: a plain metadata touch or an
             # in-progress write triggers neither MODIFY reliably nor what
             # we actually want, which is "a file finished being written".
@@ -303,12 +305,55 @@ def _wait_for_vdir_change(vdir_root, poll_seconds: int = 15) -> None:
              "-e", "close_write,create,delete,move", str(vdir_root)],
             capture_output=True,
         )
-    else:
-        time.sleep(poll_seconds)
+        # inotifywait exits 2 on timeout, 0 when it saw something. The
+        # difference is what separates "the user just added an event,
+        # push it" from "nothing happened, this is just the heartbeat".
+        return result.returncode == 0
+    time.sleep(poll_seconds)
+    return False
+
+
+DEFAULT_SYNC_INTERVAL = 300
+SYNC_SETTLE = 10
+
+
+def _sync_due(now: float, last_sync: float, pending_push: bool,
+              interval: int, settle: int = SYNC_SETTLE) -> bool:
+    """Whether the watcher should sync on this pass.
+
+    Two reasons to: the periodic pull has come round, or the user changed
+    something locally and the settle window has passed. The settle window
+    exists because a sync writes into the vdir it is watching, so its own
+    writes arrive as changes -- without it, one sync schedules the next
+    and the watcher spins forever.
+    """
+    since = now - last_sync
+    return since >= interval or (pending_push and since >= settle)
+
+
+def _sync_once() -> None:
+    """One sync attempt from inside the watcher. Never raises: the
+    watcher outlives any single network failure. Failures do go to
+    stderr, which the service collects and the panel shows -- an event
+    that isn't reaching the server is exactly what the user needs told."""
+    from omagenda.sync import sync_all
+
+    try:
+        results = sync_all()
+    except Exception as exc:  # noqa: BLE001 -- a watcher must not die of this
+        print(f"omagenda watch: sync failed, will retry: {exc}", file=sys.stderr)
+        return
+    broken = {k: v for k, v in results.items() if not v.get("ok", False)}
+    for account_id, result in sorted(broken.items()):
+        print(f"omagenda watch: sync failed for '{account_id}': "
+              f"{result.get('detail', 'unknown error')}", file=sys.stderr)
 
 
 def cmd_watch(args) -> int:
+    import time
+
     from omagenda.alarms import check_and_fire
+    from omagenda.doctor import read_config
     from omagenda.index import build_agenda, write_agenda
     from omagenda.vdir import resolve_vdir_root
 
@@ -317,7 +362,28 @@ def cmd_watch(args) -> int:
         return _fail("another 'omagenda watch' is already running")
 
     vdir_root = resolve_vdir_root()
-    print(f"omagenda watch: watching {vdir_root}", file=sys.stderr)
+
+    # PLAN.md § "The vdir is still the truth": sync is run by `omagenda
+    # sync` *and by `omagenda watch` on a timer*. Only the reindex half
+    # was ever built, so an event added in Quick Add reached the panel
+    # instantly and the server never -- it sat in the vdir until someone
+    # happened to run `omagenda sync` by hand.
+    config = read_config()
+    has_accounts = bool(config.get("accounts"))
+    sync_interval = args.sync_interval if args.sync_interval is not None else int(
+        config.get("sync_interval", DEFAULT_SYNC_INTERVAL))
+    syncing = has_accounts and sync_interval > 0 and not args.no_sync
+    last_sync = 0.0
+    pending_push = False
+
+    if syncing:
+        print(f"omagenda watch: watching {vdir_root}, syncing every "
+              f"{sync_interval}s", file=sys.stderr)
+    else:
+        print(f"omagenda watch: watching {vdir_root} (no sync: "
+              f"{'disabled' if has_accounts else 'no accounts configured'})",
+              file=sys.stderr)
+
     try:
         while True:
             # A single malformed .ics file (a half-finished sync write, a
@@ -330,7 +396,18 @@ def cmd_watch(args) -> int:
                 check_and_fire(agenda)
             except Exception as exc:  # noqa: BLE001 -- see comment above
                 print(f"omagenda watch: reindex failed, will retry: {exc}", file=sys.stderr)
-            _wait_for_vdir_change(vdir_root, poll_seconds=args.poll_seconds)
+
+            if syncing:
+                if _sync_due(time.monotonic(), last_sync, pending_push, sync_interval):
+                    pending_push = False
+                    _sync_once()
+                    # Timed from after the sync, so a slow one doesn't
+                    # immediately qualify as due again.
+                    last_sync = time.monotonic()
+
+            changed = _wait_for_vdir_change(vdir_root, poll_seconds=args.poll_seconds)
+            if changed:
+                pending_push = True
     except KeyboardInterrupt:
         return 0
 
@@ -595,6 +672,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch = sub.add_parser("watch", help="long-running: reindex on vdir changes, fire alarms")
     p_watch.add_argument("--days", type=int, default=14)
     p_watch.add_argument("--poll-seconds", type=int, default=15)
+    p_watch.add_argument("--sync-interval", type=int, default=None,
+                         help=f"seconds between syncs (default {DEFAULT_SYNC_INTERVAL}, "
+                              "or 'sync_interval' in config.toml; 0 disables)")
+    p_watch.add_argument("--no-sync", action="store_true",
+                         help="reindex only, never sync (for debugging)")
     p_watch.set_defaults(func=cmd_watch)
 
     p_account = sub.add_parser("account", help="account add|list|remove")

@@ -53,6 +53,20 @@ class FakeBridge:
         self.push_delete_calls.append(ref)
 
 
+
+def _sync_bridge_for_test(bridge, root, calendars):
+    """Drive _sync_bridge with a stub bridge, without importlib."""
+    import importlib
+    import unittest.mock
+
+    import omagenda.sync as sync_module
+
+    # _sync_bridge imports its bridge module by name at call time.
+    with unittest.mock.patch.object(importlib, "import_module", return_value=bridge), \
+            unittest.mock.patch.dict(sync_module.BRIDGE_MODULES, {"stub": "stub.module"}):
+        return sync_module._sync_bridge({"id": "acct", "type": "stub"}, root, state_dir=root / "state")
+
+
 class SyncOneCalendarTest(unittest.TestCase):
     def test_pull_writes_files_and_records_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -389,3 +403,139 @@ class AdoptRemoteUidTest(unittest.TestCase):
     def test_a_file_with_no_uid_is_left_alone(self):
         raw = b"BEGIN:VEVENT\r\nSUMMARY:x\r\nEND:VEVENT\r\n"
         self.assertEqual(_rewrite_uid(raw, "short"), raw)
+
+
+class ConcurrencyTest(unittest.TestCase):
+    """Calendars are synced concurrently because a sync is almost all
+    waiting: an incremental pull that returns nothing still costs Google
+    the better part of ten seconds, so twelve calendars done in series
+    took two and a half minutes. Correctness must not depend on the
+    order they finish in.
+    """
+
+    def _calendars(self, n):
+        return [RemoteCalendar(id=f"cal-{i}", name=f"Calendar {i}") for i in range(n)]
+
+    def test_every_calendar_is_synced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            calendars = self._calendars(5)
+            bridge = FakeBridge(list_calendars_result=calendars)
+            result = _sync_bridge_for_test(bridge, Path(tmp), calendars)
+        self.assertEqual(sorted(result["calendars"]), sorted(c.id for c in calendars))
+        self.assertTrue(result["ok"])
+
+    def test_results_are_reported_in_the_listed_order(self):
+        # as_completed hands them back in whatever order they finish, so
+        # the report is re-ordered deliberately; a shuffled list of
+        # calendars in the CLI output would be its own small bug.
+        with tempfile.TemporaryDirectory() as tmp:
+            calendars = self._calendars(6)
+            bridge = FakeBridge(list_calendars_result=calendars)
+            result = _sync_bridge_for_test(bridge, Path(tmp), calendars)
+        self.assertEqual(list(result["calendars"]), [c.id for c in calendars])
+
+    def test_one_failing_calendar_does_not_sink_the_others(self):
+        class OneBadBridge(FakeBridge):
+            def pull(self, account, calendar, cursor):
+                if calendar.id == "cal-2":
+                    raise RuntimeError("that calendar is on fire")
+                return PullResult()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            calendars = self._calendars(5)
+            result = _sync_bridge_for_test(OneBadBridge(list_calendars_result=calendars),
+                                           Path(tmp), calendars)
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["calendars"]["cal-2"]["ok"])
+        self.assertTrue(all(result["calendars"][c.id]["ok"] for c in calendars if c.id != "cal-2"))
+
+    def test_a_single_calendar_skips_the_pool_entirely(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            calendars = self._calendars(1)
+            result = _sync_bridge_for_test(FakeBridge(list_calendars_result=calendars),
+                                           Path(tmp), calendars)
+        self.assertTrue(result["ok"])
+
+
+class DeleteVersusEchoTest(unittest.TestCase):
+    """Deleting an event you had only just created used to bring it back.
+
+    The create was pushed, Google reported that same event back as
+    changed on the next pull, the pull rewrote the file the user had
+    since deleted, and the deletion -- no longer visible on disk -- was
+    never sent anywhere. No error was raised; the event simply returned.
+    Local deletions are now judged on a snapshot taken before the pull.
+    """
+
+    EVENT = (b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:remote-1\r\n"
+             b"DTSTART:20260909T160000Z\r\nDTEND:20260909T170000Z\r\n"
+             b"SUMMARY:Coffee\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+
+    def _seeded(self):
+        """A calendar with one event both sides already agree on."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        path = root / "acct" / "cal-1"
+        path.mkdir(parents=True)
+        calendar = RemoteCalendar(id="cal-1", name="Primary")
+        seeding = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="remote-1", ics_bytes=self.EVENT,
+            ref=RemoteRef(remote_id="remote-1", etag="etag-1"))])])
+        _sync_one_calendar(seeding, {"id": "acct"}, calendar, path, state_dir=root / "state")
+        return root, path, calendar
+
+    def test_a_delete_survives_the_server_echoing_the_event_back(self):
+        root, path, calendar = self._seeded()
+        (path / "remote-1.ics").unlink()
+
+        # The very next pull hands the same event back, exactly as Google
+        # does with an event it has just been told about.
+        echo = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="remote-1", ics_bytes=self.EVENT,
+            ref=RemoteRef(remote_id="remote-1", etag="etag-1"))])])
+        counts = _sync_one_calendar(echo, {"id": "acct"}, calendar, path, state_dir=root / "state")
+
+        self.assertEqual(counts["deletedLocal"], 1)
+        self.assertEqual([r.remote_id for r in echo.push_delete_calls], ["remote-1"])
+        self.assertFalse((path / "remote-1.ics").exists(), "the event must not come back")
+
+    def test_a_plain_delete_still_works(self):
+        root, path, calendar = self._seeded()
+        (path / "remote-1.ics").unlink()
+
+        bridge = FakeBridge()
+        counts = _sync_one_calendar(bridge, {"id": "acct"}, calendar, path, state_dir=root / "state")
+
+        self.assertEqual(counts["deletedLocal"], 1)
+        self.assertEqual(len(bridge.push_delete_calls), 1)
+
+    def test_an_event_deleted_on_the_server_is_not_pushed_back_as_a_delete(self):
+        root, path, calendar = self._seeded()
+
+        bridge = FakeBridge(pull_results=[PullResult(deleted_uids=["remote-1"])])
+        counts = _sync_one_calendar(bridge, {"id": "acct"}, calendar, path, state_dir=root / "state")
+
+        self.assertEqual(counts["deletedRemote"], 1)
+        self.assertEqual(bridge.push_delete_calls, [], "the server already knows")
+        self.assertFalse((path / "remote-1.ics").exists())
+
+    def test_a_new_event_from_the_server_is_not_mistaken_for_a_deletion(self):
+        root, path, calendar = self._seeded()
+
+        fresh = self.EVENT.replace(b"remote-1", b"remote-2")
+        bridge = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="remote-2", ics_bytes=fresh,
+            ref=RemoteRef(remote_id="remote-2", etag="etag-9"))])])
+        _sync_one_calendar(bridge, {"id": "acct"}, calendar, path, state_dir=root / "state")
+
+        self.assertEqual(bridge.push_delete_calls, [])
+        self.assertTrue((path / "remote-2.ics").exists())
+
+    def test_an_untouched_calendar_pushes_nothing(self):
+        root, path, calendar = self._seeded()
+        bridge = FakeBridge()
+        counts = _sync_one_calendar(bridge, {"id": "acct"}, calendar, path, state_dir=root / "state")
+        self.assertEqual(counts["deletedLocal"], 0)
+        self.assertEqual(bridge.push_delete_calls, [])
+        self.assertTrue((path / "remote-1.ics").exists())

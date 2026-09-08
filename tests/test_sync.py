@@ -19,20 +19,36 @@ FIXTURE_ICS = Path(__file__).parent / "fixtures" / "vdir" / "family" / "holiday.
 
 
 class WithVdir:
-    """Context manager: point OMAGENDA_VDIR at a fresh temp dir for the
-    duration of the block, and always restore the previous value."""
+    """Context manager: point OMAGENDA_VDIR *and* OMAGENDA_STATE at fresh
+    temp dirs for the duration of the block, always restoring both.
+
+    The state override was added after this guard failed to prevent the
+    very thing it exists for. sync_all() records when it last ran, and
+    that record defaults to the real ~/.local/state/omagenda -- so a test
+    syncing a fixture account named "broken" wrote {"ok": false,
+    "problems": ["broken"]} into the maintainer's live state, and the
+    running panel duly reported that syncing was failing. Redirecting the
+    vdir alone was never enough: anything sync_all writes has to land in
+    the temp dir, not just the calendars.
+    """
+
+    _VARS = ("OMAGENDA_VDIR", "OMAGENDA_STATE")
 
     def __enter__(self):
-        self._old = os.environ.get("OMAGENDA_VDIR")
+        self._old = {v: os.environ.get(v) for v in self._VARS}
         self._tmp = tempfile.TemporaryDirectory()
-        os.environ["OMAGENDA_VDIR"] = self._tmp.name
-        return Path(self._tmp.name)
+        root = Path(self._tmp.name)
+        os.environ["OMAGENDA_VDIR"] = str(root / "calendars")
+        os.environ["OMAGENDA_STATE"] = str(root / "state")
+        (root / "calendars").mkdir()
+        return root / "calendars"
 
     def __exit__(self, *exc):
-        if self._old is None:
-            os.environ.pop("OMAGENDA_VDIR", None)
-        else:
-            os.environ["OMAGENDA_VDIR"] = self._old
+        for var, previous in self._old.items():
+            if previous is None:
+                os.environ.pop(var, None)
+            else:
+                os.environ[var] = previous
         self._tmp.cleanup()
 
 
@@ -135,3 +151,36 @@ class IcsResyncTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuardTest(unittest.TestCase):
+    """The guard itself. It failed once by covering only half of what
+    sync_all writes, and the failure was invisible until the maintainer's
+    own panel started reporting a sync failure for an account named
+    "broken" that existed only in this file."""
+
+    def test_the_state_dir_is_redirected_too(self):
+        real = os.environ.get("OMAGENDA_STATE")
+        with WithVdir():
+            self.assertNotEqual(os.environ["OMAGENDA_STATE"], real)
+            from omagenda.index import resolve_state_dir
+
+            self.assertTrue(str(resolve_state_dir()).startswith(tempfile.gettempdir()))
+
+    def test_a_sync_records_inside_the_temp_state_dir(self):
+        from omagenda.index import resolve_state_dir
+        from omagenda.sync import read_last_sync, record_path
+
+        with WithVdir():
+            sync_all({"accounts": [{"id": "broken", "type": "ics"}]})
+            self.assertTrue(record_path().exists())
+            self.assertEqual(read_last_sync()["problems"], ["broken"])
+            temp_state = resolve_state_dir()
+
+        self.assertFalse(temp_state.exists(), "the temp state dir must be cleaned up")
+
+    def test_both_variables_are_restored(self):
+        before = (os.environ.get("OMAGENDA_VDIR"), os.environ.get("OMAGENDA_STATE"))
+        with WithVdir():
+            pass
+        self.assertEqual((os.environ.get("OMAGENDA_VDIR"), os.environ.get("OMAGENDA_STATE")), before)
