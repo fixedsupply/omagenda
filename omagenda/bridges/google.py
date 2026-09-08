@@ -133,16 +133,11 @@ def _open_browser(url: str) -> None:
     print(f"Open this URL to continue: {url}")
 
 
-def authorize(account: dict) -> None:
-    """Interactive: opens a browser for consent, waits for the loopback
-    redirect, exchanges the code, and stores the refresh token."""
-    verifier, challenge = _pkce_pair()
-    server = http.server.HTTPServer(("127.0.0.1", 0), _OneShotAuthHandler)
-    server.oauth_code = None
-    server.oauth_error = None
-    port = server.server_address[1]
-    redirect_uri = f"http://127.0.0.1:{port}/"
-
+def build_auth_url(redirect_uri: str, challenge: str, email: str | None = None) -> str:
+    """The consent URL. `login_hint` is what makes an account's own address
+    actually matter: without it Google shows a generic account chooser, so
+    on a machine signed into several accounts you have to know which one
+    this is supposed to be. With it, Google preselects that address."""
     params = {
         "client_id": DEFAULT_CLIENT_ID,
         "redirect_uri": redirect_uri,
@@ -153,7 +148,22 @@ def authorize(account: dict) -> None:
         "access_type": "offline",
         "prompt": "consent",
     }
-    auth_url = f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
+    if email:
+        params["login_hint"] = email
+    return f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
+
+
+def authorize(account: dict) -> None:
+    """Interactive: opens a browser for consent, waits for the loopback
+    redirect, exchanges the code, and stores the refresh token."""
+    verifier, challenge = _pkce_pair()
+    server = http.server.HTTPServer(("127.0.0.1", 0), _OneShotAuthHandler)
+    server.oauth_code = None
+    server.oauth_error = None
+    port = server.server_address[1]
+    redirect_uri = f"http://127.0.0.1:{port}/"
+
+    auth_url = build_auth_url(redirect_uri, challenge, account.get("email"))
     _open_browser(auth_url)
     server.handle_request()
     server.server_close()
