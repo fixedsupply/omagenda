@@ -162,7 +162,7 @@ Two homes, by ownership:
 
 ```toml
 vdir = "~/.local/share/calendars"
-default_calendar = "google-calvin/primary"
+default_calendar = "google-calvin/primary"   # set by `omagenda calendars --set-default`
 
 [[accounts]]
 id = "google-calvin"

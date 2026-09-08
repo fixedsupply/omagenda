@@ -137,22 +137,55 @@ def _build_ics(result: dict):
 
 
 def cmd_calendars(args) -> int:
+    from omagenda.accounts import write_config
     from omagenda.vdir import discover_calendars
     from omagenda.doctor import read_config
 
     calendars = discover_calendars()
     config = read_config()
+
+    if args.clear_default:
+        config.pop("default_calendar", None)
+        write_config(config)
+        print("Cleared the default calendar. New events go to the first writable calendar.")
+        return 0
+
+    if args.set_default:
+        target = next((c for c in calendars if c["id"] == args.set_default), None)
+        if target is None:
+            names = ", ".join(c["id"] for c in calendars) or "none"
+            return _fail(f"no calendar named '{args.set_default}' (have: {names})")
+        if target["readOnly"]:
+            return _fail(f"'{args.set_default}' is read-only, so new events can't go there")
+        config["default_calendar"] = target["id"]
+        write_config(config)
+        print(f"New events now go to '{target['id']}' unless a sentence says otherwise.")
+        return 0
+
     if args.json:
         print(json.dumps({"calendars": calendars, "defaultCalendar": config.get("default_calendar")}))
         return 0
     if not calendars:
         print("No calendars found. Create one under ~/.local/share/calendars/<name>/.")
         return 0
+
     default = config.get("default_calendar")
+    writable = [c for c in calendars if not c["readOnly"]]
     for cal in calendars:
         marker = " (default)" if cal["id"] == default else ""
         ro = " [read-only]" if cal["readOnly"] else ""
         print(f"{cal['id']:20s} {cal['name']:20s} {cal['color']}{ro}{marker}")
+
+    # Silently picking one of several writable calendars is exactly the
+    # kind of thing a user only discovers after an event lands somewhere
+    # unexpected, so say which one it would be and how to change it.
+    if not default and writable:
+        print()
+        if len(writable) == 1:
+            print(f"New events go to '{writable[0]['id']}' (the only writable calendar).")
+        else:
+            print(f"No default set, so new events go to '{writable[0]['id']}'.")
+            print(f"Change it with: omagenda calendars --set-default <id>")
     return 0
 
 
@@ -175,7 +208,12 @@ def cmd_add(args) -> int:
     # setup was a read-only Google subscription -- so every Quick Add
     # failed with "'gcal' is read-only" while a perfectly good local
     # calendar sat right there.
-    target_id = (args.calendar or result["calendar"] or read_config().get("default_calendar")
+    configured_default = read_config().get("default_calendar")
+    # A default that has since been removed or turned read-only shouldn't
+    # wedge Quick Add; fall through to a calendar that can take the event.
+    if configured_default and not any(c["id"] == configured_default and not c["readOnly"] for c in calendars):
+        configured_default = None
+    target_id = (args.calendar or result["calendar"] or configured_default
                  or (writable[0]["id"] if writable else None))
     if target_id is None:
         return _fail("no writable calendar; every calendar found is read-only")
@@ -538,7 +576,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--json", action="store_true")
     p_add.set_defaults(func=cmd_add)
 
-    p_calendars = sub.add_parser("calendars", help="vdir discovery, colors, sets")
+    p_calendars = sub.add_parser("calendars", help="vdir discovery, colors, and the default for new events")
+    p_calendars.add_argument("--set-default", dest="set_default", default=None, metavar="ID",
+                             help="send new events to this calendar unless a sentence says otherwise")
+    p_calendars.add_argument("--clear-default", dest="clear_default", action="store_true",
+                             help="go back to using the first writable calendar")
     p_calendars.add_argument("--json", action="store_true")
     p_calendars.set_defaults(func=cmd_calendars)
 

@@ -346,6 +346,27 @@ function previewLine(parsed, timeFormat) {
 
 var MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+// Calendars an event can actually be written to. A read-only subscription
+// is in the agenda but can never be a target, so it is never offered.
+function writableCalendars(agenda) {
+  var calendars = (agenda && agenda.calendars) || []
+  var out = []
+  for (var i = 0; i < calendars.length; i++) {
+    if (!calendars[i].readOnly) out.push(calendars[i])
+  }
+  return out
+}
+
+// Tab walks the writable calendars, starting from whichever is in play.
+function nextCalendarId(agenda, currentId) {
+  var writable = writableCalendars(agenda)
+  if (writable.length === 0) return ""
+  for (var i = 0; i < writable.length; i++) {
+    if (writable[i].id === currentId) return writable[(i + 1) % writable.length].id
+  }
+  return writable[0].id
+}
+
 // ---------------------------------------------------------------------
 // Exports for node:test. QML loads this file with `import "Model.js"`,
 // which ignores module.exports entirely.
@@ -376,6 +397,8 @@ if (typeof module !== "undefined") {
     footerText: footerText,
     escapeHtml: escapeHtml,
     highlightedHtml: highlightedHtml,
-    previewLine: previewLine
+    previewLine: previewLine,
+    writableCalendars: writableCalendars,
+    nextCalendarId: nextCalendarId
   }
 }

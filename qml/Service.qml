@@ -47,6 +47,10 @@ Item {
 
   readonly property int eventCount: agenda && agenda.events ? agenda.events.length : 0
 
+  // The calendar new events go to, as the CLI would resolve it, so Quick
+  // Add can show the destination before anything is written.
+  property string defaultCalendar: ""
+
   function reload() {
     agendaFile.reload()
   }
@@ -146,6 +150,22 @@ Item {
     interval: 10000
     repeat: false
     onTriggered: if (!watchProc.running) watchProc.running = true
+  }
+
+  // Read from config.toml rather than guessed, and re-read whenever it
+  // changes, so `omagenda calendars --set-default` shows up without a
+  // shell restart.
+  FileView {
+    id: configFile
+    path: root.home + "/.config/omagenda/config.toml"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var match = /^\s*default_calendar\s*=\s*"([^"]*)"/m.exec(text())
+      root.defaultCalendar = match ? match[1] : ""
+    }
+    onLoadFailed: root.defaultCalendar = ""
+    onFileChanged: reload()
   }
 
   Process {

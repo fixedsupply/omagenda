@@ -319,3 +319,31 @@ test("preview line is empty until there is something to preview", () => {
   assert.equal(Model.previewLine(null, "24h"), "")
   assert.equal(Model.previewLine({}, "24h"), "")
 })
+
+// ---------------------------------------------------------------------
+const MIXED = {
+  calendars: [
+    { id: "gcal", name: "Google", color: "blue", readOnly: true },
+    { id: "personal", name: "Personal", color: "green", readOnly: false },
+    { id: "work", name: "Work", color: "yellow", readOnly: false }
+  ],
+  events: []
+}
+
+test("a read-only subscription is never offered as a target", () => {
+  assert.deepEqual(Model.writableCalendars(MIXED).map(c => c.id), ["personal", "work"])
+})
+
+test("tab walks the writable calendars and wraps", () => {
+  assert.equal(Model.nextCalendarId(MIXED, "personal"), "work")
+  assert.equal(Model.nextCalendarId(MIXED, "work"), "personal")
+})
+
+test("tab starts somewhere sensible when nothing is chosen yet", () => {
+  assert.equal(Model.nextCalendarId(MIXED, ""), "personal")
+  assert.equal(Model.nextCalendarId(MIXED, "gcal"), "personal")  // a read-only one was in play
+})
+
+test("tab does nothing when there is nowhere to write", () => {
+  assert.equal(Model.nextCalendarId({ calendars: [{ id: "x", readOnly: true }] }, ""), "")
+})

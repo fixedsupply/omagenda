@@ -34,6 +34,10 @@ Item {
 
   property bool opened: false
   property string text: ""
+  // "" means "let the CLI decide" -- a /tag in the sentence, then the
+  // configured default, then the first writable calendar. Tab overrides
+  // that for this one event without changing anyone's default.
+  property string targetCalendar: ""
   property var parsed: null
   property string parseError: ""
   property bool busy: false
@@ -49,11 +53,26 @@ Item {
     root.text, parsed && parsed.spans ? parsed.spans : [], root.accent, root.foreground)
   readonly property string preview: Model.previewLine(parsed, timeFormat)
   readonly property var warnings: parsed && parsed.warnings ? parsed.warnings : []
+  readonly property var agenda: service ? service.agenda : ({ calendars: [], events: [] })
+
+  // What the event will land in, said plainly: a /tag in the sentence wins,
+  // then a Tab choice, then the configured default the CLI would apply.
+  readonly property string effectiveCalendar: {
+    if (parsed && parsed.calendar) return parsed.calendar
+    if (targetCalendar !== "") return targetCalendar
+    return service && service.defaultCalendar ? service.defaultCalendar : ""
+  }
 
   signal added(string title)
 
+  function cycleCalendar() {
+    var next = Model.nextCalendarId(root.agenda, root.effectiveCalendar)
+    if (next !== "") root.targetCalendar = next
+  }
+
   function open(dateKey) {
     root.prefillDate = dateKey || ""
+    root.targetCalendar = ""
     root.text = ""
     root.parsed = null
     root.parseError = ""
@@ -105,7 +124,12 @@ Item {
       root.close()
       return
     }
-    addProc.command = [root.binPath, "add", root.sentence(), "--json"]
+    var command = [root.binPath, "add", root.sentence(), "--json"]
+    // Only when the user actually chose one: otherwise the CLI applies the
+    // configured default, which is the behaviour they set up deliberately.
+    if (root.targetCalendar !== "" && !(root.parsed && root.parsed.calendar))
+      command = command.concat(["--calendar", root.targetCalendar])
+    addProc.command = command
     addProc.running = true
     if (keepOpen) {
       root.text = ""
@@ -211,6 +235,9 @@ Item {
             // Shift+Enter writes and stays open for the next one, which is
             // what you want when emptying a list of things onto a calendar.
             root.submit((event.modifiers & Qt.ShiftModifier) !== 0)
+            event.accepted = true
+          } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+            root.cycleCalendar()
             event.accepted = true
           } else if (Util.editsFilter(event, root.text)) {
             root.setText(Util.editedFilter(event, root.text))
@@ -328,7 +355,18 @@ Item {
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: "ENTER SAVE · SHIFT+ENTER SAVE AND ADD ANOTHER · ESC CANCEL"
+          visible: root.effectiveCalendar !== ""
+          text: "→ " + root.effectiveCalendar
+                + (root.parsed && root.parsed.calendar ? "  (from the sentence)" : "")
+          color: root.accent
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+
+        Text {
+          width: parent.width
+          textFormat: Text.PlainText
+          text: "ENTER SAVE · SHIFT+ENTER SAVE AND ADD ANOTHER · TAB CALENDAR · ESC CANCEL"
           color: Qt.darker(root.foreground, 1.6)
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
