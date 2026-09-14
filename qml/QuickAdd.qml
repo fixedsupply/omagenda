@@ -1,11 +1,7 @@
 // Quick Add: type a sentence, get an event.
 //
 // A centred card over a scrim, following plugins/reminders/ReminderFlow.qml
-// -- including its most useful trick. The field is a plain Text driven by
-// raw key events rather than a TextInput, which is what makes live
-// highlighting tractable: there is no real caret to fight with the markup,
-// so the sentence renders as StyledText with every recognised fragment in
-// the accent colour and the caret is simply drawn on the end.
+// with a native text input for cursor movement, selection, paste and IME.
 //
 // The parser runs out of process (`omagenda parse --json`), debounced, and
 // only one at a time: a keystroke that lands while a parse is in flight
@@ -42,6 +38,10 @@ Item {
   property string parseError: ""
   property bool busy: false
   property string pendingText: ""
+  property string parsingText: ""
+  property bool keepOpenAfterSave: false
+  property string savedTitle: ""
+  property string saveError: ""
 
   readonly property color foreground: Color.menu.text
   readonly property color accent: Color.accent
@@ -49,8 +49,6 @@ Item {
   readonly property string timeFormat: Model.resolveTimeFormat(
     "system", Qt.locale().timeFormat(Locale.ShortFormat).indexOf("AP") === -1)
 
-  readonly property string highlighted: Model.highlightedHtml(
-    root.text, parsed && parsed.spans ? parsed.spans : [], root.accent, root.foreground)
   readonly property string preview: Model.previewLine(parsed, timeFormat)
   readonly property var warnings: parsed && parsed.warnings ? parsed.warnings : []
   readonly property var agenda: service ? service.agenda : ({ calendars: [], events: [] })
@@ -88,7 +86,7 @@ Item {
     root.parsed = null
     root.parseError = ""
     root.opened = true
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    Qt.callLater(function() { field.forceActiveFocus() })
   }
 
   function close() {
@@ -113,6 +111,7 @@ Item {
       return
     }
     root.busy = true
+    root.parsingText = root.text
     parseProc.command = [root.binPath, "parse", root.sentence(), "--json"]
     parseProc.running = true
   }
@@ -131,6 +130,7 @@ Item {
   }
 
   function submit(keepOpen) {
+    if (addProc.running) return
     if (root.text.trim() === "") {
       root.close()
       return
@@ -140,14 +140,11 @@ Item {
     // configured default, which is the behaviour they set up deliberately.
     if (root.targetCalendar !== "" && !(root.parsed && root.parsed.calendar))
       command = command.concat(["--calendar", root.targetCalendar])
+    root.keepOpenAfterSave = keepOpen
+    root.savedTitle = ""
+    root.saveError = ""
     addProc.command = command
     addProc.running = true
-    if (keepOpen) {
-      root.text = ""
-      root.parsed = null
-    } else {
-      root.close()
-    }
   }
 
   Timer {
@@ -169,6 +166,7 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        if (!root.opened || root.text !== root.parsingText) return
         try {
           root.parsed = JSON.parse(text)
           root.parseError = ""
@@ -179,11 +177,11 @@ Item {
     }
     stderr: StdioCollector {
       waitForEnd: true
-      onStreamFinished: if (text.trim() !== "") root.parseError = text.trim()
+      onStreamFinished: if (root.opened && root.text === root.parsingText && text.trim() !== "") root.parseError = text.trim()
     }
     onExited: {
       root.busy = false
-      if (root.pendingText !== "") {
+      if (root.opened && root.text.trim() !== "" && root.text !== root.parsingText) {
         root.pendingText = ""
         root.runParse()
       }
@@ -195,16 +193,28 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var title = ""
-        try { title = (JSON.parse(text).event || {}).title || "" } catch (e) {}
-        root.added(title)
+        try { root.savedTitle = (JSON.parse(text).event || {}).title || "" } catch (e) {}
       }
     }
     stderr: StdioCollector {
       waitForEnd: true
-      onStreamFinished: if (text.trim() !== "") console.warn("omagenda quick add:", text.trim())
+      onStreamFinished: root.saveError = text.trim()
     }
-    onExited: if (root.service) root.service.reload()
+    onExited: function(exitCode, exitStatus) {
+      if (exitCode !== 0) {
+        root.parseError = root.saveError || "Could not save the event. Your text is still here."
+        return
+      }
+      root.added(root.savedTitle)
+      if (root.keepOpenAfterSave) {
+        root.text = ""
+        root.parsed = null
+        field.forceActiveFocus()
+      } else {
+        root.close()
+      }
+      if (root.service) root.service.reload()
+    }
   }
 
   PanelWindow {
@@ -239,35 +249,6 @@ Item {
 
       MouseArea { anchors.fill: parent; onClicked: {} }
 
-      Item {
-        id: keyCatcher
-        anchors.fill: parent
-        focus: true
-
-        Keys.priority: Keys.BeforeItem
-        Keys.onPressed: function(event) {
-          if (event.key === Qt.Key_Escape) {
-            root.close()
-            event.accepted = true
-          } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            // Shift+Enter writes and stays open for the next one, which is
-            // what you want when emptying a list of things onto a calendar.
-            root.submit((event.modifiers & Qt.ShiftModifier) !== 0)
-            event.accepted = true
-          } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-            root.cycleCalendar()
-            event.accepted = true
-          } else if (Util.editsFilter(event, root.text)) {
-            root.setText(Util.editedFilter(event, root.text))
-            event.accepted = true
-          } else if (event.text && event.text.length === 1
-                     && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
-            root.setText(root.text + event.text)
-            event.accepted = true
-          }
-        }
-      }
-
       Column {
         id: content
         anchors.left: parent.left
@@ -296,37 +277,22 @@ Item {
             font.pixelSize: Style.font.heading
           }
 
-          Row {
+          SentenceField {
+            id: field
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 0
-
-            Text {
-              id: field
-              width: Math.min(implicitWidth, parent.width - caret.width)
-              textFormat: Text.StyledText
-              text: root.highlighted
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.heading
-              elide: Text.ElideLeft
-            }
-
-            Rectangle {
-              id: caret
-              width: Math.max(1, Style.space(1))
-              height: Style.font.heading
-              anchors.verticalCenter: parent.verticalCenter
-              color: root.foreground
-              visible: root.opened
-
-              SequentialAnimation on opacity {
-                running: root.opened
-                loops: Animation.Infinite
-                NumberAnimation { to: 0; duration: 520 }
-                NumberAnimation { to: 1; duration: 520 }
-              }
-            }
+            text: root.text
+            readOnly: addProc.running
+            color: root.foreground
+            selectionColor: root.accent
+            selectedTextColor: Color.background
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.heading
+            onTextEdited: root.setText(text)
+            onSaveRequested: function(keepOpen) { root.submit(keepOpen) }
+            onCancelRequested: if (!addProc.running) root.close()
+            onCalendarRequested: root.cycleCalendar()
           }
         }
 
