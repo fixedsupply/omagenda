@@ -139,6 +139,13 @@ class GoogleReliabilityTest(unittest.TestCase):
     EVENT = {"id": "demo", "etag": "v1", "summary": "Demo",
              "start": {"date": "2026-09-15"}, "end": {"date": "2026-09-16"}}
 
+    def test_response_offset_can_differ_from_event_timezone(self):
+        value, zone, all_day = google._google_time_to_ics({
+            "dateTime": "2026-09-16T15:00:00Z", "timeZone": "America/Edmonton"})
+        self.assertEqual(value, "20260916T090000")
+        self.assertEqual(zone, "America/Edmonton")
+        self.assertFalse(all_day)
+
     def test_pull_retains_etag(self):
         with patch.object(google, "_authed_request", return_value=(200, {"items": [self.EVENT]}, {})):
             result = google.pull(ACCOUNT, CALENDAR, "cursor")
