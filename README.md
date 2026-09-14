@@ -2,6 +2,10 @@
 
 *Type a sentence, get an event. What's next, always in the bar.*
 
+**Reviewer preview:** Google access currently requires an approved test user;
+sign-in expires after seven days in Testing mode. See
+[reviewer checks and limitations](docs/reviewer-checklist.md) before connecting calendars.
+
 An [Omarchy](https://omarchy.org) shell plugin that brings the two ideas
 that made Fantastical's original menu-bar app worth having — a small
 agenda you can summon, and event entry by typing a sentence — to the
@@ -9,10 +13,8 @@ Omarchy desktop. Events are plain `.ics` files in a vdir you own.
 
 ![The Omagenda pill and agenda panel](preview.png)
 
-Quick Add parses as you type, and shows you what it understood before you
-commit to it:
-
-![Quick Add parsing a sentence](docs/screenshots/quick-add.png)
+Quick Add parses as you type and previews the event before you save.
+Its native text field supports cursor movement, selection, undo and paste.
 
 It takes its colours from your theme, because it reads the theme's own
 palette rather than shipping one:
@@ -53,7 +55,7 @@ Full recipes for each account type are in
 ## Keybindings
 
 Omagenda ships none, because a plugin should not take your keys without
-asking. Copy [docs/bindings.lua](docs/bindings.lua) into
+asking. Add the contents of [docs/bindings.lua](docs/bindings.lua) to
 `~/.config/hypr/bindings.lua` for:
 
 | Keys | Does |
@@ -93,9 +95,8 @@ dentist on 14/9 at 10am for 45m
 review 2-3pm /work
 ```
 
-Recognised fragments light up as you type, and the line underneath shows
-exactly what will be written. Anything genuinely ambiguous — "next
-Friday" — is flagged rather than guessed at.
+The line underneath previews the date, time and title that will be written. Ambiguous times such as "at 3" produce a warning. The preview lets you
+check the interpretation before saving.
 
 - `Enter` saves. `Shift + Enter` saves and stays open for the next one.
 - `Tab` cycles which calendar it goes to, among those that can accept an
@@ -136,7 +137,10 @@ through a built-in bridge; iCloud and other CalDAV servers sync through
 [pimsync](https://pimsync.whynothugo.nl/), configured for you by
 `omagenda account add`.
 
-Your credentials live in the system keyring, never in a config file.
+OAuth tokens and app passwords use the system keyring when available.
+If it is unavailable, they fall back to a private file with owner-only
+permissions under `~/.local/state/omagenda/secrets`. Subscription URLs are
+credentials too: keep your local configuration private.
 
 ## Works alongside renCal and OmaCal
 

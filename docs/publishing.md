@@ -3,10 +3,13 @@
 Drafts for the two listings. Both are submitted by the maintainer; this
 file is here so the wording does not have to be reinvented each time.
 
+Do not submit until the [reviewer acceptance checks](reviewer-checklist.md)
+are recorded for the candidate commit.
+
 ## Before submitting
 
 - [ ] `omarchy plugin validate .` is clean
-- [ ] Both suites pass (`python -m unittest discover -s tests`,
+- [ ] Both suites pass (`python tools/test-isolated.py`,
       `node --test 'tests/**/*.test.js'`)
 - [ ] `preview.png` and every screenshot contain invented data only,
       regenerated from `tools/demo-vdir.py`
@@ -29,20 +32,18 @@ file is here so the wording does not have to be reinvented each time.
 >
 > It takes the two ideas worth taking from Fantastical's original
 > menu-bar app: a small agenda you can summon, and natural-language entry
-> that shows you what it understood before you commit. Recognised
-> fragments light up as you type, and anything genuinely ambiguous is
-> flagged rather than guessed at.
+> with a live interpretation preview and a native text field.
 >
 > Events are plain .ics files in a vdir you own, so khal and anything
 > else that speaks vdir sees the same data. Google syncs through a
 > built-in bridge; iCloud and any other CalDAV server sync through
-> pimsync, configured for you. Credentials live in your system keyring.
+> pimsync, configured for you. Credentials use the system keyring, with a private-file fallback.
 > Colours come from your theme rather than from us.
 >
 > It is not a calendar window and does not want to be one — if you use
 > renCal or OmaCal for the month grid, keep them.
 
-**Screenshots:** `preview.png`, `docs/screenshots/quick-add.png`,
+**Screenshots:** `preview.png`,
 `docs/screenshots/panel-tokyo-night.png`
 
 ## awesome-omarchy
@@ -59,3 +60,6 @@ Fantastical is a Flexibits product. Both drafts above mention it once,
 descriptively, to say where the idea came from. Do not use it in the
 name, the tagline, the plugin id, or the keywords, and do not reuse any
 Flexibits icon, screenshot, or copy.
+
+The existing quick-add screenshot shows the previous simulated text field.
+Replace it with an isolated, fictional-data capture before using it in a listing.

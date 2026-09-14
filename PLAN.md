@@ -2,9 +2,25 @@
 
 *Working title. Fantastical's two best ideas, the mini window and the magic sentence, rebuilt as an Omarchy shell plugin.*
 
-Status: planning, 2026-09-07. Product manager: Calvin Symes. Design and taste: Claude (Fable 5.1). Implementation: any capable coding agent following `AGENTS.md`.
+Status: reviewer preview under reliability validation, 2026-09-14. Product manager: Calvin Symes. Design and taste: Claude (Fable 5.1). Implementation: any capable coding agent following `AGENTS.md`.
 
 ---
+
+## Current implementation status
+
+The pill, panel, native-text Quick Add with interpretation preview, Google
+bridge, CalDAV configuration generator and reviewer materials exist.
+Calendar sets, templates and Microsoft remain deferred. Inline coloured
+text highlighting is deferred in favour of correct native text editing.
+The pill keeps an idle calendar icon; right-click syncs. These current
+behaviours supersede the original interaction proposals below.
+
+The reliability pass preserves conflicting local edits, retains Google
+versions, reconciles full downloads, rebuilds recurring exceptions and
+uses partial updates. Multi-component series edits are explicitly refused.
+See `docs/reviewer-checklist.md` for acceptance gates and `STATUS.md` for
+verification evidence. Automated tests do not establish live-provider or
+fresh-desktop acceptance.
 
 ## 1. The thesis in three sentences
 
@@ -142,58 +158,24 @@ Decided 2026-09-07: Google, Apple, and Microsoft compatibility are all in scope,
 
 Why this split: Apple and every self-hosted service speak CalDAV, and pimsync already does careful two-way CalDAV sync with conflict handling, so Omagenda should configure it rather than reimplement it. Google and Microsoft do not speak CalDAV usably (Google's CalDAV endpoint still needs OAuth and is second-class; Microsoft has none), so those two get purpose-built bridges that translate between the vendor JSON and `VEVENT`. Both bridges implement the same small interface (`ARCHITECTURE.md` §11) so a third one is a contribution-sized task.
 
-**Google accounts on Advanced Protection.** Discovered 2026-09-08 on the
-PM's own account. Google's Advanced Protection Program blocks *unverified*
-third-party apps from sensitive scopes outright: the consent screen never
-appears, and the OAuth flow ends in `Error 400: policy_enforced`. Advanced
-Protection also disables app passwords entirely, so the CalDAV fallback is
-closed on those accounts too. What still works is the per-calendar secret
-iCal URL, which carries its own token, needs no OAuth, and is read-only.
+**Reviewer access.** In Google Testing mode only explicitly approved test
+users can connect (up to 100), and calendar grants/refresh tokens expire
+after seven days. The cumulative unverified-app user cap is separate;
+Production status does not itself mean verification. Advanced Protection
+and workplace policies can still block access. The maintainer previously
+used a read-only ICS subscription and later connected through OAuth.
 
-So an Advanced Protection user's Google calendars are read-only in
-Omagenda until the app completes Google verification, and possibly after
-(verified apps are permitted under Advanced Protection, but that is
-Google's call, not something the plan can assume). This is not an edge
-case to note and forget -- it is the PM's own primary calendar, and it
-means Quick Add writes to a local or iCloud calendar rather than to
-Google. It also moves Google verification from "nice, removes a warning"
-to "the only route to writing to Google for these users".
-
-**What other people will hit, which is not what the maintainer hit.**
-The Google bridge is built and works; the secret-iCal fallback was needed
-for one specific reason that most users won't share. Three different
-situations, worth keeping straight:
-
-| Who | What happens today | Fix |
-|---|---|---|
-| Ordinary Google account | OAuth works, after clicking past an "unverified app" warning that looks alarming | verification removes the warning |
-| Anyone, once 100 people have connected | The 101st user is refused outright | verification lifts the cap |
-| Account on Advanced Protection | Hard-blocked, no click-through | verification, and even then it is Google's call |
-
-The middle row is the one that decides whether this can be published.
-Google caps an unverified project at 100 users *in total*, so a plugin
-listed on omarchyplugins.com would work for its first hundred adopters
-and then start failing for everyone after, with an error none of them can
-do anything about. That is not a warning to document; it is a release
-blocker.
-
-Verification for this scope is paperwork, not a paid audit: `calendar` is
-a *sensitive* scope, not a *restricted* one, so it needs a homepage on a
-domain the project controls, a privacy policy on that domain, a demo video
-of the consent flow, and Google's review. Days to weeks, no fee. The
-alternative for the privacy-minded is documented bring-your-own-client,
-where a user makes their own Google Cloud project and is the only user of
-it -- no cap, at the cost of a twenty-step setup most people won't do.
-
-So the release sequence is: verification submitted before the plugin is
-listed anywhere public, bring-your-own-client documented as the escape
-hatch, and the secret-iCal subscription kept as the always-works,
-read-only path for Advanced Protection users and anyone who would rather
-not grant write access at all.
+See Google's [Testing rules](https://support.google.com/cloud/answer/15549945?hl=en)
+and [unverified-app limits](https://support.google.com/googleapi/answer/7454865?hl=en).
+The PM's decision stands: trusted reviewers first; domain registration and
+verification preparation after useful feedback. See `docs/sync-setup.md`.
 
 **Credentials.** OAuth tokens and app passwords go into the desktop keyring through `secret-tool` (libsecret), which Omarchy ships. If no keyring is available, `omagenda doctor` says so and the bridge falls back to a mode-0600 file under `~/.local/state/omagenda/`, clearly labeled.
 
-**Google client id.** The repo ships an OAuth client owned by the project (Google does not treat the installed-app client secret as confidential, and the calendar scope is what makes the app useful). Until the project passes Google's app verification, Google shows an "unverified app" interstitial and caps the app at 100 users. Two consequences for the PM: create the Google Cloud project and OAuth client before Phase 1b, and plan to submit for verification once the README, a privacy page, and a short demo video exist. A bring-your-own-client path stays documented for people who prefer it.
+**Google client id.** The repository includes the installed-app OAuth
+client; it does not grant access to anyone's calendar without consent.
+`OMAGENDA_GOOGLE_CLIENT_ID` and `OMAGENDA_GOOGLE_CLIENT_SECRET` support
+reviewers who use their own registered client.
 
 **Microsoft app registration.** Free in Entra ID; a personal Microsoft account can register a multi-tenant public client with no secret. Work and school tenants may require an admin to consent, which the setup wizard explains rather than hides.
 
@@ -240,29 +222,12 @@ Done: the Google Cloud project and OAuth client (2026-09-07), stored in `.env.lo
 
 Decided 2026-09-07: wait on the Microsoft Entra app registration until Phase 5 is actually reached, rather than doing it now.
 
-**Decided 2026-09-08: ship to trusted reviewers under the 100-user cap,
-register a domain and verify only if the plugin proves viable.** Google
-requires the homepage and privacy policy to live on a domain the project
-owns -- GitHub Pages, Vercel and similar are rejected by reviewers who
-have tried -- so verification has a real if small floor of about a domain
-a year. That is not worth paying before anyone has used the thing. Until
-then: the README says plainly that Google sign-in is capped and shows an
-unverified-app warning, the read-only iCal subscription stays the path
-that always works for everyone, and nothing in the code assumes which way
-this goes -- `OMAGENDA_GOOGLE_CLIENT_ID`/`_SECRET` already let a user
-point at their own project, and verification later changes no code at all,
-only the state of the Cloud project.
-
-**Blocking wider release (raised 2026-09-08): submit the Google Cloud
-project for verification.** An unverified project is capped at 100 users
-in total, so a plugin listed on omarchyplugins.com would work for its
-first hundred adopters and then refuse everyone after, with an error none
-of them can act on. Verification also removes the "unverified app" warning
-every user currently clicks past, and is the only route by which an
-Advanced Protection account (the maintainer's own) can ever connect. It is
-paperwork rather than a paid audit for this scope: a homepage on a domain
-the project controls, a privacy policy on it, a demo video of the consent
-flow, and Google's review. See §7.
+**Decided 2026-09-08: trusted reviewers first; domain registration and
+verification follow evidence that the plugin is useful.** This remains the
+release direction. Reviewers must be approved test users. Public listing
+is deferred pending provider acceptance checks and an appropriate Google
+publishing/verification setup. Environment overrides allow a reviewer to
+use their own OAuth client.
 
 ## 11. Risks
 

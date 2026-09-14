@@ -300,14 +300,17 @@ Read these files first and match them line for line in structure, naming, and co
 | Helper processes | `~/.config/omarchy/plugins/njpatel.omapager/Service.qml` | resolving `bin/` next to the QML with `Qt.resolvedUrl`, long-running `Process` |
 | Tests | `~/.config/omarchy/plugins/mohamedmansour.finance/tests/` | `node:test` for `Model.js`, `qmlformat` smoke test |
 
-Live-highlighting in Quick Add: use a `TextInput` with a transparent text color layered over a `Text` that renders the same string with `textFormat: Text.RichText` and `<font color>` spans from the parser, or `TextEdit` with `TextDocument` formats. Both work; pick the one that keeps the caret and selection correct, and prove it with a manual test before building on it.
+Quick Add uses `SentenceField.qml`, a native `TextInput`, so cursor movement,
+selection, undo, clipboard and input methods remain Qt's responsibility.
+The parser's interpretation appears below it. Inline coloured highlighting
+is deferred; the old simulated caret is removed.
 
 IPC: `Service.qml` registers `IpcHandler { target: "omagenda" }` with `toggle`, `quickAdd`, `sync`, `next` so `omarchy-shell omagenda quickAdd` and `omarchy-shell shell toggle fixedsupply.omagenda` both work from keybindings.
 
 ## 9. Testing and debugging
 
 ```
-python -m unittest discover -s tests -v          # Python
+python tools/test-isolated.py          # Python
 node --test 'tests/**/*.test.js'                  # Model.js + qmlformat smoke (a bare directory throws MODULE_NOT_FOUND on Node 26)
 omarchy plugin validate .                        # manifest
 omarchy-shell shell rescanPlugins                # hot reload after edits under ~/.config/omarchy/plugins/
@@ -350,10 +353,22 @@ class Bridge(Protocol):
 
 Sync state per calendar lives in `~/.local/state/omagenda/sync/<account>/<calendar>.json`: remote sync token or delta link, and a map of `UID -> {remoteId, etag, localHash}`. The algorithm, in order, every cycle:
 
-1. **Pull** incrementally; for each changed remote item write or rewrite `<uid>.ics` and update the map; for each deleted remote item remove the file. On a `410 Gone` (Google) or an invalid delta link (Microsoft) do a full pull.
-2. **Detect local changes** by comparing each file's hash with `localHash`: new files (no map entry) are creates, changed hashes are updates, missing files with a map entry are deletes.
-3. **Push** with conditional requests (`If-Match: etag`). A `412` means the remote changed since the last pull: keep the remote version, save the local one as `<uid>.conflict.ics`, and notify.
-4. **Record** the new tokens and hashes atomically.
+1. Download changes without modifying the local files. Retain ETags. An
+   expired cursor or an incremental recurrence change triggers a full
+   snapshot, including series exceptions.
+2. Snapshot local files and their hashes after the network request, before
+   applying downloads. Preserve locally edited versions when the remote
+   changed or deleted them. Reconcile absent remote items on full snapshots.
+3. Push local changes only for writable calendars. Updates use partial
+   requests with the tracked ETag; deletes use the pre-download ETag. Missing
+   versions and 412 responses fail closed and request a fresh snapshot.
+   Existing conflict copies are never silently replaced by different edits.
+4. Record state atomically; restore read-only permissions even on errors.
+
+Google local edits to files containing multiple VEVENT components are
+refused until instance-level editing is implemented. Partial updates leave
+unmapped metadata untouched. Supported mappings and their limits are tested
+with invented provider responses in `tests/test_reliability.py`.
 
 Mapping rules, Google: `summary`↔`SUMMARY`, `start/end` with `dateTime`+`timeZone` or `date`↔`DTSTART`/`DTEND`, `recurrence[]`↔`RRULE`/`EXDATE` lines verbatim, `location`, `description`, `hangoutLink` and `conferenceData.entryPoints[].uri`→`CONFERENCE`/`X-GOOGLE-CONFERENCE`, `reminders.overrides`↔`VALARM`, `attendees` read-only, `status: cancelled`→delete, instances of recurring events with `recurringEventId`→`RECURRENCE-ID`. Time zones: Google gives IANA names; keep them as `TZID`.
 
@@ -361,4 +376,4 @@ Mapping rules, Microsoft: `subject`, `start/end` with `dateTime`+`timeZone` (Win
 
 OAuth, both: loopback redirect to `http://127.0.0.1:<random port>/` served by `http.server` for one request, PKCE, browser opened with `omarchy launch browser <url>` or `xdg-open`. Refresh tokens stored with `secret-tool store --label "Omagenda <account>" omagenda account <id>`. Google scope `https://www.googleapis.com/auth/calendar`; Microsoft scopes `Calendars.ReadWrite offline_access`.
 
-Network calls use `urllib.request` with a 15 s timeout and exponential backoff on 429/5xx. The bridge never runs on the QML side; `omagenda watch` schedules it by `sync_minutes` and on demand from the panel's `s`.
+Network calls use `urllib.request` with a 15 s timeout and exponential backoff on 429/5xx. The bridge never runs on the QML side; `omagenda watch` schedules it by `sync_interval` (seconds) and on demand from the panel's `s`.

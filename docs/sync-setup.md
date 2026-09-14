@@ -20,20 +20,25 @@ with a username and password by any client, including this one.
 omagenda account add google
 ```
 
-Your browser opens, you approve, and the token is stored in your system
-keyring rather than in any file in this repository.
+Your browser opens for consent. Tokens use the system keyring, with an
+owner-only local file fallback if the keyring is unavailable; neither
+belongs in this repository.
 
-> **You will see "Google hasn't verified this app".** Click **Advanced**,
-> then **Go to Omagenda (unsafe)**. Omagenda's OAuth client has not been
-> through Google's verification review, which is a review of the
-> publisher, not of the code. The code is in this repository and the
-> scope requested is `calendar` and nothing else.
+The project is currently a **reviewer preview in Google Testing mode**.
+The maintainer must add your Google account to the project's test-user list
+before you can connect. That list is limited to 100 users. Calendar
+permission grants and refresh tokens expire after seven days in this mode;
+reconnect when Omagenda reports that sign-in has expired.
+See [Google's audience documentation](https://support.google.com/cloud/answer/15549945?hl=en).
 
-> **Sign-ins currently expire about weekly.** Until the OAuth client is
-> published to production, Google expires its refresh tokens every seven
-> days. When that happens the panel says so and names the command to run.
-> See [docs/google-cloud-setup.md](google-cloud-setup.md) for the detail,
-> including what to do if your account is on Advanced Protection.
+You may see an unverified-app warning during consent. Review the requested
+calendar access before proceeding. Being a test user does not override
+Advanced Protection or a workplace administrator's restrictions.
+
+The Testing limit is separate from Google's cumulative cap for unverified
+apps requesting sensitive scopes. Moving to Production is not verification
+and does not by itself remove that cap. See
+[Google's unverified-app documentation](https://support.google.com/googleapi/answer/7454865?hl=en).
 
 By default every calendar you can write to is synced. To choose
 explicitly, list them in `~/.config/omagenda/config.toml`:
@@ -52,6 +57,10 @@ calendars = [
 read-only.
 
 ## Apple iCloud
+
+**Validation status:** configuration generation has automated coverage; a
+fresh-install round trip against a disposable iCloud calendar remains a
+release acceptance check.
 
 iCloud speaks CalDAV and takes an app-specific password, so it needs no
 OAuth and no browser.
@@ -121,3 +130,17 @@ omagenda doctor
 
 Reports missing packages, the vdir, whether your sign-ins are still good,
 the keyring, and whether the plugin is in your bar.
+
+## Editing limits in this preview
+
+Google updates use conditional partial writes, preserving fields such as
+attendees that Omagenda does not edit. A conflicting local edit is saved
+beside the event as `.conflict.ics`; the remote version wins. Existing
+conflict copies are retained. Review them manually rather than copying
+an entire series back onto the server.
+
+Series containing exception components cannot currently be edited locally;
+sync reports an error instead of discarding those components. Edit those
+series in Google Calendar. Changes to recurring events trigger a complete
+calendar download to rebuild the series correctly, so they can take longer
+than an ordinary incremental sync.

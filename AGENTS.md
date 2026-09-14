@@ -61,6 +61,25 @@ symlink anywhere underneath it -- which a venv always has (`lib64 -> lib`).
 Activate the external venv before running `python -m unittest` or the CLI
 directly; nothing about the shipped code depends on a venv existing.
 
+## Reliability development and tests
+
+Work in an isolated checkout when the normal checkout is the running plugin.
+Run `python tools/test-isolated.py` for Python tests; it redirects config,
+calendar, state and credential defaults into temporary directories. Never
+change the installed source to test watcher invalidation. The watcher test
+uses a temporary module.
+
+Native text-field interaction tests run with:
+
+```
+QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tests/qml
+```
+
+Mocked provider tests do not establish live-provider acceptance. Record
+remaining checks in `docs/reviewer-checklist.md`. Multi-component series
+writes and inline syntax highlighting are currently deferred; keep native
+text editing and the interpretation preview functional.
+
 ## Phase 0 — scaffold and corpus
 
 Read list: `PLAN.md`, `ARCHITECTURE.md`, `/usr/share/omarchy/shell/README.md` (manifest section only), `/usr/share/omarchy/shell/plugins/README.md`.
