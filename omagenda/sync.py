@@ -1,23 +1,4 @@
-"""Sync orchestration.
-
-Reads config.toml's accounts and dispatches each one by type. This phase
-has no accounts.py yet (that's Phase 1b), so nothing writes a real account
-into config.toml -- sync_all() runs safely against an empty account list
-today, and the dispatch below is what Phase 1b's `omagenda account add`
-starts populating.
-
-- `ics`: fully implemented and testable now -- a plain HTTP fetch into a
-  read-only vdir folder, no external tool required.
-- `icloud` / `caldav`: delegates to the configured sync tool (pimsync,
-  falling back to vdirsyncer). The exact CLI invocation is a placeholder
-  pending Phase 1b, when `accounts.py` writes real pimsync configs and
-  this can be verified against `man pimsync` on a machine that has it
-  installed (this one doesn't -- no sudo in this session, see AGENTS.md).
-- `google` / `microsoft`: not implemented until their bridges land
-  (Phase 1b, Phase 5) -- reported clearly rather than attempted.
-
-See ARCHITECTURE.md §7 and §11.
-"""
+"""Sync local vdir calendars with Google, CalDAV and ICS subscriptions."""
 from __future__ import annotations
 
 import hashlib
@@ -173,6 +154,14 @@ def _write_vdir_metadata(calendar_path: Path, calendar) -> None:
 
 
 def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, state_dir=None) -> dict:
+    try:
+        return _sync_calendar_contents(bridge, account, calendar, calendar_path, state_dir)
+    finally:
+        if not calendar.writable and calendar_path.exists():
+            calendar_path.chmod(0o555)
+
+
+def _sync_calendar_contents(bridge, account: dict, calendar, calendar_path: Path, state_dir=None) -> dict:
     """The shared pull -> detect-local-changes -> push -> record algorithm
     (ARCHITECTURE.md §11), driven through the Bridge protocol so it works
     the same way for any bridge, not just Google."""
@@ -190,21 +179,46 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
     counts = {"pulled": 0, "createdRemote": 0, "createdLocal": 0, "updated": 0, "deletedRemote": 0,
               "deletedLocal": 0, "conflicts": 0}
 
+    # Download first, then snapshot local files before applying the response.
+    # An edit made while a slow network request is running must be included.
+    pull_result = bridge.pull(account, calendar, state.cursor)
+
     # Both captured before the pull writes anything, because the pull is
     # what destroys the evidence. A delete made shortly after creating an
     # event used to vanish: the create was pushed, Google reported it back
     # as changed on the next pull, the pull rewrote the file the user had
     # just deleted, and the deletion -- now invisible on disk -- was never
     # sent. The event came back from the dead with no error anywhere.
+    refs_before = {uid: dict(entry) for uid, entry in state.items.items()}
     known_before = set(state.items)
     on_disk_before = {f.stem for f in calendar_path.glob("*.ics")
                       if not f.name.endswith(".conflict.ics")}
 
-    # 1. Pull.
-    pull_result = bridge.pull(account, calendar, state.cursor)
+    local_edits = {}
+    for uid in known_before & on_disk_before:
+        content = (calendar_path / f"{uid}.ics").read_bytes()
+        if hashlib.sha256(content).hexdigest() != state.items[uid]["localHash"]:
+            local_edits[uid] = content
+
+    def preserve(uid, content):
+        # Do not replace a previous unresolved conflict with a newer one.
+        suffix = hashlib.sha256(content).hexdigest()[:12]
+        path = calendar_path / f"{uid}.conflict.ics"
+        if path.exists() and path.read_bytes() != content:
+            path = calendar_path / f"{uid}.{suffix}.conflict.ics"
+        _overwrite_ics(path, content)
+        counts["conflicts"] += 1
+        try:
+            _notify_conflict(uid, calendar.name)
+        except OSError:
+            pass  # Notification availability must not undo preservation.
+
+    # 1. Apply the downloaded changes.
     for change in pull_result.changed:
         digest = hashlib.sha256(change.ics_bytes).hexdigest()
         entry = state.items.get(change.uid)
+        if change.uid in local_edits and entry is not None and entry["localHash"] != digest:
+            preserve(change.uid, local_edits.pop(change.uid))
         # A "changed" event whose bytes are what we already hold is not a
         # change, and rewriting it costs more than the write: every touched
         # file wakes the watcher, invalidates that file's index-cache entry,
@@ -227,11 +241,20 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
             "etag": change.ref.etag,
             "localHash": digest,
         }
-    for uid in pull_result.deleted_uids:
+    deleted = set(pull_result.deleted_uids)
+    if pull_result.full_resync:
+        deleted.update(known_before - {change.uid for change in pull_result.changed})
+    for uid in deleted:
+        if uid in local_edits:
+            preserve(uid, local_edits.pop(uid))
         (calendar_path / f"{uid}.ics").unlink(missing_ok=True)
         state.items.pop(uid, None)
         counts["deletedRemote"] += 1
     state.cursor = pull_result.next_cursor
+    if not calendar.writable:
+        state.save(state_path)
+        counts["ok"] = True
+        return counts
 
     # 2. Detect local changes: compare every file on disk against the
     # hash recorded the last time this uid was pulled or pushed. A file
@@ -274,10 +297,8 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
                 # brings <uid>.ics back in line with the server, since the
                 # Bridge protocol has no "fetch one item" method and
                 # doesn't need one just for this rare path.
-                conflict_path = calendar_path / f"{uid}.conflict.ics"
-                conflict_path.write_bytes(content)
-                _notify_conflict(uid, calendar.name)
-                counts["conflicts"] += 1
+                preserve(uid, content)
+                state.cursor = None  # Fetch the winning remote version on the next sync.
             except Exception as exc:  # noqa: BLE001
                 counts.setdefault("errors", []).append(f"update {uid}: {exc}")
 
@@ -293,7 +314,11 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
         if entry is None:
             continue
         try:
-            bridge.push_delete(account, calendar, RemoteRef(remote_id=entry["remoteId"], etag=entry.get("etag")))
+            bridge.push_delete(account, calendar, RemoteRef(remote_id=refs_before[uid]["remoteId"], etag=refs_before[uid].get("etag")))
+        except ConflictError as exc:
+            state.cursor = None
+            counts.setdefault("errors", []).append(f"delete {uid}: {exc}; remote event retained")
+            continue
         except Exception as exc:  # noqa: BLE001
             counts.setdefault("errors", []).append(f"delete {uid}: {exc}")
             continue
@@ -305,8 +330,6 @@ def _sync_one_calendar(bridge, account: dict, calendar, calendar_path: Path, sta
 
     # 4. Record.
     state.save(state_path)
-    if not calendar.writable:
-        calendar_path.chmod(0o555)  # readOnly, per vdir.discover_calendars
     counts["ok"] = "errors" not in counts
     return counts
 

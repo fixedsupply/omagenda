@@ -484,7 +484,7 @@ def _wrap_calendar(vevent_lines: list[str]) -> bytes:
 # pull
 # ---------------------------------------------------------------------
 def pull(account: dict, calendar: RemoteCalendar, cursor: str | None) -> PullResult:
-    full_resync = False
+    full_resync = cursor is None
     items: list[dict] = []
     next_cursor = cursor
 
@@ -517,8 +517,16 @@ def pull(account: dict, calendar: RemoteCalendar, cursor: str | None) -> PullRes
         else:
             raise
 
+    # A delta may contain only an exception, or only a changed master.
+    # Rebuild from a complete snapshot so neither drops existing exceptions.
+    if cursor is not None and not full_resync and any(
+            item.get("recurringEventId") or item.get("recurrence") for item in items):
+        items = []
+        next_cursor = fetch(None)
+        full_resync = True
     files, deleted_uids = _map_events_page(items)
-    changed = [PullChange(uid=uid, ics_bytes=_wrap_calendar(lines), ref=RemoteRef(remote_id=uid))
+    versions = {item["id"]: item.get("etag") for item in items}
+    changed = [PullChange(uid=uid, ics_bytes=_wrap_calendar(lines), ref=RemoteRef(remote_id=uid, etag=versions.get(uid)))
                for uid, lines in files.items()]
     return PullResult(changed=changed, deleted_uids=deleted_uids, next_cursor=next_cursor, full_resync=full_resync)
 
@@ -548,13 +556,15 @@ def _local_event_to_google_body(event) -> dict:
     if event.get("description"):
         body["description"] = str(event["description"])
 
-    rrule = event.get("rrule")
-    if rrule:
-        body["recurrence"] = [f"RRULE:{rrule.to_ical().decode()}"]
-        exdates = event.get("exdate")
-        exdates = exdates if isinstance(exdates, list) else ([exdates] if exdates else [])
-        for exdate_prop in exdates:
-            body["recurrence"].append(f"EXDATE:{exdate_prop.to_ical().decode()}")
+    recurrence = []
+    for name in ("rrule", "rdate", "exrule", "exdate"):
+        properties = event.get(name)
+        properties = properties if isinstance(properties, list) else ([properties] if properties else [])
+        for prop in properties:
+            params = ";" + prop.params.to_ical().decode() if prop.params else ""
+            recurrence.append(name.upper() + params + ":" + prop.to_ical().decode())
+    if recurrence:
+        body["recurrence"] = recurrence
 
     overrides = []
     for valarm in event.walk("VALARM"):
@@ -570,7 +580,10 @@ def _local_event_to_google_body(event) -> dict:
 def push_create(account: dict, calendar: RemoteCalendar, ics_bytes: bytes) -> RemoteRef:
     import icalendar
 
-    event = next(iter(icalendar.Calendar.from_ical(ics_bytes).walk("VEVENT")))
+    events = icalendar.Calendar.from_ical(ics_bytes).walk("VEVENT")
+    if len(events) != 1 or events[0].get("recurrence-id"):
+        raise ValueError("Creating a series with exceptions is not supported yet; use Google Calendar")
+    event = events[0]
     url = f"{API_BASE}/calendars/{urllib.parse.quote(calendar.id)}/events"
     _, payload, headers = _authed_request(account, "POST", url, body=_local_event_to_google_body(event))
     return RemoteRef(remote_id=payload["id"], etag=payload.get("etag"))
@@ -579,11 +592,20 @@ def push_create(account: dict, calendar: RemoteCalendar, ics_bytes: bytes) -> Re
 def push_update(account: dict, calendar: RemoteCalendar, ics_bytes: bytes, ref: RemoteRef) -> RemoteRef:
     import icalendar
 
-    event = next(iter(icalendar.Calendar.from_ical(ics_bytes).walk("VEVENT")))
+    events = icalendar.Calendar.from_ical(ics_bytes).walk("VEVENT")
+    if len(events) != 1 or events[0].get("recurrence-id"):
+        raise ValueError("Editing a series with exceptions is not supported yet; edit it in Google Calendar")
+    event = events[0]
+    if not ref.etag:
+        raise ConflictError("Missing event version; sync again before updating")
+    body = _local_event_to_google_body(event)
+    for field in ("location", "description"):
+        body.setdefault(field, "")
+    body.setdefault("recurrence", [])
     url = f"{API_BASE}/calendars/{urllib.parse.quote(calendar.id)}/events/{urllib.parse.quote(ref.remote_id)}"
     headers = {"If-Match": ref.etag} if ref.etag else {}
     try:
-        _, payload, _ = _authed_request(account, "PUT", url, body=_local_event_to_google_body(event), extra_headers=headers)
+        _, payload, _ = _authed_request(account, "PATCH", url, body=body, extra_headers=headers)
     except ApiError as exc:
         if exc.status == 412:
             raise ConflictError(f"'{ref.remote_id}' changed on the server since it was last read") from exc
@@ -592,9 +614,13 @@ def push_update(account: dict, calendar: RemoteCalendar, ics_bytes: bytes, ref: 
 
 
 def push_delete(account: dict, calendar: RemoteCalendar, ref: RemoteRef) -> None:
+    if not ref.etag:
+        raise ConflictError("Missing event version; sync again before deleting")
     url = f"{API_BASE}/calendars/{urllib.parse.quote(calendar.id)}/events/{urllib.parse.quote(ref.remote_id)}"
     try:
-        _authed_request(account, "DELETE", url)
+        _authed_request(account, "DELETE", url, extra_headers={"If-Match": ref.etag})
     except ApiError as exc:
-        if exc.status != 404:  # already gone is not an error
+        if exc.status == 412:
+            raise ConflictError("Event changed before deletion") from exc
+        if exc.status not in (404, 410):  # already gone is not an error
             raise

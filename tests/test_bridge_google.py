@@ -302,13 +302,13 @@ class PushTest(unittest.TestCase):
 
     def test_push_delete_ignores_already_gone(self):
         with mock.patch("urllib.request.urlopen", side_effect=_HTTPErrorWithBody(404, b"{}")):
-            push_delete(self.account, self.calendar, RemoteRef(remote_id="r1"))  # must not raise
+            push_delete(self.account, self.calendar, RemoteRef(remote_id="r1", etag="v1"))  # must not raise
 
     def test_push_delete_propagates_other_errors(self):
         with mock.patch("urllib.request.urlopen", side_effect=_HTTPErrorWithBody(500, b"{}")), \
              mock.patch("time.sleep"):
             with self.assertRaises(ApiError):
-                push_delete(self.account, self.calendar, RemoteRef(remote_id="r1"))
+                push_delete(self.account, self.calendar, RemoteRef(remote_id="r1", etag="v1"))
 
 
 if __name__ == "__main__":

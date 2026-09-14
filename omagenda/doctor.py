@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
 
-CONFIG_PATH = Path.home() / ".config" / "omagenda" / "config.toml"
+CONFIG_PATH = Path(os.environ.get("OMAGENDA_CONFIG", Path.home() / ".config" / "omagenda" / "config.toml"))
 SHELL_JSON_PATH = Path.home() / ".config" / "omarchy" / "shell.json"
 PLUGIN_ID = "fixedsupply.omagenda"
 REQUIRED_PACKAGES = ["icalendar", "dateutil", "recurring_ical_events"]

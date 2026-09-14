@@ -241,8 +241,9 @@ def cmd_add(args) -> int:
         print(json.dumps({"file": str(path), "calendar": target["id"], "event": result}))
     else:
         print(f"Added '{result['title']}' to {target['id']} ({path.name})")
-    for warning in result["warnings"]:
-        print(f"  ! {warning}")
+    if not args.json:
+        for warning in result["warnings"]:
+            print(f"  ! {warning}")
     return 0
 
 
@@ -650,8 +651,9 @@ def cmd_parse(args) -> int:
         print(f"  repeats: {result['rrule']}")
     if result["alarms"]:
         print(f"  alarms: {', '.join(result['alarms'])}")
-    for warning in result["warnings"]:
-        print(f"  ! {warning}")
+    if not args.json:
+        for warning in result["warnings"]:
+            print(f"  ! {warning}")
     return 0
 
 

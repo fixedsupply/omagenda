@@ -54,7 +54,7 @@ def write_config(config: dict, path: Path | None = None) -> None:
     path = path or CONFIG_PATH
     lines: list[str] = []
 
-    for key in ("vdir", "default_calendar"):
+    for key in ("vdir", "default_calendar", "sync_interval", "sync_workers"):
         if key in config:
             lines.append(f"{key} = {_toml_value(config[key])}")
     if lines:

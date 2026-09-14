@@ -128,7 +128,8 @@ def discover_calendars(vdir_root: Path | str | None = None) -> list[dict]:
 
 
 def list_ics_files(calendar_path: Path | str) -> list[Path]:
-    return sorted(Path(calendar_path).glob("*.ics"))
+    return sorted(p for p in Path(calendar_path).glob("*.ics")
+                  if not p.name.endswith(".conflict.ics"))
 
 
 def read_ics_file(path: Path | str) -> icalendar.Calendar:

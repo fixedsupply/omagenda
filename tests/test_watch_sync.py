@@ -8,6 +8,7 @@ and by `omagenda watch` on a timer"; only the reindex half was built.
 import importlib.machinery
 import importlib.util
 import os
+import tempfile
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -117,15 +118,14 @@ class SourceFingerprintTest(unittest.TestCase):
         self.assertEqual(cli._source_fingerprint(), cli._source_fingerprint())
 
     def test_a_touched_source_file_changes_the_fingerprint(self):
-        before = cli._source_fingerprint()
-        target = next(p for p in cli._source_paths() if p.name == "sync.py")
-        original = target.stat()
-        try:
-            os.utime(target, ns=(original.st_atime_ns, original.st_mtime_ns + 1_000_000_000))
-            self.assertNotEqual(cli._source_fingerprint(), before)
-        finally:
-            os.utime(target, ns=(original.st_atime_ns, original.st_mtime_ns))
-        self.assertEqual(cli._source_fingerprint(), before)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "module.py"
+            target.write_text("# invented module\n")
+            with unittest.mock.patch.object(cli, "_source_paths", return_value=[target]):
+                before = cli._source_fingerprint()
+                original = target.stat()
+                os.utime(target, ns=(original.st_atime_ns, original.st_mtime_ns + 1_000_000_000))
+                self.assertNotEqual(cli._source_fingerprint(), before)
 
     def test_a_missing_file_counts_as_changed(self):
         # A plugin update caught mid-write: better to restart than to run
