@@ -111,8 +111,13 @@ Panel {
     return false
   }
 
+  // Newer shells expose this as a read-only property with a setter, and
+  // assigning to it throws -- which aborted close() before hide() ran and
+  // left the panel stuck open. Prefer the setter, as the stock panels do.
   function setCenterHoverRevealSuppressed(value) {
-    if (root.bar && "centerHoverRevealSuppressed" in root.bar)
+    if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
+      root.bar.setCenterHoverRevealSuppressed(value)
+    else if (root.bar && "centerHoverRevealSuppressed" in root.bar)
       root.bar.centerHoverRevealSuppressed = value
   }
 
