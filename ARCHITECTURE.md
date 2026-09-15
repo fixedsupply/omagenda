@@ -227,6 +227,9 @@ home = ["google-calvin/family@group.calendar.google.com", "icloud-family/family"
 default_lead = "PT10M"      # used when an event has no VALARM
 ```
 
+Pimsync's vdir storage identifies local changes by whole-second modification time and inode, so an in-place edit in the same second as a sync can be invisible.
+Never modify an existing event file in place; always write a temporary file in the same directory, flush and fsync it, then replace the event with `os.replace` so it has a new inode.
+
 `omagenda calendars` prints the merged view so QML has one place to ask.
 
 Watcher sync can be paused with `omagenda sync --pause 30m` and resumed

@@ -52,6 +52,20 @@ def write_receipt(path: Path, name: str, url: str, phase: str) -> None:
     temporary.replace(path)
 
 
+def replace_local_event(path: Path, content: bytes) -> None:
+    """Replace the inode so pimsync detects edits made within the same second."""
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix='.acceptance-', suffix='.ics.tmp')
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
 def trusted_url(url: str) -> str:
     parsed = urlsplit(url)
     if (parsed.scheme != 'https' or not parsed.hostname
@@ -395,11 +409,11 @@ def main(argv: list[str] | None = None) -> int:
         sync()
         check('iCloud time change downloaded', components(path.read_bytes())[0]['DTSTART'].dt == start)
         stage = 'local title edit'
-        path.write_bytes(changed(path.read_bytes(), summary='Locally edited appointment'))
+        replace_local_event(path, changed(path.read_bytes(), summary='Locally edited appointment'))
         sync()
         check('Local title edit uploaded', str(components(request('GET', event_url))[0]['SUMMARY']) == 'Locally edited appointment')
         stage = 'simultaneous edits'
-        path.write_bytes(changed(path.read_bytes(), summary='Local conflict copy'))
+        replace_local_event(path, changed(path.read_bytes(), summary='Local conflict copy'))
         put(event_url, changed(request('GET', event_url), summary='Remote conflict winner'))
         sync()
         check('Simultaneous edit keeps remote title on both sides',

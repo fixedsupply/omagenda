@@ -1,4 +1,5 @@
 """Offline safeguards for the opt-in iCloud script; no provider acceptance."""
+import ast
 import contextlib
 import importlib.util
 import io
@@ -22,6 +23,33 @@ SPEC.loader.exec_module(acceptance)
 class ICloudAcceptanceTests(unittest.TestCase):
     def setUp(self):
         self.vdir = self.enterContext(WithVdir())
+
+    def test_local_event_replace_changes_content_and_inode(self):
+        path = self.vdir / 'invented.ics'
+        path.write_bytes(b'original')
+        original_inode = path.stat().st_ino
+        acceptance.replace_local_event(path, b'edited')
+        self.assertEqual(path.read_bytes(), b'edited')
+        self.assertNotEqual(path.stat().st_ino, original_inode)
+        self.assertEqual(list(self.vdir.iterdir()), [path])
+
+    def test_local_edit_steps_use_atomic_helper(self):
+        tree = ast.parse((ROOT / 'tools/icloud-acceptance.py').read_text())
+        edits = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Attribute):
+                self.assertNotEqual(node.func.attr, 'write_bytes')
+                if node.func.attr == 'write_text':
+                    # Only setup metadata and the isolated sync config use text writes.
+                    self.assertIsInstance(node.func.value, ast.BinOp)
+                    self.assertIn(node.func.value.right.value,
+                                  ('displayname', 'omagenda-acceptance.scfg'))
+            if isinstance(node.func, ast.Name) and node.func.id == 'replace_local_event':
+                self.assertEqual(node.args[0].id, 'path')
+                edits.append(node.args[1].keywords[0].value.value)
+        self.assertCountEqual(edits, ['Locally edited appointment', 'Local conflict copy'])
 
     def test_report_skips_collection_and_preserves_item_with_explicit_port(self):
         calendar_url = 'https://p01-caldav.icloud.com:443/home/disposable/'

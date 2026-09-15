@@ -37,15 +37,14 @@ def _sync_ics(account: dict, vdir_root: Path) -> dict:
 
     # The folder is left read-only so discover_calendars reports the
     # subscription as such, which means every later refresh has to open
-    # the write bit again first. Overwriting an existing file happens to
-    # survive a read-only directory, but creating one does not -- so a
-    # single deleted file would otherwise wedge the subscription forever.
+    # the write bit again first. Atomic replacement needs to create a
+    # temporary file in the same directory, even for an existing event.
     folder.chmod(0o755)
     try:
         (folder / "displayname").write_text(account.get("id", url))
         if account.get("color"):
             (folder / "color").write_text(account["color"])
-        (folder / "subscription.ics").write_bytes(data)
+        _overwrite_ics(folder / "subscription.ics", data)
     except OSError as exc:
         return {"ok": False, "detail": f"couldn't write into {folder}: {exc}"}
     finally:
@@ -129,13 +128,13 @@ def _adopt_remote_uid(file_path: Path, content: bytes, remote_id: str):
 
     So the moment a create succeeds, the local file takes the remote's
     identity: renamed to the remote id and rewritten to carry it as the
-    UID. The next pull then overwrites that same file in place.
+    UID. The next pull then atomically replaces that same file.
     """
     if not remote_id or remote_id == file_path.stem:
         return file_path.stem, file_path, content
     new_path = file_path.with_name(f"{remote_id}.ics")
     new_content = _rewrite_uid(content, remote_id)
-    new_path.write_bytes(new_content)
+    _overwrite_ics(new_path, new_content)
     if new_path != file_path:
         file_path.unlink(missing_ok=True)
     return remote_id, new_path, new_content
