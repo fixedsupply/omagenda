@@ -1,4 +1,5 @@
 """Offline safeguards for the opt-in iCloud script; no provider acceptance."""
+import ast
 import contextlib
 import importlib.util
 import io
@@ -22,6 +23,80 @@ SPEC.loader.exec_module(acceptance)
 class ICloudAcceptanceTests(unittest.TestCase):
     def setUp(self):
         self.vdir = self.enterContext(WithVdir())
+
+    def test_local_event_replace_changes_content_and_inode(self):
+        path = self.vdir / 'invented.ics'
+        path.write_bytes(b'original')
+        original_inode = path.stat().st_ino
+        acceptance.replace_local_event(path, b'edited')
+        self.assertEqual(path.read_bytes(), b'edited')
+        self.assertNotEqual(path.stat().st_ino, original_inode)
+        self.assertEqual(list(self.vdir.iterdir()), [path])
+
+    def test_local_edit_steps_use_atomic_helper(self):
+        tree = ast.parse((ROOT / 'tools/icloud-acceptance.py').read_text())
+        edits = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Attribute):
+                self.assertNotEqual(node.func.attr, 'write_bytes')
+                if node.func.attr == 'write_text':
+                    # Only setup metadata and the isolated sync config use text writes.
+                    self.assertIsInstance(node.func.value, ast.BinOp)
+                    self.assertIn(node.func.value.right.value,
+                                  ('displayname', 'omagenda-acceptance.scfg'))
+            if isinstance(node.func, ast.Name) and node.func.id == 'replace_local_event':
+                self.assertEqual(node.args[0].id, 'path')
+                edits.append(node.args[1].keywords[0].value.value)
+        self.assertCountEqual(edits, ['Locally edited appointment', 'Local conflict copy'])
+
+    def test_report_skips_collection_and_preserves_item_with_explicit_port(self):
+        calendar_url = 'https://p01-caldav.icloud.com:443/home/disposable/'
+        for trailing_slash in ('', '/'):
+            with self.subTest(trailing_slash=trailing_slash):
+                body = f'''<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+                  <d:response><d:href>/home/disposable{trailing_slash}</d:href>
+                    <d:propstat><d:prop><d:getetag>"collection"</d:getetag></d:prop>
+                      <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+                  <d:response><d:href>/home/disposable/invented.ics</d:href>
+                    <d:propstat><d:prop><c:calendar-data>BEGIN:VCALENDAR
+END:VCALENDAR</c:calendar-data></d:prop>
+                      <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+                </d:multistatus>'''.encode()
+                self.assertEqual(acceptance.parse_events_report(body, calendar_url),
+                                 {calendar_url + 'invented.ics': b'BEGIN:VCALENDAR\nEND:VCALENDAR'})
+
+    def test_report_rejects_other_collection(self):
+        body = b'''<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+          <d:response><d:href>/home/disposable-other/invented.ics</d:href>
+            <d:propstat><d:prop><c:calendar-data>invented</c:calendar-data></d:prop>
+              <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+        </d:multistatus>'''
+        with self.assertRaisesRegex(RuntimeError, 'outside the disposable calendar'):
+            acceptance.parse_events_report(body, 'https://p01-caldav.icloud.com:443/home/disposable/')
+
+    def test_report_rejects_item_without_calendar_data(self):
+        body = b'''<d:multistatus xmlns:d="DAV:">
+          <d:response><d:href>/home/disposable/invented.ics</d:href>
+            <d:propstat><d:prop><d:getetag>"item"</d:getetag></d:prop>
+              <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+        </d:multistatus>'''
+        with self.assertRaisesRegex(RuntimeError, 'REPORT omitted calendar data'):
+            acceptance.parse_events_report(body, 'https://p01-caldav.icloud.com:443/home/disposable/')
+
+    def test_failure_line_includes_script_exception_messages(self):
+        for exception in (RuntimeError, AssertionError, TimeoutError, ValueError):
+            with self.subTest(exception=exception):
+                self.assertEqual(acceptance.failure_line('offline check', exception('Fixed script message')),
+                                 f'FAIL: offline check ({exception.__name__}: Fixed script message)')
+
+    def test_failure_line_hides_library_exception_messages(self):
+        private_url = 'https://p01-caldav.icloud.com/123/calendars/invented/'
+        for exc in (OSError(private_url), json.JSONDecodeError(private_url, '', 0)):
+            with self.subTest(exception=type(exc)):
+                self.assertEqual(acceptance.failure_line('offline check', exc),
+                                 f'FAIL: offline check ({type(exc).__name__})')
 
     def test_requires_explicit_live_flag(self):
         with patch.object(acceptance.subprocess, 'run') as run, contextlib.redirect_stderr(io.StringIO()):
@@ -79,12 +154,16 @@ class ICloudAcceptanceTests(unittest.TestCase):
         self.assertIn('        id_a disposable\n', config)
         self.assertIn('        href_b "/123/calendars/abc/"\n', config)
         self.assertNotIn('collections ', config)
-        self.assertIn('conflict_resolution keep b', config)
+        self.assertIn('conflict_resolution cmd ', config)
+        self.assertIn('resolve-conflict --account "acceptance"', config)
+        self.assertNotIn('keep b', config)
         self.assertIn('cmd secret-tool lookup service omagenda account "test-account"', config)
         self.assertIn('status_path "/tmp/acceptance example/pimsync-state/"', config)
         self.assertIn('path "/tmp/acceptance example/calendars/acceptance/"', config)
         self.assertNotIn('pair family', config)
-        self.assertNotIn(str(Path.home()), config)
+        # The conflict resolver is the plugin's own CLI; no other real path may appear.
+        from omagenda.accounts import CONFLICT_RESOLVER
+        self.assertNotIn(str(Path.home()), config.replace(str(CONFLICT_RESOLVER), ''))
 
     def test_scfg_quotes_untrusted_values(self):
         config = acceptance.generate_scfg(Path('/tmp/test'),

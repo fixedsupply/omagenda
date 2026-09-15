@@ -54,6 +54,37 @@ class WithVdir:
 
 
 class SyncIcsTest(unittest.TestCase):
+    def test_subscription_refresh_replaces_existing_inode_and_content(self):
+        with WithVdir() as vdir_root:
+            folder = vdir_root / 'holidays'
+            folder.mkdir()
+            path = folder / 'subscription.ics'
+            path.write_bytes(b'original')
+            original_inode = path.stat().st_ino
+            result = sync_all({'accounts': [
+                {'id': 'holidays', 'type': 'ics', 'url': FIXTURE_ICS.resolve().as_uri()},
+            ]})
+            self.assertTrue(result['holidays']['ok'])
+            self.assertEqual(path.read_bytes(), FIXTURE_ICS.read_bytes())
+            self.assertNotEqual(path.stat().st_ino, original_inode)
+
+    def test_remote_uid_adoption_replaces_existing_destination(self):
+        from omagenda.sync import _adopt_remote_uid
+
+        with WithVdir() as vdir_root:
+            source = vdir_root / 'local.ics'
+            content = b'BEGIN:VEVENT\r\nUID:local\r\nEND:VEVENT\r\n'
+            source.write_bytes(content)
+            destination = vdir_root / 'remote.ics'
+            destination.write_bytes(b'original')
+            original_inode = destination.stat().st_ino
+            uid, path, adopted = _adopt_remote_uid(source, content, 'remote')
+            self.assertEqual((uid, path), ('remote', destination))
+            self.assertEqual(adopted, content.replace(b'UID:local', b'UID:remote'))
+            self.assertEqual(destination.read_bytes(), adopted)
+            self.assertNotEqual(destination.stat().st_ino, original_inode)
+            self.assertFalse(source.exists())
+
     def test_fetches_ics_subscription_into_readonly_calendar(self):
         with WithVdir() as vdir_root:
             config = {"accounts": [

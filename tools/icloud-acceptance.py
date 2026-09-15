@@ -52,6 +52,20 @@ def write_receipt(path: Path, name: str, url: str, phase: str) -> None:
     temporary.replace(path)
 
 
+def replace_local_event(path: Path, content: bytes) -> None:
+    """Replace the inode so pimsync detects edits made within the same second."""
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix='.acceptance-', suffix='.ics.tmp')
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
 def trusted_url(url: str) -> str:
     parsed = urlsplit(url)
     if (parsed.scheme != 'https' or not parsed.hostname
@@ -62,11 +76,37 @@ def trusted_url(url: str) -> str:
     return url
 
 
+def parse_events_report(body: bytes, calendar_url: str) -> dict[str, bytes]:
+    root = ET.fromstring(body)
+    found = {}
+    for response in root.findall('d:response', NS):
+        href = trusted_url(urljoin(calendar_url, response.findtext('d:href', '', NS)))
+        # iCloud includes the collection itself without calendar data in this REPORT.
+        if href.rstrip('/') == calendar_url.rstrip('/'):
+            continue
+        if not href.startswith(calendar_url.rstrip('/') + '/'):
+            raise RuntimeError('REPORT returned a resource outside the disposable calendar')
+        data = response.findtext('.//c:calendar-data', None, NS)
+        if data is None:
+            raise RuntimeError('REPORT omitted calendar data')
+        found[href] = data.encode()
+    return found
+
+
+def failure_line(stage: str, exc: Exception) -> str:
+    detail = type(exc).__name__
+    # Library exception subclasses can include private URLs in their messages.
+    if type(exc) in (RuntimeError, AssertionError, TimeoutError, ValueError):
+        detail += ': ' + str(exc)
+    return 'FAIL: ' + stage + ' (' + detail + ')'
+
+
 def generate_scfg(folder: Path, account: dict, calendar_url: str) -> str:
     trusted_url(calendar_url)
     # pimsync.conf(5), COLLECTION SECTIONS: id_a selects the local directory;
     # href_b selects exactly this remote path. No discovery-wide selector is used.
     q = json.dumps
+    from omagenda.accounts import conflict_resolution_directive
     return f'''status_path {q(str(folder / 'pimsync-state') + '/')}
 pair acceptance {{
     storage_a acceptance_local
@@ -76,7 +116,7 @@ pair acceptance {{
         id_a disposable
         href_b {q(urlsplit(calendar_url).path)}
     }}
-    conflict_resolution keep b
+    {conflict_resolution_directive(PAIR)}
 }}
 storage acceptance_local {{
     type vdir/icalendar
@@ -313,8 +353,16 @@ def main(argv: list[str] | None = None) -> int:
                'PYTHONDONTWRITEBYTECODE': '1'}
 
         def cli(*args: str) -> dict:
+            started = time.monotonic()
             result = subprocess.run(cli_command(folder, *args, '--json'), env=env,
                                     capture_output=True, text=True, timeout=150)
+            # Kept only in the private temporary folder, which is retained on
+            # failure: the isolated CLI's own detail says which step failed.
+            log = folder / 'isolated-cli.log'
+            with os.fdopen(os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), 'a') as stream:
+                stream.write(json.dumps({'args': list(args), 'exit': result.returncode,
+                                         'seconds': round(time.monotonic() - started, 1),
+                                         'stdout': result.stdout[-4000:], 'stderr': result.stderr[-4000:]}) + '\n')
             if result.returncode:
                 raise RuntimeError('Isolated CLI command failed')
             return json.loads(result.stdout)
@@ -328,18 +376,8 @@ def main(argv: list[str] | None = None) -> int:
             body = (f'<c:calendar-query xmlns:c="{NS["c"]}" xmlns:d="DAV:">'
                     '<d:prop><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR">'
                     '<c:comp-filter name="VEVENT"/></c:comp-filter></c:filter></c:calendar-query>').encode()
-            root = ET.fromstring(request('REPORT', calendar_url, body,
-                                {'Depth': '1', 'Content-Type': 'application/xml'}))
-            found = {}
-            for response in root.findall('d:response', NS):
-                href = trusted_url(urljoin(calendar_url, response.findtext('d:href', '', NS)))
-                if not href.startswith(calendar_url) or href == calendar_url:
-                    raise RuntimeError('REPORT returned a resource outside the disposable calendar')
-                data = response.findtext('.//c:calendar-data', None, NS)
-                if data is None:
-                    raise RuntimeError('REPORT omitted calendar data')
-                found[href] = data.encode()
-            return found
+            return parse_events_report(request('REPORT', calendar_url, body,
+                                       {'Depth': '1', 'Content-Type': 'application/xml'}), calendar_url)
 
         def components(data: bytes) -> list:
             return icalendar.Calendar.from_ical(data).walk('VEVENT')
@@ -380,16 +418,20 @@ def main(argv: list[str] | None = None) -> int:
         sync()
         check('iCloud time change downloaded', components(path.read_bytes())[0]['DTSTART'].dt == start)
         stage = 'local title edit'
-        path.write_bytes(changed(path.read_bytes(), summary='Locally edited appointment'))
+        replace_local_event(path, changed(path.read_bytes(), summary='Locally edited appointment'))
         sync()
         check('Local title edit uploaded', str(components(request('GET', event_url))[0]['SUMMARY']) == 'Locally edited appointment')
         stage = 'simultaneous edits'
-        path.write_bytes(changed(path.read_bytes(), summary='Local conflict copy'))
+        replace_local_event(path, changed(path.read_bytes(), summary='Local conflict copy'))
         put(event_url, changed(request('GET', event_url), summary='Remote conflict winner'))
         sync()
         check('Simultaneous edit keeps remote title on both sides',
               str(components(path.read_bytes())[0]['SUMMARY']) == 'Remote conflict winner' and
               str(components(request('GET', event_url))[0]['SUMMARY']) == 'Remote conflict winner')
+        saved = list((folder / 'state' / 'conflicts' / PAIR).glob('*.conflict.ics'))
+        check('Simultaneous edit saved the local version outside the calendar',
+              len(saved) == 1 and str(components(saved[0].read_bytes())[0]['SUMMARY']) == 'Local conflict copy'
+              and not list(local.glob('*.conflict.ics')))
         stage = 'recurring exceptions'
         series_uid = uuid.uuid4().hex
         cal = icalendar.Calendar()
@@ -473,7 +515,7 @@ def main(argv: list[str] | None = None) -> int:
         success = True
     except Exception as exc:
         failed_stage = stage
-        print('FAIL: ' + stage + ' (' + type(exc).__name__ + ')', file=sys.stderr, flush=True)
+        print(failure_line(stage, exc), file=sys.stderr, flush=True)
     finally:
         try:
             if watcher is not None:

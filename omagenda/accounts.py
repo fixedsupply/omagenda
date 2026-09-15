@@ -15,9 +15,10 @@ section, since this machine has no sudo path to install pimsync and check
 it directly (see AGENTS.md's Phase 1b note): the `password { cmd ... }`
 block form, `storage <name> { type vdir/icalendar | caldav; ... }`, the
 `pair` block's `storage_a`/`storage_b`/`collections`/`conflict_resolution`
-directives, and the literal `conflict_resolution keep a|keep b` keywords
-(not a made-up "remote_wins" or similar) all come from its own worked
-examples, not guessed.
+directives, and the `conflict_resolution cmd` form all come from its own
+worked examples, not guessed. (`keep a|keep b` also exist, but pimsync
+0.5.7 never resolves a conflict with them; see
+`conflict_resolution_directive`.)
 """
 from __future__ import annotations
 
@@ -211,6 +212,55 @@ def _safe_pair_name(account_id: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "_", account_id)
 
 
+CONFLICT_RESOLVER = Path(__file__).resolve().parent.parent / "bin" / "omagenda"
+_CONFLICT_LINE = re.compile(r"^([ \t]*)conflict_resolution\b.*$", re.MULTILINE)
+
+
+def _scfg_quote(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def conflict_resolution_directive(account_id: str) -> str:
+    """The pair's conflict policy: the server version wins, and the local
+    version is kept and announced, exactly as the Google bridge does.
+
+    It cannot be `conflict_resolution keep b`. In pimsync 0.5.7 an item
+    changed on both sides then makes `sync` report "0 conflicts detected"
+    and fail with "etag mismatch when updating item", on that sync and every
+    later one, while `resolve-conflicts` finds nothing to resolve, so one
+    genuine conflict wedges the account for good. With a `cmd` resolver,
+    `sync` reports the conflict and `pimsync resolve-conflicts` runs the
+    command; `sync._sync_caldav` does that automatically."""
+    return (f"conflict_resolution cmd {_scfg_quote(str(CONFLICT_RESOLVER))} "
+            f"resolve-conflict --account {_scfg_quote(account_id)}")
+
+
+def ensure_conflict_resolver(account_id: str) -> bool:
+    """Bring an existing config's conflict_resolution line up to date, so
+    configs written with `keep b` before the fix above stop wedging.
+    Everything else in the file is left exactly as it was."""
+    path = pimsync_config_path(account_id)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    wanted = conflict_resolution_directive(account_id)
+    updated = _CONFLICT_LINE.sub(lambda match: match.group(1) + wanted, text)
+    if updated == text:
+        return False
+    import tempfile
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix="." + path.name + "-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(updated)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return True
+
+
 def generate_pimsync_config(account: dict, vdir_root: Path | None = None) -> Path:
     """Writes a self-contained pimsync config for one account: a local
     vdir/icalendar storage and a remote caldav storage, paired with
@@ -219,8 +269,9 @@ def generate_pimsync_config(account: dict, vdir_root: Path | None = None) -> Pat
     path -- exactly the layout vdir.discover_calendars expects for a
     multi-calendar account (ARCHITECTURE.md §1).
 
-    `conflict_resolution keep b` matches Omagenda's stated policy
-    everywhere else (ARCHITECTURE.md §11): the remote wins.
+    The conflict policy matches Omagenda's everywhere else (ARCHITECTURE.md
+    §11): the remote wins and the local version is kept; see
+    `conflict_resolution_directive` for why that is a `cmd` resolver.
     """
     from omagenda.vdir import resolve_vdir_root
 
@@ -249,7 +300,7 @@ def generate_pimsync_config(account: dict, vdir_root: Path | None = None) -> Pat
         f"\tstorage_a {pair_name}_local\n"
         f"\tstorage_b {pair_name}_remote\n"
         "\tcollections from b\n"
-        "\tconflict_resolution keep b\n"
+        f"\t{conflict_resolution_directive(account_id)}\n"
         "}\n"
         "\n"
         f"storage {pair_name}_local {{\n"

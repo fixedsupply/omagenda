@@ -273,6 +273,14 @@ def cmd_add(args) -> int:
     return 0
 
 
+def cmd_resolve_conflict(args) -> int:
+    """Run by pimsync, never by hand: see sync.preserve_pimsync_conflict."""
+    from omagenda.sync import preserve_pimsync_conflict
+
+    preserve_pimsync_conflict(args.account, Path(args.local), Path(args.remote))
+    return 0
+
+
 def cmd_doctor(args) -> int:
     from omagenda.doctor import run
 
@@ -760,6 +768,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_calendars.add_argument("--show", action="append", default=[], metavar="ID")
     p_calendars.add_argument("--show-all", action="store_true")
     p_calendars.set_defaults(func=cmd_calendars)
+
+    p_resolve = sub.add_parser("resolve-conflict",
+                               help="used by pimsync: keep the server version of a conflicting event and save yours")
+    p_resolve.add_argument("--account", required=True)
+    p_resolve.add_argument("local")
+    p_resolve.add_argument("remote")
+    p_resolve.set_defaults(func=cmd_resolve_conflict)
 
     p_doctor = sub.add_parser("doctor", help="dependencies, vdir, sync tool, keyring, plugin enabled")
     p_doctor.add_argument("--json", action="store_true")

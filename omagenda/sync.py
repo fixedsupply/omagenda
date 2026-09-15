@@ -37,15 +37,14 @@ def _sync_ics(account: dict, vdir_root: Path) -> dict:
 
     # The folder is left read-only so discover_calendars reports the
     # subscription as such, which means every later refresh has to open
-    # the write bit again first. Overwriting an existing file happens to
-    # survive a read-only directory, but creating one does not -- so a
-    # single deleted file would otherwise wedge the subscription forever.
+    # the write bit again first. Atomic replacement needs to create a
+    # temporary file in the same directory, even for an existing event.
     folder.chmod(0o755)
     try:
         (folder / "displayname").write_text(account.get("id", url))
         if account.get("color"):
             (folder / "color").write_text(account["color"])
-        (folder / "subscription.ics").write_bytes(data)
+        _overwrite_ics(folder / "subscription.ics", data)
     except OSError as exc:
         return {"ok": False, "detail": f"couldn't write into {folder}: {exc}"}
     finally:
@@ -54,7 +53,7 @@ def _sync_ics(account: dict, vdir_root: Path) -> dict:
 
 
 def _sync_caldav(account: dict) -> dict:
-    from omagenda.accounts import pimsync_config_path
+    from omagenda.accounts import ensure_conflict_resolver, pimsync_config_path
 
     tool = account.get("sync", "pimsync")
     binary = shutil.which(tool)
@@ -65,6 +64,7 @@ def _sync_caldav(account: dict) -> dict:
     if not config_path.exists():
         return {"ok": False, "detail": f"no pimsync config at {config_path}; run 'omagenda account add' again"}
 
+    ensure_conflict_resolver(account["id"])
     try:
         # Verbatim against pimsync.conf(5) and pimsync(1): `pimsync -c
         # <configfile> sync [pair...]`. accounts.generate_pimsync_config
@@ -72,14 +72,37 @@ def _sync_caldav(account: dict) -> dict:
         # the only pair this config file defines.
         from omagenda.accounts import _safe_pair_name
 
-        result = subprocess.run(
-            [binary, "-c", str(config_path), "sync", _safe_pair_name(account["id"])],
-            capture_output=True, text=True, timeout=120,
-        )
+        def pimsync(command: str, **extra) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                [binary, "-c", str(config_path), command, _safe_pair_name(account["id"])],
+                capture_output=True, text=True, timeout=120, **extra,
+            )
+
+        result = pimsync("sync")
+        items, properties = pimsync_conflicts(result.stdout)
+        if items or properties:
+            # `sync` never applies conflict_resolution itself; it only runs
+            # under `resolve-conflicts`, which prompts for every conflict.
+            # Its output is discarded because a prompt that is never
+            # answered repeats without end.
+            subprocess.run(
+                [binary, "-c", str(config_path), "resolve-conflicts", _safe_pair_name(account["id"])],
+                input=pimsync_resolve_answers(items, properties), text=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60,
+            )
+            result = pimsync("sync")
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"ok": False, "detail": f"{tool} failed to run: {exc}"}
     if result.returncode != 0:
         return {"ok": False, "detail": f"{tool} exited {result.returncode}: {result.stderr.strip()[:200]}"}
+    if items or properties:
+        kept = []
+        if items:
+            kept.append(f"{items} conflicting event{'s' if items != 1 else ''} (yours saved)")
+        if properties:
+            kept.append(f"{properties} calendar setting{'s' if properties != 1 else ''}")
+        return {"ok": True, "conflicts": items, "propertyConflicts": properties,
+                "detail": f"{tool} sync ok; kept the server version of " + " and ".join(kept)}
     return {"ok": True, "detail": f"{tool} sync ok"}
 
 
@@ -98,11 +121,74 @@ def _overwrite_ics(path: Path, content: bytes) -> None:
         raise
 
 
-def _notify_conflict(uid: str, calendar_name: str) -> None:
+def _notify_conflict(uid: str, calendar_name: str, saved_as: str | None = None) -> None:
     binary = shutil.which("omarchy-notification-send") or "/usr/share/omarchy/bin/omarchy-notification-send"
     subprocess.run([binary, "-g", "󰢌", "Sync conflict",
                     f"An edit to an event in {calendar_name} conflicted with a server change; "
-                    f"your version was saved as {uid}.conflict.ics"], check=False)
+                    f"your version was saved as {saved_as or uid + '.conflict.ics'}"], check=False)
+
+
+_FOLD = re.compile(rb"\r?\n[ \t]")
+_UID_VALUE = re.compile(rb"^UID:(.*?)\r?$", re.MULTILINE)
+
+
+def preserve_pimsync_conflict(account_id: str, local: Path, remote: Path, state_dir=None) -> Path:
+    """pimsync's conflict resolver (accounts.conflict_resolution_directive).
+
+    `local` and `remote` are pimsync's temporary copies of the two versions,
+    not files in the vdir. The server version wins, as for Google: the local
+    version is saved first, then `local` is made identical to `remote`,
+    which is what tells pimsync the conflict is resolved. The copy is kept in
+    the state folder rather than beside the calendar, because pimsync would
+    upload any .ics file placed in the vdir as a duplicate event."""
+    from omagenda.index import resolve_state_dir
+
+    content = local.read_bytes()
+    match = _UID_VALUE.search(_FOLD.sub(b"", content))
+    uid = match.group(1).decode("utf-8", "replace").strip() if match else ""
+    safe_uid = re.sub(r"[^A-Za-z0-9@._-]", "_", uid)[:200] or "event"
+    safe_account = re.sub(r"[^A-Za-z0-9@._-]", "_", account_id) or "account"
+    base = Path(state_dir) if state_dir is not None else resolve_state_dir()
+    folder = base / "conflicts" / safe_account
+    folder.mkdir(parents=True, exist_ok=True)
+    folder.chmod(0o700)
+    # Do not replace a previous unresolved conflict with a newer one.
+    path = folder / f"{safe_uid}.conflict.ics"
+    if path.exists() and path.read_bytes() != content:
+        path = folder / f"{safe_uid}.{hashlib.sha256(content).hexdigest()[:12]}.conflict.ics"
+    _overwrite_ics(path, content)
+    local.write_bytes(remote.read_bytes())
+    try:
+        _notify_conflict(uid or safe_uid, account_id, saved_as=str(path))
+    except OSError:
+        pass  # Notification availability must not undo preservation.
+    return path
+
+
+_PIMSYNC_ITEM_CONFLICT = re.compile(r"^-> Item .*: conflict\b", re.MULTILINE)
+_PIMSYNC_PROPERTY_CONFLICT = re.compile(r"^-> Property .*: conflict\b", re.MULTILINE)
+
+
+def pimsync_conflicts(stdout: str) -> tuple[int, int]:
+    """(event conflicts, collection property conflicts) listed by `pimsync sync`.
+
+    Its "N conflicts detected" total mixes the two, and a property conflict
+    alone (a calendar renamed or recoloured on both sides) still exits 0."""
+    text = stdout or ""
+    return len(_PIMSYNC_ITEM_CONFLICT.findall(text)), len(_PIMSYNC_PROPERTY_CONFLICT.findall(text))
+
+
+def pimsync_resolve_answers(items: int, properties: int) -> str:
+    """Answers for `pimsync resolve-conflicts`, which asks per conflict.
+
+    Items: "Resolve it manually? (Y)es, (N)o, or (Q)uit" -> y runs the `cmd`
+    resolver. Properties: "Keep (A), (B), (E)dit, (S)kip, or (Q)uit" -> b,
+    the server, which is Omagenda's policy. Neither prompt accepts the other's
+    answer and each simply asks again, so alternating y and b answers every
+    prompt in any order. The supply is finite on purpose: at end of input a
+    property prompt repeats forever, so it must never run out early, and the
+    caller's timeout is the backstop."""
+    return "y\nb\n" * (2 * (items + properties) + 4)
 
 
 _UID_LINE = re.compile(rb"^UID:.*(?:\r?\n[ \t].*)*\r?\n", re.MULTILINE)
@@ -129,13 +215,13 @@ def _adopt_remote_uid(file_path: Path, content: bytes, remote_id: str):
 
     So the moment a create succeeds, the local file takes the remote's
     identity: renamed to the remote id and rewritten to carry it as the
-    UID. The next pull then overwrites that same file in place.
+    UID. The next pull then atomically replaces that same file.
     """
     if not remote_id or remote_id == file_path.stem:
         return file_path.stem, file_path, content
     new_path = file_path.with_name(f"{remote_id}.ics")
     new_content = _rewrite_uid(content, remote_id)
-    new_path.write_bytes(new_content)
+    _overwrite_ics(new_path, new_content)
     if new_path != file_path:
         file_path.unlink(missing_ok=True)
     return remote_id, new_path, new_content
