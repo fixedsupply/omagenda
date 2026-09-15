@@ -106,6 +106,7 @@ def generate_scfg(folder: Path, account: dict, calendar_url: str) -> str:
     # pimsync.conf(5), COLLECTION SECTIONS: id_a selects the local directory;
     # href_b selects exactly this remote path. No discovery-wide selector is used.
     q = json.dumps
+    from omagenda.accounts import conflict_resolution_directive
     return f'''status_path {q(str(folder / 'pimsync-state') + '/')}
 pair acceptance {{
     storage_a acceptance_local
@@ -115,7 +116,7 @@ pair acceptance {{
         id_a disposable
         href_b {q(urlsplit(calendar_url).path)}
     }}
-    conflict_resolution keep b
+    {conflict_resolution_directive(PAIR)}
 }}
 storage acceptance_local {{
     type vdir/icalendar
@@ -419,6 +420,10 @@ def main(argv: list[str] | None = None) -> int:
         check('Simultaneous edit keeps remote title on both sides',
               str(components(path.read_bytes())[0]['SUMMARY']) == 'Remote conflict winner' and
               str(components(request('GET', event_url))[0]['SUMMARY']) == 'Remote conflict winner')
+        saved = list((folder / 'state' / 'conflicts' / PAIR).glob('*.conflict.ics'))
+        check('Simultaneous edit saved the local version outside the calendar',
+              len(saved) == 1 and str(components(saved[0].read_bytes())[0]['SUMMARY']) == 'Local conflict copy'
+              and not list(local.glob('*.conflict.ics')))
         stage = 'recurring exceptions'
         series_uid = uuid.uuid4().hex
         cal = icalendar.Calendar()

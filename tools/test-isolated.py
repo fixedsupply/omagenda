@@ -18,6 +18,10 @@ with tempfile.TemporaryDirectory(prefix="omagenda-tests-") as tmp:
     secret_tool = guard_bin / "secret-tool"
     secret_tool.write_text("#!/bin/sh\nexit 1\n")
     secret_tool.chmod(0o700)
+    # Conflict handling notifies the desktop; tests must never reach it.
+    notifier = guard_bin / "omarchy-notification-send"
+    notifier.write_text("#!/bin/sh\nexit 0\n")
+    notifier.chmod(0o700)
     os.environ["PATH"] = str(guard_bin) + os.pathsep + os.environ["PATH"]
     from omagenda import accounts, doctor
     with patch.object(accounts, "SECRETS_DIR", base / "secrets"), \

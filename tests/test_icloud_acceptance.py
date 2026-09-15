@@ -154,12 +154,16 @@ END:VCALENDAR</c:calendar-data></d:prop>
         self.assertIn('        id_a disposable\n', config)
         self.assertIn('        href_b "/123/calendars/abc/"\n', config)
         self.assertNotIn('collections ', config)
-        self.assertIn('conflict_resolution keep b', config)
+        self.assertIn('conflict_resolution cmd ', config)
+        self.assertIn('resolve-conflict --account "acceptance"', config)
+        self.assertNotIn('keep b', config)
         self.assertIn('cmd secret-tool lookup service omagenda account "test-account"', config)
         self.assertIn('status_path "/tmp/acceptance example/pimsync-state/"', config)
         self.assertIn('path "/tmp/acceptance example/calendars/acceptance/"', config)
         self.assertNotIn('pair family', config)
-        self.assertNotIn(str(Path.home()), config)
+        # The conflict resolver is the plugin's own CLI; no other real path may appear.
+        from omagenda.accounts import CONFLICT_RESOLVER
+        self.assertNotIn(str(Path.home()), config.replace(str(CONFLICT_RESOLVER), ''))
 
     def test_scfg_quotes_untrusted_values(self):
         config = acceptance.generate_scfg(Path('/tmp/test'),

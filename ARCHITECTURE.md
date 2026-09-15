@@ -230,6 +230,11 @@ default_lead = "PT10M"      # used when an event has no VALARM
 Pimsync's vdir storage identifies local changes by whole-second modification time and inode, so an in-place edit in the same second as a sync can be invisible.
 Never modify an existing event file in place; always write a temporary file in the same directory, flush and fsync it, then replace the event with `os.replace` so it has a new inode.
 
+iCloud and CalDAV conflicts follow the Google policy: the server version wins and the local version is saved and announced.
+pimsync 0.5.7 cannot do that with `conflict_resolution keep b`: an item changed on both sides fails every sync with "etag mismatch when updating item" and `resolve-conflicts` finds nothing, so generated configs name `omagenda resolve-conflict` as a `cmd` resolver instead, and existing configs are migrated on their next sync.
+`pimsync sync` never runs that resolver itself; when a sync reports conflicts, `sync._sync_caldav` runs `pimsync resolve-conflicts <pair>` with stdin closed and syncs again.
+The losing local version is saved under `$OMAGENDA_STATE/conflicts/<account>/<uid>.conflict.ics`, never in the vdir, where pimsync would upload it as a duplicate event.
+
 `omagenda calendars` prints the merged view so QML has one place to ask.
 
 Watcher sync can be paused with `omagenda sync --pause 30m` and resumed

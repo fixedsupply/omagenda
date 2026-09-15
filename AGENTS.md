@@ -256,9 +256,11 @@ script's shape and safeguards:
   occurrence downloads as one file with `EXDATE` and a `RECURRENCE-ID`
   component; local deletion reaches iCloud; remote deletion removes the
   local file; and the watcher round trip with a two-second interval, as in
-  the Google script. Conflicts are pimsync's business under
-  `conflict_resolution keep b`; check only that a simultaneous edit ends
-  with the remote title on both sides and no error.
+  the Google script. A simultaneous edit must end with the remote title on
+  both sides, the local version saved under the isolated state folder's
+  `conflicts/`, and no error. (`conflict_resolution keep b` was the original
+  plan; pimsync 0.5.7 never resolves a conflict with it, so Omagenda uses a
+  `cmd` resolver. See `accounts.conflict_resolution_directive`.)
 - In `finally`, stop the isolated watcher, `DELETE` the disposable calendar,
   check the real iCloud/CalDAV vdir folders for an orphan collection without
   changing them, then resume through the installed CLI even if cleanup fails.

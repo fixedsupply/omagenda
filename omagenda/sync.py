@@ -53,7 +53,7 @@ def _sync_ics(account: dict, vdir_root: Path) -> dict:
 
 
 def _sync_caldav(account: dict) -> dict:
-    from omagenda.accounts import pimsync_config_path
+    from omagenda.accounts import ensure_conflict_resolver, pimsync_config_path
 
     tool = account.get("sync", "pimsync")
     binary = shutil.which(tool)
@@ -64,6 +64,7 @@ def _sync_caldav(account: dict) -> dict:
     if not config_path.exists():
         return {"ok": False, "detail": f"no pimsync config at {config_path}; run 'omagenda account add' again"}
 
+    ensure_conflict_resolver(account["id"])
     try:
         # Verbatim against pimsync.conf(5) and pimsync(1): `pimsync -c
         # <configfile> sync [pair...]`. accounts.generate_pimsync_config
@@ -71,14 +72,29 @@ def _sync_caldav(account: dict) -> dict:
         # the only pair this config file defines.
         from omagenda.accounts import _safe_pair_name
 
-        result = subprocess.run(
-            [binary, "-c", str(config_path), "sync", _safe_pair_name(account["id"])],
-            capture_output=True, text=True, timeout=120,
-        )
+        def pimsync(command: str, **extra) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                [binary, "-c", str(config_path), command, _safe_pair_name(account["id"])],
+                capture_output=True, text=True, timeout=120, **extra,
+            )
+
+        result = pimsync("sync")
+        match = _PIMSYNC_CONFLICTS.search(result.stdout or "")
+        conflicts = int(match.group(1)) if match else 0
+        if result.returncode != 0 and conflicts:
+            # `sync` never applies conflict_resolution itself; the resolver
+            # only runs under `resolve-conflicts`. stdin is closed so its
+            # per-item prompt cannot wait on a terminal.
+            pimsync("resolve-conflicts", stdin=subprocess.DEVNULL)
+            result = pimsync("sync")
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"ok": False, "detail": f"{tool} failed to run: {exc}"}
     if result.returncode != 0:
         return {"ok": False, "detail": f"{tool} exited {result.returncode}: {result.stderr.strip()[:200]}"}
+    if conflicts:
+        return {"ok": True, "conflicts": conflicts,
+                "detail": f"{tool} sync ok; kept the server version of {conflicts} conflicting "
+                          f"event{'s' if conflicts != 1 else ''} and saved yours"}
     return {"ok": True, "detail": f"{tool} sync ok"}
 
 
@@ -97,11 +113,51 @@ def _overwrite_ics(path: Path, content: bytes) -> None:
         raise
 
 
-def _notify_conflict(uid: str, calendar_name: str) -> None:
+def _notify_conflict(uid: str, calendar_name: str, saved_as: str | None = None) -> None:
     binary = shutil.which("omarchy-notification-send") or "/usr/share/omarchy/bin/omarchy-notification-send"
     subprocess.run([binary, "-g", "󰢌", "Sync conflict",
                     f"An edit to an event in {calendar_name} conflicted with a server change; "
-                    f"your version was saved as {uid}.conflict.ics"], check=False)
+                    f"your version was saved as {saved_as or uid + '.conflict.ics'}"], check=False)
+
+
+_FOLD = re.compile(rb"\r?\n[ \t]")
+_UID_VALUE = re.compile(rb"^UID:(.*?)\r?$", re.MULTILINE)
+
+
+def preserve_pimsync_conflict(account_id: str, local: Path, remote: Path, state_dir=None) -> Path:
+    """pimsync's conflict resolver (accounts.conflict_resolution_directive).
+
+    `local` and `remote` are pimsync's temporary copies of the two versions,
+    not files in the vdir. The server version wins, as for Google: the local
+    version is saved first, then `local` is made identical to `remote`,
+    which is what tells pimsync the conflict is resolved. The copy is kept in
+    the state folder rather than beside the calendar, because pimsync would
+    upload any .ics file placed in the vdir as a duplicate event."""
+    from omagenda.index import resolve_state_dir
+
+    content = local.read_bytes()
+    match = _UID_VALUE.search(_FOLD.sub(b"", content))
+    uid = match.group(1).decode("utf-8", "replace").strip() if match else ""
+    safe_uid = re.sub(r"[^A-Za-z0-9@._-]", "_", uid)[:200] or "event"
+    safe_account = re.sub(r"[^A-Za-z0-9@._-]", "_", account_id) or "account"
+    base = Path(state_dir) if state_dir is not None else resolve_state_dir()
+    folder = base / "conflicts" / safe_account
+    folder.mkdir(parents=True, exist_ok=True)
+    folder.chmod(0o700)
+    # Do not replace a previous unresolved conflict with a newer one.
+    path = folder / f"{safe_uid}.conflict.ics"
+    if path.exists() and path.read_bytes() != content:
+        path = folder / f"{safe_uid}.{hashlib.sha256(content).hexdigest()[:12]}.conflict.ics"
+    _overwrite_ics(path, content)
+    local.write_bytes(remote.read_bytes())
+    try:
+        _notify_conflict(uid or safe_uid, account_id, saved_as=str(path))
+    except OSError:
+        pass  # Notification availability must not undo preservation.
+    return path
+
+
+_PIMSYNC_CONFLICTS = re.compile(r"^(\d+) conflicts? detected", re.MULTILINE)
 
 
 _UID_LINE = re.compile(rb"^UID:.*(?:\r?\n[ \t].*)*\r?\n", re.MULTILINE)
