@@ -6,7 +6,7 @@
 <title>Omagenda Privacy Policy</title>
 <style>
 body{font-family:system-ui,-apple-system,sans-serif;line-height:1.55;max-width:42rem;margin:2rem auto;padding:0 1rem;color:#111}
-h1,h2{line-height:1.25} a{color:#0b57d0} ul{padding-left:1.25rem}
+h1,h2{line-height:1.25} a{color:#0b57d0} ul{padding-left:1.25rem} pre{overflow-x:auto}
 </style>
 </head>
 <body>
@@ -41,7 +41,9 @@ h1,h2{line-height:1.25} a{color:#0b57d0} ul{padding-left:1.25rem}
 <li>Remove the account in Omagenda with <code>omagenda account remove &lt;id&gt;</code>.</li>
 <li>Delete the local calendar folder, by default <code>~/.local/share/calendars/&lt;id&gt;/</code>.</li>
 </ul>
-<p>Removing the account in Omagenda does not currently delete the stored Google sign-in token because of a known bug; a fix is still pending. Revoking access in your Google account still stops Omagenda from using Google on your behalf.</p>
+<p>Removing an account in Omagenda stops it syncing. To also delete the stored Google sign-in token, run:</p>
+<pre><code>secret-tool clear service omagenda account &lt;id&gt;-refresh-token
+rm -f ~/.local/state/omagenda/secrets/&lt;id&gt;-refresh-token</code></pre>
 
 <h2>This website</h2>
 <p>This site is hosted on GitHub Pages, which may keep standard server logs such as IP addresses under GitHub’s own privacy statement. The site sets no cookies and has no analytics.</p>
