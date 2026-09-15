@@ -66,7 +66,7 @@ Item {
   property string cycleNote: ""
 
   function cycleCalendar() {
-    var reason = Model.cycleUnavailableReason(root.agenda)
+    var reason = Model.cycleUnavailableReason(root.agenda, root.effectiveCalendar)
     if (reason !== "") {
       // Say why rather than appearing broken.
       root.cycleNote = reason
@@ -351,7 +351,7 @@ Item {
           width: parent.width
           textFormat: Text.PlainText
           visible: root.effectiveCalendar !== ""
-          text: "→ " + root.effectiveCalendar
+          text: Model.destinationText(root.agenda, root.effectiveCalendar)
                 + (root.parsed && root.parsed.calendar ? "  (from the sentence)" : "")
           color: root.accent
           font.family: root.fontFamily
@@ -361,7 +361,7 @@ Item {
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: Model.quickAddHints(root.agenda)
+          text: Model.quickAddHints(root.agenda, root.effectiveCalendar)
           color: Qt.darker(root.foreground, 1.6)
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption

@@ -101,3 +101,15 @@ Checks packages, the vdir, whether sign-ins are still valid, the keyring,
 and whether the plugin is in the bar. If `agenda` returns `syncOk: false`
 or a non-empty `needsReauth`, the calendar on screen is a snapshot rather
 than the truth — say so, and pass on the command `doctor` names.
+
+## Calendar visibility
+
+Press `c` in the panel to choose calendars. Use `j`/`k` or arrows to move,
+`Space`/`Enter` or a click to toggle, and `c`/`Escape` to return.
+Hidden calendars keep syncing but disappear from the agenda, pill and alarms.
+Quick Add's Tab cycle skips them; a hidden default still receives new events
+and is marked `(hidden)` in the destination line.
+
+`omagenda calendars --hide ID`, `--show ID` (repeatable), and `--show-all`
+save visibility in the top-level `hidden_calendars` config preference.
+`omagenda calendars --json` includes hidden flags and the saved ids.

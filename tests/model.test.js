@@ -11,7 +11,6 @@ const AGENDA = {
   generatedAt: "2026-09-07T13:48:00-06:00",
   range: { from: "2026-09-07", to: "2026-09-21" },
   lastSync: "2026-09-07T13:45:00-06:00",
-  activeSet: "",
   calendars: [
     { id: "personal", name: "Personal", color: "blue", readOnly: false },
     { id: "work", name: "Work", color: "green", readOnly: false },
@@ -236,13 +235,10 @@ test("formatTimeRange covers timed and all-day events", () => {
   assert.equal(Model.formatTimeRange(labourDay, "24h"), "all day")
 })
 
-test("footerText reports the active set and last sync", () => {
-  assert.equal(Model.footerText(AGENDA, "24h"), "Set: all · synced 13:45")
-  // This once asserted a bare "Set: work". Staying silent about a sync
-  // that had never run is what let an event sit in the vdir unnoticed,
-  // so the absence is now stated outright.
-  assert.equal(Model.footerText({ activeSet: "work", lastSync: null }, "24h"),
-               "Set: work · not synced")
+test("footerText reports last sync", () => {
+  assert.equal(Model.footerText(AGENDA, "24h"), "synced 13:45")
+  assert.equal(Model.footerText({ lastSync: null }, "24h"),
+               "not synced")
 })
 
 // ---------------------------------------------------------------------
@@ -397,22 +393,24 @@ test("the footer offers the tab hint when there are two places to write", () => 
 // event added in Quick Add reached the panel and never the server, and
 // the footer said nothing either way.
 test("a never-synced agenda says so rather than staying quiet", () => {
-  assert.match(Model.footerText({ activeSet: "", lastSync: null }, "24h"), /not synced/)
+  assert.match(Model.footerText({ lastSync: null }, "24h"), /not synced/)
 })
 
 test("a failing sync is named in the footer", () => {
-  const text = Model.footerText({ activeSet: "", lastSync: "2026-09-08T14:00:00", syncOk: false }, "24h")
+  const text = Model.footerText({ lastSync: "2026-09-08T14:00:00", syncOk: false }, "24h")
   assert.match(text, /sync failing/)
 })
 
 test("a healthy sync shows the time it happened", () => {
-  const text = Model.footerText({ activeSet: "", lastSync: "2026-09-08T14:05:00", syncOk: true }, "24h")
+  const text = Model.footerText({ lastSync: "2026-09-08T14:05:00", syncOk: true }, "24h")
   assert.match(text, /synced 14:05/)
   assert.ok(!text.includes("not synced"))
 })
 
-test("the active set still leads the footer", () => {
-  assert.match(Model.footerText({ activeSet: "Work", lastSync: null }, "24h"), /^Set: Work/)
+test("hidden calendar counts lead the footer", () => {
+  assert.equal(Model.footerText({ calendarCount: 20, visibleCalendarCount: 14 }, "24h"), "14 of 20 calendars · not synced")
+  assert.equal(Model.footerText({ calendarCount: 20, visibleCalendarCount: 20 }, "24h"), "not synced")
+  assert.equal(Model.footerText({ calendarCount: 20, visibleCalendarCount: 0 }, "24h"), "0 of 20 calendars · not synced")
 })
 
 // ---------------------------------------------------------------------
@@ -473,11 +471,48 @@ test("needsReauth is only true when an account actually needs it", () => {
 
 test("footerText gives an active sync pause precedence over every sync status", () => {
   for (const state of [{}, { lastSync: "2026-09-08T13:45:00" }, { syncOk: false }]) {
-    assert.equal(Model.footerText({ activeSet: "work", ...state,
+    assert.equal(Model.footerText({ ...state,
       syncPausedUntil: "2026-09-08T15:30:00" }, "24h"),
-      "Set: work · sync paused until 15:30")
+      "sync paused until 15:30")
   }
   assert.equal(Model.footerText({ syncPausedUntil: "2026-09-08T15:30:00" }, "12h"),
-    "Set: all · sync paused until " + Model.formatTime("2026-09-08T15:30:00", "12h"))
-  assert.equal(Model.footerText({ syncPausedUntil: null }, "24h"), "Set: all · not synced")
+    "sync paused until " + Model.formatTime("2026-09-08T15:30:00", "12h"))
+  assert.equal(Model.footerText({ syncPausedUntil: null }, "24h"), "not synced")
+})
+
+test("visibility queue retains rapid toggles in order and overlays the latest intent", () => {
+  const agenda = { calendars: [{ id: "a", name: "A", hidden: false }, { id: "b", hidden: false }] }
+  let queue = Model.visibilityQueue([], { type: "toggle", id: "a", hidden: false })
+  queue = Model.visibilityQueue(queue, { type: "toggle", id: "b", hidden: false })
+  queue = Model.visibilityQueue(queue, { type: "toggle", id: "a", hidden: true })
+  assert.deepEqual(queue, [{ id: "a", hidden: true }, { id: "b", hidden: true }, { id: "a", hidden: false }])
+  assert.deepEqual(Model.calendarRows(agenda, queue).map(c => c.hidden), [false, true])
+  queue = Model.visibilityQueue(queue, { type: "complete" })
+  assert.deepEqual(queue, [{ id: "b", hidden: true }, { id: "a", hidden: false }])
+  assert.deepEqual(Model.calendarRows(agenda, []).map(c => c.hidden), [false, false])
+})
+
+test("calendar groups preserve discovery order within the first-seen account order", () => {
+  const ids = ["google/z", "personal", "google/a", "cloud/work", "other"]
+  assert.deepEqual(Model.calendarRows({ calendars: ids.map(id => ({ id })) }, []).map(c => c.id),
+    ["google/z", "google/a", "personal", "other", "cloud/work"])
+})
+
+test("hidden calendars are skipped by Tab but a hidden default has a destination", () => {
+  const agenda = { calendars: [{ id: "personal", name: "Personal", hidden: true },
+    { id: "work", name: "Work" }, { id: "family", name: "Family" }] }
+  assert.deepEqual(Model.writableCalendars(agenda).map(c => c.id), ["work", "family"])
+  assert.equal(Model.nextCalendarId(agenda, "personal"), "work")
+  assert.equal(Model.nextCalendarId(agenda, "family"), "work")
+  assert.equal(Model.destinationText(agenda, "personal"), "→ Personal (hidden)")
+  assert.equal(Model.destinationText(agenda, "work"), "→ Work")
+})
+
+
+test("Tab can leave a hidden default for the only visible writable calendar", () => {
+  const agenda = { calendars: [{ id: "personal", hidden: true }, { id: "work" }] }
+  assert.equal(Model.cycleUnavailableReason(agenda, "personal"), "")
+  assert.match(Model.quickAddHints(agenda, "personal"), /TAB CALENDAR/)
+  assert.equal(Model.nextCalendarId(agenda, "personal"), "work")
+  assert.notEqual(Model.cycleUnavailableReason(agenda, "work"), "")
 })

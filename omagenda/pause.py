@@ -33,7 +33,7 @@ def read_pause(state_dir: Path | None = None, now: datetime | None = None) -> st
 
 
 def pause_sync(duration: str, state_dir: Path | None = None) -> str:
-    from omagenda.sets import atomic_write_text
+    from omagenda.storage import atomic_write_text
     from omagenda.sync import _sync_lock
 
     until = (datetime.now(timezone.utc) + timedelta(seconds=parse_duration(duration))).isoformat()

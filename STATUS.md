@@ -1,16 +1,12 @@
-# Calendar sets — 2026-09-15
+# Calendar visibility — 2026-09-15
 
-Phase 4b-1 implementation is complete on `calendar-sets`, based on
-`b805ec1`. Sets use `config.toml`; the active choice uses the state file.
-CLI selection immediately rebuilds the filtered agenda, the watcher reads
-the choice each tick, and panel keys `1`–`9` select sets while `0` clears.
-Unknown saved names fall back to all calendars and produce a doctor warning.
-
-Verification: 211 isolated Python tests passed (including ten new calendar
-set tests); both Node test files passed, including QML syntax validation.
-Live panel latency, keyboard behaviour and the PM's doctor result remain
-unverified; see `docs/reviewer-checklist.md`. No live calendar or syncing
-watcher was used. Per-set Quick Add defaults remain deferred.
+Persistent per-calendar visibility replaces the previous selection layer.
+The panel pick list supports queued toggles, and hidden events leave the
+agenda, pill and alarms while calendars keep syncing. Quick Add preserves
+a hidden default and labels it. Live panel acceptance remains pending;
+see `docs/reviewer-checklist.md`. Verification: 252 isolated Python tests and 68 Model.js tests plus QML syntax
+validation passed; plugin validation and whitespace checks are clean.
+All development used isolated state.
 
 ## Previous reliability pass — 2026-09-14
 

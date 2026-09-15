@@ -10,7 +10,7 @@ Status: reviewer preview under reliability validation, 2026-09-14. Product manag
 
 The pill, panel, native-text Quick Add with interpretation preview, Google
 bridge, CalDAV configuration generator and reviewer materials exist.
-Calendar sets, templates and Microsoft remain deferred. Inline coloured
+Templates and Microsoft remain deferred. Inline coloured
 text highlighting is deferred in favour of correct native text editing.
 The pill keeps an idle calendar icon; right-click syncs. These current
 behaviours supersede the original interaction proposals below.
@@ -71,7 +71,7 @@ These are the tiebreakers for any decision the implementer faces.
 | Natural language event entry with live highlighting | **Keep, this is the product** | Quick Add overlay (like the Reminders and Emoji overlays), global hotkey, tokens light up in the accent color as you type, preview card shows the parsed event |
 | DayTicker (horizontal day strip + list below) | Keep, renamed | Seven-day "ticker" strip of date pills with event dots, agenda for the selected day beneath it |
 | Up Next with countdown | Keep | Pill text: `Standup · 12m`; header of the panel: hero with title, time, and Join |
-| Calendar Sets | Keep, simplified | Named sets in `config.toml`; switch with number keys in the panel or `omagenda set work`; per-set default calendar for Quick Add deferred |
+| Calendar visibility | Keep | Persistent hidden calendars in `config.toml`; C opens the panel pick list |
 | Conference call detection and Join | Keep | Regex over location, description, `CONFERENCE`, and `X-GOOGLE-CONFERENCE` for Meet, Zoom, Teams, Webex, Jitsi, Whereby; Join opens the browser and appears on the notification |
 | Time zone support | Keep, small | Store `TZID`, display local, show the source zone when it differs; parser accepts `3pm EST` and `at 15:00 Europe/Berlin` |
 | Templates | Adapt | Saved sentences: `omagenda add --template standup` and a `/` picker in Quick Add; a template is just a sentence with blanks |
@@ -79,7 +79,6 @@ These are the tiebreakers for any decision the implementer faces.
 | Openings, proposals, RSVP, invitations | Drop for v1 | Needs email and a server; belongs in renCal and OmaCal. Show attendees read-only |
 | Tasks, Todoist | Drop for v1 | omarchy-todoist exists; revisit as a `VTODO` view later |
 | Interesting calendars | Adapt | Read-only ICS subscriptions (holidays, sports) as a URL in the config, refreshed by the sync step |
-| Focus filters | Later | Bind a calendar set to Hyprland workspaces or a Do Not Disturb state; cheap once sets exist |
 | Attachments, email forwarding, widgets, Vision Pro | Drop | Not the desktop |
 
 ## 6. The surfaces
@@ -98,9 +97,9 @@ Composition, top to bottom, following `panels/weather/Panel.qml` and `panels/clo
 1. **Hero**: the next (or current) event. Title, `14:00–14:30 · in 12m`, calendar color hairline, and a trailing Join button when a conference link exists. When nothing is left today: `Nothing else today`, with tomorrow's first event as the meta line.
 2. **Ticker strip**: seven date pills starting today, weekday initial over day number, up to three event dots in calendar colors under each. Today is marked the way the clock panel marks it. `h`/`l` move the selection, `H`/`L` move a week, `t` returns to today.
 3. **Agenda list** for the selected day: time column, title, location or attendee count as a dim second line. All-day events first. `j`/`k` move, `Enter` expands a row inline (description, location link, attendees, calendar), `o` opens the location or conference URL, `e` opens the `.ics` in `$EDITOR` in a floating terminal (Omarchy's honest "edit" for v1).
-4. **Footer** (small-caps): active calendar set name, last sync time, and hints: `n new · s sync · 1–9 sets · ? help`.
+4. **Footer** (small-caps): visible/total calendar counts when anything is hidden, sync state, and hints: `n new · s sync · t today · c calendars`.
 
-Keys: `n` Quick Add prefilled with the selected date, `s` sync, `1`…`9` switch set, `Escape` close, left/right arrows hand off to neighboring panels like other first-party panels.
+Keys: `n` Quick Add prefilled with the selected date, `s` sync, `c` opens the calendar pick list, `Escape` close, left/right arrows hand off to neighboring panels like other first-party panels.
 
 ### 6.3 Quick Add overlay
 
@@ -117,11 +116,11 @@ A centered card in the menu style (see `plugins/reminders/ReminderFlow.qml` for 
 Python 3, standard library plus the Arch packages `python-icalendar`, `python-dateutil`, and `python-recurring-ical-events`. Same binary the QML calls. Every command has `--json`.
 
 ```
-omagenda agenda [--days N] [--from DATE] [--set NAME]   # what the panel shows
+omagenda agenda [--days N] [--from DATE]   # what the panel shows
 omagenda next                                          # what the pill shows
 omagenda parse "<sentence>"                            # parsed event, no write
 omagenda add "<sentence>" [--calendar NAME] [--dry-run]
-omagenda calendars                                     # vdir discovery, colors, sets
+omagenda calendars                                     # vdir discovery, colors, visibility
 omagenda sync                                          # runs pimsync or vdirsyncer if configured, then reindex
 omagenda index                                         # rebuild ~/.local/state/omagenda/agenda.json
 omagenda watch                                         # long-running: reindex on vdir changes, fire alarms
@@ -183,7 +182,7 @@ reviewers who use their own registered client.
 
 **v1 must**: vdir reader with recurrence expansion; agenda index; Up Next pill; agenda panel with keyboard navigation; Quick Add with live highlighting and deterministic parser; write `.ics`; `omagenda` CLI with `--json`; Google bridge with two-way sync; iCloud and generic CalDAV through a pimsync config written by `omagenda account add`; alarms via notifications; Join detection; theme-native colors; `doctor`; README with screenshots; `omarchy plugin validate` clean.
 
-**v1 should**: Microsoft bridge; calendar sets; templates; ICS subscriptions; OmaCal read-only merge; `SKILL.md`.
+**v1 should**: Microsoft bridge; calendar visibility; templates; ICS subscriptions; OmaCal read-only merge; `SKILL.md`.
 
 **Later**: editing in place (title, time) from the panel; Focus filters tied to workspaces; `VTODO` view; a `bar` kind that replaces the clock for users who want one pill.
 
@@ -198,12 +197,12 @@ Prices are Anthropic API rates at 2026-09-07 (Claude Code usage credits bill at 
 | 1b | Google bridge: OAuth, incremental two-way sync, JSON↔VEVENT, keyring | Sonnet 5 for the mapping, Opus 5 for the sync state machine if it stalls | 10–18 |
 | 2 | QML: Up Next pill + agenda panel, keyboard nav, theme-native | Opus 5 | 15–30 |
 | 3 | QML: Quick Add overlay with live highlighting, templates | Opus 5 | 10–20 |
-| 4 | `watch` alarms, Join, sets, doctor, README, screenshots, publish | Sonnet 5 | 5–10 |
+| 4 | `watch` alarms, Join, visibility, doctor, README, screenshots, publish | Sonnet 5 | 5–10 |
 | 5 | Microsoft bridge on the Phase 1b interface | Sonnet 5 | 8–15 |
 
 Totals: USD 53–104 without Microsoft, 61–119 with it. **The honest reading is that Microsoft does not fit inside the current credits alongside everything else.** It is therefore Phase 5, built last on an interface the Google bridge has already proven, and it is the first thing to defer if the console says so. Because the PM's own calendars are Google and Apple, this order also means v1 is testable end to end on a real setup before any money goes to Microsoft.
 
-Cut order if money runs short: Microsoft bridge, templates, OmaCal merge, ICS subscriptions, calendar sets, then alarms. The pill, the panel, Quick Add, and Google plus iCloud sync are the product.
+Cut order if money runs short: Microsoft bridge, templates, OmaCal merge, ICS subscriptions, then alarms. The pill, the panel, Quick Add, and Google plus iCloud sync are the product.
 
 Cost hygiene is spelled out in `AGENTS.md`: one phase per session, a fixed read list instead of exploring, logic in Python and `Model.js` where tests are cheap, QML kept thin.
 

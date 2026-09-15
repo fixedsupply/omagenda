@@ -60,12 +60,20 @@ Item {
     syncProc.running = true
   }
 
-  function selectSet(number) {
-    if (setProc.running) return
-    setProc.command = number === 0
-      ? [root.binPath, "set", "--clear", "--json"]
-      : [root.binPath, "set", "--number", String(number), "--json"]
-    setProc.running = true
+  property var visibilityPending: []
+  readonly property var calendarRows: Model.calendarRows(agenda, visibilityPending)
+
+  function toggleCalendar(id, hidden) {
+    visibilityPending = Model.visibilityQueue(visibilityPending, { type: "toggle", id: id, hidden: hidden })
+    runVisibility()
+  }
+
+  function runVisibility() {
+    if (visibilityProc.running || visibilityPending.length === 0) return
+    var operation = visibilityPending[0]
+    visibilityProc.command = [root.binPath, "calendars", operation.hidden ? "--hide" : "--show", operation.id, "--json"]
+    visibilityProc.failure = ""
+    visibilityProc.running = true
   }
 
   function paletteColor(name, fallback) {
@@ -85,7 +93,7 @@ Item {
     onLoaded: {
       try {
         root.agenda = JSON.parse(text())
-        root.lastError = ""
+        if (visibilityProc.failure === "") root.lastError = ""
       } catch (e) {
         root.lastError = "agenda.json is not valid JSON: " + e
       }
@@ -165,7 +173,7 @@ Item {
   // shell restart.
   FileView {
     id: configFile
-    path: root.home + "/.config/omagenda/config.toml"
+    path: Quickshell.env("OMAGENDA_CONFIG") || root.home + "/.config/omagenda/config.toml"
     watchChanges: true
     printErrors: false
     onLoaded: {
@@ -183,10 +191,27 @@ Item {
   }
 
   Process {
-    id: setProc
-    onExited: root.reload()
+    id: visibilityProc
+    property string failure: ""
+    onExited: function(exitCode, exitStatus) {
+      if (exitCode !== 0) {
+        failure = failure || "Calendar visibility update failed"
+        root.lastError = failure
+      }
+      root.visibilityPending = Model.visibilityQueue(root.visibilityPending, { type: "complete" })
+      root.reload()
+      Qt.callLater(root.runVisibility)
+    }
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var result = JSON.parse(text)
+          root.agenda = Object.assign({}, root.agenda, { calendars: result.calendars })
+        } catch (e) { }
+      }
+    }
     stderr: StdioCollector {
-      onStreamFinished: if (text.trim() !== "") root.lastError = text.trim()
+      onStreamFinished: visibilityProc.failure = text.trim()
     }
   }
 

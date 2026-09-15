@@ -71,7 +71,7 @@ def cmd_agenda(args) -> int:
     from omagenda.index import build_agenda
 
     start = date.fromisoformat(args.date_from) if args.date_from else date.today()
-    agenda = build_agenda(days=args.days, start=start, active_set=args.calendar_set)
+    agenda = build_agenda(days=args.days, start=start)
     if args.json:
         print(json.dumps(agenda))
         return 0
@@ -144,26 +144,36 @@ def cmd_calendars(args) -> int:
     calendars = discover_calendars()
     config = read_config()
 
+    known = {c["id"] for c in calendars}
+    if any(c not in known for c in args.hide + args.show):
+        return _fail("unknown calendar id")
     if args.clear_default:
         config.pop("default_calendar", None)
-        write_config(config)
-        print("Cleared the default calendar. New events go to the first writable calendar.")
-        return 0
-
     if args.set_default:
         target = next((c for c in calendars if c["id"] == args.set_default), None)
         if target is None:
-            names = ", ".join(c["id"] for c in calendars) or "none"
-            return _fail(f"no calendar named '{args.set_default}' (have: {names})")
+            return _fail("unknown calendar id")
         if target["readOnly"]:
-            return _fail(f"'{args.set_default}' is read-only, so new events can't go there")
+            return _fail("default calendar is read-only")
         config["default_calendar"] = target["id"]
+    hidden = list(config.get("hidden_calendars", []))
+    if args.show_all:
+        hidden = []
+    for calendar_id in args.hide:
+        if calendar_id not in hidden:
+            hidden.append(calendar_id)
+    hidden = [c for c in hidden if c not in args.show]
+    if args.hide or args.show or args.show_all:
+        config["hidden_calendars"] = hidden
+    if args.clear_default or args.set_default or args.hide or args.show or args.show_all:
         write_config(config)
-        print(f"New events now go to '{target['id']}' unless a sentence says otherwise.")
-        return 0
+        from omagenda.index import index
+        index()
+    for calendar in calendars:
+        calendar["hidden"] = calendar["id"] in hidden
 
     if args.json:
-        print(json.dumps({"calendars": calendars, "defaultCalendar": config.get("default_calendar")}))
+        print(json.dumps({"calendars": calendars, "defaultCalendar": config.get("default_calendar"), "hiddenCalendars": hidden}))
         return 0
     if not calendars:
         print("No calendars found. Create one under ~/.local/share/calendars/<name>/.")
@@ -173,6 +183,7 @@ def cmd_calendars(args) -> int:
     writable = [c for c in calendars if not c["readOnly"]]
     for cal in calendars:
         marker = " (default)" if cal["id"] == default else ""
+        marker += " [hidden]" if cal["hidden"] else ""
         ro = " [read-only]" if cal["readOnly"] else ""
         print(f"{cal['id']:20s} {cal['name']:20s} {cal['color']}{ro}{marker}")
 
@@ -244,31 +255,6 @@ def cmd_add(args) -> int:
     if not args.json:
         for warning in result["warnings"]:
             print(f"  ! {warning}")
-    return 0
-
-
-def cmd_set(args) -> int:
-    from omagenda.index import index
-    from omagenda.sets import defined_sets, read_active, write_active
-
-    sets = defined_sets()
-    name = args.name
-    if args.number is not None:
-        if not 1 <= args.number <= min(9, len(sets)):
-            return _fail("no calendar set at that number")
-        name = list(sets)[args.number - 1]
-    if name is not None and (not name or name not in sets):
-        return _fail("unknown calendar set: " + repr(name))
-    if name is not None or args.clear:
-        write_active("" if args.clear else name)
-        index()
-    result = {"activeSet": read_active(), "sets": sets}
-    if args.json:
-        print(json.dumps(result))
-    else:
-        print("Active set: " + (result["activeSet"] or "all"))
-        for number, (set_name, calendars) in enumerate(sets.items(), 1):
-            print(f"{number}. {set_name}: {', '.join(calendars) or 'all'}")
     return 0
 
 
@@ -730,7 +716,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_agenda = sub.add_parser("agenda", help="what the panel shows")
     p_agenda.add_argument("--days", type=int, default=14)
     p_agenda.add_argument("--from", dest="date_from", default=None)
-    p_agenda.add_argument("--set", dest="calendar_set", default=None)
     p_agenda.add_argument("--json", action="store_true")
     p_agenda.set_defaults(func=cmd_agenda)
 
@@ -756,15 +741,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_calendars.add_argument("--clear-default", dest="clear_default", action="store_true",
                              help="go back to using the first writable calendar")
     p_calendars.add_argument("--json", action="store_true")
+    p_calendars.add_argument("--hide", action="append", default=[], metavar="ID")
+    p_calendars.add_argument("--show", action="append", default=[], metavar="ID")
+    p_calendars.add_argument("--show-all", action="store_true")
     p_calendars.set_defaults(func=cmd_calendars)
-
-    p_set = sub.add_parser("set", help="list, select, or clear the active calendar set")
-    selection = p_set.add_mutually_exclusive_group()
-    selection.add_argument("name", nargs="?")
-    selection.add_argument("--clear", action="store_true")
-    selection.add_argument("--number", type=int, help="select the Nth defined set (1–9)")
-    p_set.add_argument("--json", action="store_true")
-    p_set.set_defaults(func=cmd_set)
 
     p_doctor = sub.add_parser("doctor", help="dependencies, vdir, sync tool, keyring, plugin enabled")
     p_doctor.add_argument("--json", action="store_true")

@@ -8,7 +8,7 @@ config for icloud/caldav accounts. See ARCHITECTURE.md §5 and §11.
 Python's stdlib only reads TOML (`tomllib`), never writes it, so this
 module owns a small writer scoped to exactly the shapes config.toml uses
 (top-level scalars, a repeated [[accounts]] array-of-tables, and the
-[sets]/[alarms] tables) -- not a general-purpose TOML serializer.
+[alarms] tables) -- not a general-purpose TOML serializer.
 
 pimsync config syntax (scfg) verified against pimsync.conf(5), section by
 section, since this machine has no sudo path to install pimsync and check
@@ -59,7 +59,7 @@ def write_config(config: dict, path: Path | None = None) -> None:
     path = path or CONFIG_PATH
     lines: list[str] = []
 
-    for key in ("vdir", "default_calendar", "sync_interval", "sync_workers"):
+    for key in ("vdir", "default_calendar", "sync_interval", "sync_workers", "hidden_calendars"):
         if key in config:
             lines.append(f"{key} = {_toml_value(config[key])}")
     if lines:
@@ -68,12 +68,6 @@ def write_config(config: dict, path: Path | None = None) -> None:
     for account in config.get("accounts", []):
         lines.append("[[accounts]]")
         for key, value in account.items():
-            lines.append(f"{key} = {_toml_value(value)}")
-        lines.append("")
-
-    if config.get("sets"):
-        lines.append("[sets]")
-        for key, value in config["sets"].items():
             lines.append(f"{key} = {_toml_value(value)}")
         lines.append("")
 

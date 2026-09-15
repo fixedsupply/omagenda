@@ -29,7 +29,7 @@ class ConfigRoundTripTest(unittest.TestCase):
                     {"id": "family-icloud", "type": "icloud", "username": "calvin@icloud.com", "sync": "pimsync"},
                     {"id": "holidays", "type": "ics", "url": "https://example.com/h.ics", "color": "yellow"},
                 ],
-                "sets": {"work": ["work"], "home": ["personal", "family-icloud/family"]},
+                "hidden_calendars": ["work", "missing"],
                 "alarms": {"default_lead": "PT10M"},
             }
             write_config(config, path)

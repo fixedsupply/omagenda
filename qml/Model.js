@@ -318,18 +318,18 @@ function secondLine(event, agenda) {
 }
 
 function footerText(agenda, timeFormat) {
-  var set = (agenda && agenda.activeSet) || ""
-  var left = "Set: " + (set || "all")
-  if (!agenda) return left
+  agenda = agenda || {}
+  var left = agenda.visibleCalendarCount < agenda.calendarCount
+    ? agenda.visibleCalendarCount + " of " + agenda.calendarCount + " calendars · " : ""
   // A sync that has never run once read the same as one that had just
   // succeeded, because nothing ever wrote lastSync. Both states are now
   // named, since "my event never reached my phone" is only diagnosable
   // if the panel admits which one it is.
   if (agenda.syncPausedUntil)
-    return left + " · sync paused until " + formatTime(agenda.syncPausedUntil, timeFormat)
-  if (agenda.syncOk === false) return left + " · sync failing"
-  if (!agenda.lastSync) return left + " · not synced"
-  return left + " · synced " + formatTime(agenda.lastSync, timeFormat)
+    return left + "sync paused until " + formatTime(agenda.syncPausedUntil, timeFormat)
+  if (agenda.syncOk === false) return left + "sync failing"
+  if (!agenda.lastSync) return left + "not synced"
+  return left + "synced " + formatTime(agenda.lastSync, timeFormat)
 }
 
 // ---------------------------------------------------------------------
@@ -394,7 +394,7 @@ function writableCalendars(agenda) {
   var calendars = (agenda && agenda.calendars) || []
   var out = []
   for (var i = 0; i < calendars.length; i++) {
-    if (!calendars[i].readOnly) out.push(calendars[i])
+    if (!calendars[i].readOnly && !calendars[i].hidden) out.push(calendars[i])
   }
   return out
 }
@@ -402,9 +402,11 @@ function writableCalendars(agenda) {
 // Why Tab did nothing, in the user's terms. Silence is the wrong answer:
 // with a single writable calendar the key appears broken, when in fact
 // there is simply nowhere else an event could go.
-function cycleUnavailableReason(agenda) {
+function cycleUnavailableReason(agenda, currentId) {
   var writable = writableCalendars(agenda)
-  if (writable.length > 1) return ""
+  if (writable.length > 1 || (writable.length === 1 && currentId && writable[0].id !== currentId)) return ""
+  if (((agenda && agenda.calendars) || []).some(function(c) { return c.hidden }))
+    return writable.length ? "Only one visible calendar can take events" : "No visible calendar can take events"
   var readOnly = ((agenda && agenda.calendars) || []).filter(function(c) { return c.readOnly })
   if (writable.length === 1) {
     if (readOnly.length === 0) return "'" + writable[0].id + "' is your only calendar"
@@ -418,9 +420,9 @@ function cycleUnavailableReason(agenda) {
 // The footer only advertises keys that do something. Offering "TAB
 // CALENDAR" when there is one writable calendar teaches the user the
 // feature is broken; withdrawing it teaches them nothing false.
-function quickAddHints(agenda) {
+function quickAddHints(agenda, currentId) {
   var base = ["ENTER SAVE", "SHIFT+ENTER SAVE AND ADD ANOTHER"]
-  if (writableCalendars(agenda).length > 1) base.push("TAB CALENDAR")
+  if (cycleUnavailableReason(agenda, currentId) === "") base.push("TAB CALENDAR")
   base.push("ESC CANCEL")
   return base.join(" \u00b7 ")
 }
@@ -433,6 +435,35 @@ function nextCalendarId(agenda, currentId) {
     if (writable[i].id === currentId) return writable[(i + 1) % writable.length].id
   }
   return writable[0].id
+}
+
+// Each queued operation records an absolute value, including repeated clicks
+// on the same row. Completing one operation never discards later intent.
+function visibilityQueue(queue, action) {
+  if (action.type === "complete") return queue.slice(1)
+  if (action.type === "toggle")
+    return queue.concat([{ id: action.id, hidden: !action.hidden }])
+  return queue.slice()
+}
+
+function calendarRows(agenda, queue) {
+  var groups = []
+  var rows = []
+  ;((agenda && agenda.calendars) || []).forEach(function(calendar) {
+    var group = calendar.id.indexOf("/") < 0 ? "LOCAL" : calendar.id.split("/")[0].toUpperCase()
+    var row = Object.assign({}, calendar, { group: group })
+    ;(queue || []).forEach(function(op) { if (op.id === row.id) row.hidden = op.hidden })
+    if (groups.indexOf(group) < 0) groups.push(group)
+    rows.push(row)
+  })
+  return groups.reduce(function(out, group) {
+    return out.concat(rows.filter(function(row) { return row.group === group }))
+  }, [])
+}
+
+function destinationText(agenda, id) {
+  var calendar = ((agenda && agenda.calendars) || []).find(function(c) { return c.id === id })
+  return "→ " + (calendar ? calendar.name : id) + (calendar && calendar.hidden ? " (hidden)" : "")
 }
 
 // ---------------------------------------------------------------------
@@ -467,6 +498,9 @@ if (typeof module !== "undefined") {
     eventsForDate: eventsForDate,
     secondLine: secondLine,
     footerText: footerText,
+    visibilityQueue: visibilityQueue,
+    calendarRows: calendarRows,
+    destinationText: destinationText,
     escapeHtml: escapeHtml,
     highlightedHtml: highlightedHtml,
     previewLine: previewLine,

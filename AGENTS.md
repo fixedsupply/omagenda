@@ -148,7 +148,7 @@ Done when: typing the ten showcase sentences in `docs/showcase.md` produces the 
 
 Read list: `PLAN.md` §6.5–§6.7, §8; `README.md` of `~/.config/omarchy/plugins/mohamedmansour.finance` as a model for tone and structure.
 
-Deliver: calendar sets (`1`–`9`, `omagenda set`), `docs/sync-setup.md`, `docs/omarchy-menu.jsonc`, `docs/bindings.lua`, `skill/SKILL.md`, `preview.png`, README with install, screenshots, keybindings, sync recipes, and a "works alongside renCal and OmaCal" section. Tag `v0.1.0`. Draft the listing text for omarchyplugins.com and a PR line for awesome-omarchy; the PM submits both.
+Deliver: calendar visibility, `docs/sync-setup.md`, `docs/omarchy-menu.jsonc`, `docs/bindings.lua`, `skill/SKILL.md`, `preview.png`, README with install, screenshots, keybindings, sync recipes, and a "works alongside renCal and OmaCal" section. Tag `v0.1.0`. Draft the listing text for omarchyplugins.com and a PR line for awesome-omarchy; the PM submits both.
 
 ## Phase 4b — close out v0.2.0 (three separate sessions)
 
@@ -166,55 +166,9 @@ write only the real sync pause, through the installed CLI with the PM's own
 environment; all other test writes stay isolated. Never run a syncing watcher against
 the real vdir, and never point anything at the real `family` pimsync pair.
 
-### 4b-1 — calendar sets
+### 4b-1 — superseded
 
-Read list: `PLAN.md` §6 (the Calendar Sets row and the footer/keys
-paragraphs), `ARCHITECTURE.md` (agenda.json `activeSet`, config.toml),
-`omagenda/accounts.py` lines 55–80 (config writer already emits a `[sets]`
-table), `omagenda/index.py` around `active_set` (line ~172 and ~282),
-`bin/omagenda` (`cmd_agenda`, its `--set` flag, `cmd_watch`, the `calendars`
-command as a model), `qml/Panel.qml` around line 183 (the `s` key handler),
-`qml/Service.qml` (how the panel invokes the CLI), `qml/Model.js`
-`footerText`.
-
-Decided design (do not re-open):
-
-- Sets are defined in `config.toml`, not in shell settings, so the CLI works
-  without the shell: `[sets]` maps a set name to a list of calendar ids as
-  they appear in `omagenda calendars --json` (for example `work = ["google/x@group.calendar.google.com", "personal"]`).
-  `ARCHITECTURE.md` currently shows `"sets": {}` under the shell defaults;
-  remove that entry and document the config.toml table instead.
-- The active set is runtime state, not config: one file,
-  `$OMAGENDA_STATE/active-set` (plain text, the set name, absent means all).
-  `omagenda set <name>` writes it, `omagenda set --clear` removes it,
-  `omagenda set` with no argument prints the active set and the defined
-  ones; `--json` on all three. A name that is not defined exits non-zero
-  with a one-line error.
-- After writing the file, `omagenda set` rebuilds agenda.json immediately
-  (reuse the indexer the watcher calls) so the panel updates through its
-  existing agenda.json watch. The watcher must also pick up the file on its
-  next tick; do not add a second inotify watch for it.
-- agenda.json: `activeSet` carries the name; `events` and `calendars` are
-  filtered to the set's calendars. An empty or unknown set means all,
-  and an unknown one is also reported in `doctor` as a warning.
-- Panel: `1`–`9` switch to the Nth defined set in `[sets]` order, `0`
-  clears, wired next to the existing `s` handler and going through the CLI
-  like `sync` does. The footer already renders `Set: <name>`; leave the
-  hint text as specified in `PLAN.md`.
-- The per-set Quick Add default calendar from `PLAN.md` is deferred to a
-  later task; do not build it.
-- Tests: Python for the state file, filtering, the unknown-name error and
-  the `--json` shapes; `Model.js` if `footerText` changes. Run
-  `python tools/test-isolated.py` and the Node suite.
-
-Also in this session, local housekeeping only: `git worktree remove` the
-`omagenda-reliability` worktree and delete the local `reliability-review`
-and `integrate-google-timezone` branches (both fully merged). Remote branch
-deletion is the PM's command, not yours.
-
-Done when: `omagenda set work` changes the panel within a second on the
-PM's machine, `omagenda set --clear` restores everything, and `doctor` is
-clean.
+Calendar sets (`omagenda set`, `[sets]`, `active-set`, `activeSet`, `selectSet`, and `1–9`) were superseded by persistent per-calendar visibility and the panel pick list on 2026-09-15.
 
 ### 4b-2 — iCloud acceptance script
 
@@ -291,6 +245,7 @@ Deliver, only after 4b-1 and 4b-2 are merged:
   no real calendar id appears in the destination line. Crop to the
   plugin's own bounds. Nothing real may be in frame; compare against the
   rule in "The maintainer's own calendar is not test data".
+- Regenerate `docs/screenshots/panel.png` from invented demo data to show the new footer.
 - `STATUS.md`: rewrite the summary for the candidate. The line saying
   iCloud setup is absent on this machine is stale (an `icloud` account
   and pimsync have been set up since); replace it with what the 4b-2 run

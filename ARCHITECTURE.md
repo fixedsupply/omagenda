@@ -94,7 +94,7 @@ No build step. Installation is `omarchy plugin add <git-url>` plus `omarchy pkg 
 }
 ```
 
-Validate with `omarchy plugin validate .` before every commit. The full schema is in `/usr/share/omarchy/shell/services/PluginRegistry.qml`; check whether `sets` (an object) is accepted as a default, otherwise store sets in the Python config file (§5) and drop it from the manifest.
+Validate with `omarchy plugin validate .` before every commit.
 
 ## 3. Data flow
 
@@ -123,10 +123,11 @@ Written atomically (temp file + rename). Times are RFC 3339 with offset; all-day
   "generatedAt": "2026-09-07T14:10:00-06:00",
   "range": { "from": "2026-09-07", "to": "2026-09-21" },
   "lastSync": "2026-09-07T14:05:12-06:00",
-  "activeSet": "work",
+  "calendarCount": 1,
+  "visibleCalendarCount": 1,
   "syncPausedUntil": null,
   "calendars": [
-    { "id": "personal", "name": "Personal", "path": "/home/crs/.local/share/calendars/personal", "color": "blue", "readOnly": false, "source": "vdir" }
+    { "id": "personal", "name": "Personal", "path": "/home/crs/.local/share/calendars/personal", "color": "blue", "readOnly": false, "hidden": false, "source": "vdir" }
   ],
   "events": [
     {
@@ -161,6 +162,7 @@ Two homes, by ownership:
 
 ```toml
 vdir = "~/.local/share/calendars"
+hidden_calendars = []
 default_calendar = "google-calvin/primary"   # set by `omagenda calendars --set-default`
 sync_interval = 300        # seconds between syncs in `omagenda watch`; 0 disables
 sync_workers = 8           # calendars synced at once (see below)
@@ -219,10 +221,6 @@ type = "ics"
 url = "https://…/canada-holidays.ics"
 color = "yellow"
 
-[sets]
-work = ["google-calvin/primary"]
-home = ["google-calvin/family@group.calendar.google.com", "icloud-family/family"]
-
 [alarms]
 default_lead = "PT10M"      # used when an event has no VALARM
 ```
@@ -245,23 +243,25 @@ and preserves pending local changes through skipped syncs. At each index,
 shows `sync paused until HH:MM` using the configured time format. `doctor`
 reports the state in `syncPause`.
 
-Calendar sets belong to `[sets]` in `config.toml`, in definition order.
-Each value is a list of calendar ids from `omagenda calendars --json`.
-The active choice lives in `$OMAGENDA_STATE/active-set` (default:
-`~/.local/state/omagenda/active-set`), as a plain-text name; an absent file
-means all calendars. `omagenda set <name>` selects a defined set and
-immediately rebuilds `agenda.json`; `omagenda set --clear` removes the file
-and rebuilds. `omagenda set` lists the active choice and definitions.
-All three accept `--json` and return `{"activeSet": "", "sets": {}}`
-with the current name and configured mapping. Unknown names are errors.
+Calendar visibility is a durable top-level `hidden_calendars = ["personal"]`
+preference in config.toml. Absent or empty means all visible. Unknown ids are
+retained and ignored; doctor reports them in its always-ok `hiddenCalendars`
+check. Legacy `[sets]` tables and `$OMAGENDA_STATE/active-set` files are silently ignored.
 
-`agenda.json` retains the name in `activeSet` and filters both `events`
-and `calendars`. An empty list or unknown saved name shows all calendars;
-`doctor` warns about unknown saved names. The watcher rereads the choice
-on its next tick. `omagenda agenda --set <name>` overrides the choice for
-that query without changing state. Panel keys `1`–`9` invoke
-`omagenda set --number N` in definition order; `0` clears. Per-set Quick
-Add defaults are deferred.
+`omagenda calendars --hide ID` and `--show ID` accept repeated ids;
+`--show-all` clears the list. Unknown ids are errors. Combined flags apply
+show-all, hides, then shows. Writes immediately rebuild agenda.json.
+The JSON calendar listing adds `hiddenCalendars` and a `hidden` boolean on
+each calendar; text marks hidden rows `[hidden]`.
+
+agenda.json retains all discovered calendars with `hidden` flags, but excludes
+hidden events. `calendarCount` and `visibleCalendarCount` drive the footer.
+Sync selection is unchanged. Quick Add skips hidden calendars during Tab
+cycling but honours a hidden configured default and labels its destination.
+Panel C opens the grouped calendar pick list; movement keys navigate,
+Space/Enter or clicking toggle visibility, and C/Escape return to the agenda.
+Queued toggles run serially; failures revert to the persisted agenda and
+surface through the Service error. The watcher rereads visibility each tick.
 
 ## 6. Natural-language parser
 

@@ -49,6 +49,14 @@ Panel {
   property string selectedKey: Model.dateKey(new Date())
   property int cursorIndex: 0
   property bool expanded: false
+  property bool choosingCalendars: false
+  readonly property var calendarRows: service ? service.calendarRows : []
+
+  function toggleCalendarRow(index) {
+    var row = calendarRows[index]
+    if (row && service) service.toggleCalendar(row.id, row.hidden)
+  }
+
 
   readonly property string timeFormat: Model.resolveTimeFormat(
     setting("timeFormat", "system"),
@@ -113,16 +121,15 @@ Panel {
 
   // Newer shells expose this as a read-only property with a setter, and
   // assigning to it throws -- which aborted close() before hide() ran and
-  // left the panel stuck open. Prefer the setter, as the stock panels do.
+  // left the panel stuck open. Use the setter, as the stock panels do.
   function setCenterHoverRevealSuppressed(value) {
     if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
       root.bar.setCenterHoverRevealSuppressed(value)
-    else if (root.bar && "centerHoverRevealSuppressed" in root.bar)
-      root.bar.centerHoverRevealSuppressed = value
   }
 
   // ---- navigation -------------------------------------------------------
   function resetToToday() {
+    choosingCalendars = false
     now = new Date()
     selectedKey = Model.dateKey(now)
     cursorIndex = 0
@@ -136,6 +143,11 @@ Panel {
   }
 
   function moveCursor(dx, dy) {
+    if (choosingCalendars) {
+      calendarList.currentIndex = Math.max(0, Math.min(calendarRows.length - 1, calendarList.currentIndex + dy))
+      calendarList.positionViewAtIndex(calendarList.currentIndex, ListView.Contain)
+      return
+    }
     if (dx !== 0) {
       stepDay(dx)
       return
@@ -179,9 +191,13 @@ Panel {
   }
 
   function handleTextKey(text) {
+    if (text === "c") { choosingCalendars = !choosingCalendars; return }
+    if (choosingCalendars) {
+      if (text === " ") toggleCalendarRow(calendarList.currentIndex)
+      return
+    }
     if (text === "t") resetToToday()
     else if (text === "s") sync()
-    else if (/^[0-9]$/.test(text) && service) service.selectSet(Number(text))
     else if (text === "n") quickAdd()
     else if (text === "o") openSelected()
     else if (text === "e") editSelected()
@@ -217,19 +233,117 @@ Panel {
     centerOnBar: true
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(420))
-    contentHeight: panel.fittedContentHeight(agendaColumn.implicitHeight)
+    contentHeight: panel.fittedContentHeight(root.choosingCalendars ? Style.space(420) : agendaColumn.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
-      onReturnRequested: root.expanded = !root.expanded
-      onCloseRequested: root.close()
+      onReturnRequested: { if (!root.choosingCalendars) root.expanded = !root.expanded }
+      onActivateRequested: { if (root.choosingCalendars) root.toggleCalendarRow(calendarList.currentIndex) }
+      onCloseRequested: { if (root.choosingCalendars) root.choosingCalendars = false; else root.close() }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) { root.handleTextKey(text) }
 
+      Column {
+        anchors.fill: parent
+        visible: root.choosingCalendars
+        spacing: Style.space(12)
+        PanelSectionHeader {
+          id: calendarHeader
+          text: "Calendars"
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+        }
+        ListView {
+          id: calendarList
+          width: parent.width
+          height: Math.max(0, parent.height - calendarHeader.implicitHeight - calendarDone.implicitHeight - calendarError.height - Style.space(36))
+          clip: true
+          model: root.calendarRows
+          currentIndex: 0
+          delegate: Column {
+            id: calendarRow
+            required property var modelData
+            required property int index
+            width: calendarList.width
+            PanelSectionHeader {
+              visible: calendarRow.index === 0 || root.calendarRows[calendarRow.index - 1].group !== calendarRow.modelData.group
+              height: visible ? implicitHeight : 0
+              text: calendarRow.modelData.group
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+            Rectangle {
+              width: parent.width
+              height: Style.space(36)
+              radius: Style.cornerRadius
+              color: calendarList.currentIndex === calendarRow.index
+                ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.15) : "transparent"
+              Row {
+                anchors.fill: parent
+                anchors.margins: Style.space(8)
+                spacing: Style.space(8)
+                opacity: calendarRow.modelData.hidden ? 0.5 : 1
+                Rectangle {
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(6)
+                  height: width
+                  radius: width / 2
+                  color: root.dotColor(calendarRow.modelData.color)
+                }
+                Text {
+                  text: calendarRow.modelData.hidden ? "" : "✓"
+                  width: Style.space(16)
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                }
+                Text {
+                  textFormat: Text.PlainText
+                  text: calendarRow.modelData.name
+                  width: calendarList.width - Style.space(64)
+                  elide: Text.ElideRight
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                }
+              }
+              TapHandler {
+                onTapped: {
+                  calendarList.currentIndex = calendarRow.index
+                  root.toggleCalendarRow(calendarRow.index)
+                }
+              }
+              HoverHandler { cursorShape: Qt.PointingHandCursor }
+            }
+          }
+        }
+        Text {
+          id: calendarError
+          width: parent.width
+          visible: root.healthProblem !== ""
+          height: visible ? implicitHeight : 0
+          textFormat: Text.PlainText
+          text: root.healthProblem
+          wrapMode: Text.WordWrap
+          color: Color.urgent
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+        Text {
+          id: calendarDone
+          anchors.right: parent.right
+          text: "SPACE SHOW/HIDE · C/ESC DONE"
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+      }
+
       Flickable {
         id: agendaScroll
+        visible: !root.choosingCalendars
         anchors.fill: parent
         contentWidth: width
         contentHeight: agendaColumn.implicitHeight
@@ -428,7 +542,9 @@ Panel {
               textFormat: Text.PlainText
               visible: root.dayEvents.length === 0 && root.healthProblem === ""
               width: parent.width
-              text: "Nothing scheduled"
+              text: root.agenda.calendarCount > 0 && root.agenda.visibleCalendarCount === 0
+                ? "All calendars are hidden. Press C to choose calendars." : "Nothing scheduled"
+              wrapMode: Text.WordWrap
               color: Qt.darker(root.foreground, 1.4)
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
@@ -564,10 +680,12 @@ Panel {
           // ---- footer: state on the left, the keys on the right ---------
           Item {
             width: parent.width
-            height: footerLeft.implicitHeight
+            height: footerLeft.implicitHeight + footerHints.implicitHeight + Style.space(4)
 
             Text {
               id: footerLeft
+              TapHandler { onTapped: root.choosingCalendars = true }
+              HoverHandler { cursorShape: Qt.PointingHandCursor }
               textFormat: Text.PlainText
               anchors.left: parent.left
               text: Model.footerText(root.agenda, root.timeFormat).toUpperCase()
@@ -579,8 +697,10 @@ Panel {
 
             Text {
               textFormat: Text.PlainText
+              id: footerHints
               anchors.right: parent.right
-              text: "N NEW · S SYNC · T TODAY"
+              anchors.bottom: parent.bottom
+              text: "N NEW · S SYNC · T TODAY · C CALENDARS"
               color: Qt.darker(root.foreground, 1.6)
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
