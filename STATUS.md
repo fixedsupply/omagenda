@@ -1,7 +1,11 @@
 # Omagenda reliability pass — 2026-09-14
 
 Implementation and automated verification are complete for this pass.
-Live-provider and fresh-desktop release acceptance remain pending.
+Google's disposable-calendar acceptance script passed on candidate `8f8a026`
+on 2026-09-14, including all ten checks and calendar cleanup. Remaining
+provider and fresh-desktop acceptance checks are recorded in
+`docs/reviewer-checklist.md`. iCloud setup is absent on this machine:
+no configured iCloud account and no installed pimsync executable.
 
 ## Google timezone integration review
 
@@ -13,7 +17,7 @@ Live-provider and fresh-desktop release acceptance remain pending.
 - All 201 isolated Python tests, both Node test files, six offscreen Qt
   results, plugin validation and whitespace checks passed.
 - Reviewed the opt-in disposable Google calendar acceptance helper and
-  checked its help command. Live execution remains pending.
+  checked its help command. Its subsequent live run passed as recorded above.
 
 ## Changes
 
@@ -44,8 +48,10 @@ Live-provider and fresh-desktop release acceptance remain pending.
 - Plugin manifest validation, Lua binding syntax and `git diff --check` passed.
 - Host reports Omarchy 4.0.3 and Qt 6.11.2 in the test runtime.
 
-All provider regression responses and appointments were invented. No live
-provider mutation or fresh-profile installation was performed for this pass.
+All provider regression responses and appointments were invented. The initial
+reliability pass did not perform live provider mutations; the subsequent
+Google acceptance run used only its own disposable calendar. No fresh-profile
+installation has been performed.
 The offscreen input tests do not exercise the complete running shell overlay.
 
 ## Remaining acceptance

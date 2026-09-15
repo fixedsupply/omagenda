@@ -36,6 +36,26 @@ after its checks are complete.
 
 ## Current limits
 
+### Recorded Google script run — 2026-09-14
+
+Candidate `8f8a026` passed `python tools/google-acceptance.py --run-live`
+on the maintainer's Omarchy 4.0.3 machine. All ten script checks passed:
+disposable calendar creation, CLI upload exactly once, remote time import,
+local update with remote metadata retained, conflicting local edit recovery,
+moved and cancelled recurrence import, local deletion, and watcher-driven
+creation, remote edit import and deletion. The disposable calendar was
+successfully deleted; the command exited zero.
+
+The initial sandbox attempt could not access the saved refresh credential
+and stopped before sending the calendar creation request. The successful
+run used desktop keyring and network access. No personal events were used.
+
+This establishes the script's Google scenarios only. Expired-auth UX,
+guest metadata, visible refusal of local series edits with exceptions,
+full shell interaction, fresh installation, reboot/source update and iCloud
+acceptance remain unverified. The watcher used an accelerated two-second
+sync interval.
+
 Calendar sets, templates, inline syntax highlighting and Microsoft support
 are deferred. Local editing of recurring series with exceptions is refused.
 A recurrence delta currently requires a full calendar download. A passed
