@@ -56,6 +56,62 @@ full shell interaction, fresh installation, reboot/source update and iCloud
 acceptance remain unverified. The watcher used an accelerated two-second
 sync interval.
 
+### Recorded iCloud script run — 2026-09-15
+
+Candidate `d57be3d` passed `python tools/icloud-acceptance.py --run-live`
+on the maintainer's Omarchy 4.0.3-1 machine with pimsync 0.5.7-1. All 16
+checks passed:
+
+- real watcher sync paused, then resumed;
+- disposable calendar created, then deleted;
+- CLI upload exactly once, with the remote time change imported;
+- local title edit uploaded;
+- simultaneous edit ending with the remote title on both sides, and the
+  local version saved outside the calendar;
+- moved and cancelled recurrence imported as one file;
+- local and remote deletion;
+- watcher-driven creation, remote edit import and deletion;
+- no disposable calendar copied into the real vdir.
+
+The command exited zero. The same checks had passed on `0b8bf1f`, the tip of
+the fix branch, before the merge. Runs were started from a Claude Code
+session with desktop keyring and network access. No personal events were
+read.
+
+Five earlier runs failed. Each deleted its calendar, resumed real sync and
+left no orphan.
+
+1. `fc30ec1`, stage "CLI upload exactly once". The event had uploaded, but
+   iCloud's `calendar-query` REPORT without a time-range lists the
+   collection itself, and the script rejected that entry. Fixed in
+   `1710a17`.
+2. `1710a17`, stage "local title edit". pimsync's vdir etag is whole-second
+   mtime plus inode, so an in-place rewrite in the same second as a sync is
+   never uploaded. The script, plus two in-place writers in `omagenda/sync.py`,
+   now replace files atomically (`2d8cfdc`).
+3. `2d8cfdc`, stage "simultaneous edits". With `conflict_resolution keep b`,
+   pimsync 0.5.7 fails every sync with "etag mismatch when updating item"
+   and `resolve-conflicts` finds nothing. Generated configs now use an
+   `omagenda resolve-conflict` command, and existing configs migrate on
+   their next sync (`054e39a`).
+4. and 5. `054e39a`, the second time with the diagnostic logging later
+   committed in `0b8bf1f`, stage "simultaneous edits". `pimsync
+   resolve-conflicts` repeated an unanswered calendar-property prompt until
+   the 120-second timeout. It is now given explicit answers and a bounded
+   timeout (`0b8bf1f`).
+
+This establishes the script's single-collection iCloud scenarios only. It
+does not establish:
+
+- multi-calendar discovery through the real `collections from b` pair;
+- the installed watcher migrating an existing `keep b` config;
+- property conflicts caused by edits on iOS;
+- sync at the normal five-minute interval (the watcher used two seconds);
+- the full shell overlay, a fresh installation, reboot or source update.
+
+Unlike the Google script, the conflict step shows a real desktop
+notification.
+
 Calendar visibility is implemented; live panel acceptance remains pending below.
 Templates, inline syntax highlighting and Microsoft support are deferred.
 Local editing of recurring series with exceptions is refused.

@@ -1,4 +1,28 @@
-# Calendar visibility — 2026-09-15
+# v0.2 candidate — 2026-09-15
+
+Candidate `d57be3d` merges calendar visibility with the iCloud acceptance
+and pimsync conflict fixes. It passed `tools/icloud-acceptance.py
+--run-live` against a disposable iCloud calendar: all 16 checks, calendar
+deleted, real watcher sync paused and resumed, no copy in the real vdir.
+Suites on the candidate: 274 isolated Python tests (including real-pimsync
+conflict tests run offline) and 70 Model.js tests plus QML parsing; plugin
+validation and whitespace checks are clean.
+
+Getting there took five failed live runs. Each found a real problem, and
+each cleaned up fully. Details are in `docs/reviewer-checklist.md`.
+
+- The script's own content check misread iCloud's reply.
+- pimsync misses in-place edits made within a second of a sync, which also
+  affected two Omagenda write paths.
+- pimsync 0.5.7's `conflict_resolution keep b` wedges on a real conflict.
+- Its `resolve-conflicts` loops forever on an unanswered property prompt.
+
+Still unverified: live panel acceptance of calendar visibility, the
+installed watcher migrating the real `family` pair's conflict setting, a
+fresh install, reboot and source update. The two pimsync bugs have not yet
+been reported upstream; a draft report exists outside the repository.
+
+## Calendar visibility — 2026-09-15
 
 Persistent per-calendar visibility replaces the previous selection layer.
 The panel pick list supports queued toggles, and hidden events leave the
