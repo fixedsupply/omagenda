@@ -335,21 +335,21 @@ def _is_iana_zone(name: str) -> bool:
 
 
 def _google_time_to_ics(t: dict) -> tuple[str, str | None, bool]:
-    """Returns (value, tzid, all_day). When Google names a real IANA zone
-    it is kept as a TZID (ARCHITECTURE.md §11) and the dateTime's own
-    embedded offset is redundant, so only the naive wall-clock component
-    is used. When the name is absent or unusable, the offset is the only
-    trustworthy part, so the instant is normalised to UTC instead -- an
-    invented TZID would be worse than no TZID."""
+    """Keep the instant from dateTime, expressed in the named zone if valid.
+
+    Calendar responses can express dateTime in a different offset from the
+    event's timeZone. Dropping that offset shifts the appointment.
+    """
     if "date" in t:
         return t["date"].replace("-", ""), None, True
 
     raw = t["dateTime"]
     tzid = t.get("timeZone")
     if tzid and _is_iana_zone(tzid):
-        match = re.match(r"(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})", raw)
-        value = match.group(1).replace("-", "") + "T" + match.group(2).replace(":", "")
-        return value, tzid, False
+        moment = datetime.fromisoformat(raw)
+        if moment.tzinfo is not None:
+            moment = moment.astimezone(zoneinfo.ZoneInfo(tzid))
+        return moment.strftime("%Y%m%dT%H%M%S"), tzid, False
 
     moment = datetime.fromisoformat(raw)
     if moment.tzinfo is None:

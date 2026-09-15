@@ -3,6 +3,18 @@
 Implementation and automated verification are complete for this pass.
 Live-provider and fresh-desktop release acceptance remain pending.
 
+## Google timezone integration review
+
+- Reviewed and integrated the timestamp-offset fix from `71df807`, retaining
+  the later panel-close fix on main. Named-zone conversion now uses the
+  timestamp's instant rather than copying its wall-clock digits.
+- Added ICS round-trip coverage for winter offsets and a previous-day
+  conversion, plus coverage for named-zone timestamps without an offset.
+- All 201 isolated Python tests, both Node test files, six offscreen Qt
+  results, plugin validation and whitespace checks passed.
+- Reviewed the opt-in disposable Google calendar acceptance helper and
+  checked its help command. Live execution remains pending.
+
 ## Changes
 
 - Preserve local edits when remote updates or deletions conflict, including

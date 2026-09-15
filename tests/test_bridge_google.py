@@ -348,6 +348,23 @@ class TimeZoneTest(unittest.TestCase):
         self.assertEqual(google._dt_property_line("DTSTART", value, tzid, all_day),
                          "DTSTART;TZID=America/Edmonton:20260909T090000")
 
+    def test_named_zone_conversion_preserves_instant_after_ics_round_trip(self):
+        for raw in ("2026-01-16T15:00:00Z", "2026-09-16T02:00:00+02:00"):
+            with self.subTest(raw=raw):
+                value, tzid, all_day = google._google_time_to_ics(
+                    {"dateTime": raw, "timeZone": "America/Edmonton"})
+                line = google._dt_property_line("DTSTART", value, tzid, all_day)
+                calendar = icalendar.Calendar.from_ical(
+                    "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:demo\r\n"
+                    + line + "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+                self.assertEqual(calendar.walk("VEVENT")[0]["DTSTART"].dt,
+                                 datetime.datetime.fromisoformat(raw))
+
+    def test_named_zone_without_offset_keeps_local_time(self):
+        self.assertEqual(google._google_time_to_ics(
+            {"dateTime": "2026-09-16T09:00:00", "timeZone": "America/Edmonton"}),
+            ("20260916T090000", "America/Edmonton", False))
+
     def test_unusable_zone_falls_back_to_utc(self):
         value, tzid, all_day = google._google_time_to_ics(
             {"dateTime": "2018-01-12T09:00:00-05:00", "timeZone": "GMT-05:00"})

@@ -40,3 +40,24 @@ Calendar sets, templates, inline syntax highlighting and Microsoft support
 are deferred. Local editing of recurring series with exceptions is refused.
 A recurrence delta currently requires a full calendar download. A passed
 mocked sync suite cannot substitute for the provider checks above.
+
+## Opt-in Google acceptance script
+
+`python tools/google-acceptance.py --run-live` uses the existing Google
+authorization to create a uniquely named disposable secondary calendar.
+It requires exactly one configured Google account with an explicit calendar
+selection, so the normal watcher will not adopt the test calendar.
+
+The script uses a temporary config, vdir and state directory. It checks CLI
+creation, remote time changes, metadata preservation, conflicts, recurring
+exceptions and deletion. It also starts a separate watcher with a two-second
+sync interval to check automatic round trips without manual sync commands.
+That accelerated check is not a measurement of the normal five-minute interval.
+No invitations are sent. Conflict notifications are suppressed for the direct
+sync scenarios; the calendar API and sync code are real.
+
+The script deletes only the calendar it created, including on test failure.
+If cleanup fails or calendar creation has an uncertain outcome, it prints the
+path to a private recovery receipt. Resolve that before rerunning. Do not
+publish the receipt or captured watcher logs. This script does not validate
+the full shell overlay, a fresh installation, reboot, or iCloud.
