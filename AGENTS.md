@@ -150,6 +150,151 @@ Read list: `PLAN.md` §6.5–§6.7, §8; `README.md` of `~/.config/omarchy/plugi
 
 Deliver: calendar sets (`1`–`9`, `omagenda set`), `docs/sync-setup.md`, `docs/omarchy-menu.jsonc`, `docs/bindings.lua`, `skill/SKILL.md`, `preview.png`, README with install, screenshots, keybindings, sync recipes, and a "works alongside renCal and OmaCal" section. Tag `v0.1.0`. Draft the listing text for omarchyplugins.com and a PR line for awesome-omarchy; the PM submits both.
 
+## Phase 4b — close out v0.2.0 (three separate sessions)
+
+Written 2026-09-15 after the reliability pass and the recorded Google
+acceptance run. Each task below is one session: finish, commit, stop.
+Work on a branch cut from `main` in a checkout that is *not*
+`~/Projects/omagenda` (that folder is the running plugin). The PM merges
+after review. Do not push. Do not rewrite history. Commit messages go
+through a file (`git commit -F`), never an inline double-quoted string.
+
+Live provider scripts cannot run inside the Codex sandbox (no network, no
+keyring). Print the exact command for the PM to run in a normal terminal,
+then read the output they paste back. Never run a syncing watcher against
+the real vdir, and never point anything at the real `family` pimsync pair.
+
+### 4b-1 — calendar sets
+
+Read list: `PLAN.md` §6 (the Calendar Sets row and the footer/keys
+paragraphs), `ARCHITECTURE.md` (agenda.json `activeSet`, config.toml),
+`omagenda/accounts.py` lines 55–80 (config writer already emits a `[sets]`
+table), `omagenda/index.py` around `active_set` (line ~172 and ~282),
+`bin/omagenda` (`cmd_agenda`, its `--set` flag, `cmd_watch`, the `calendars`
+command as a model), `qml/Panel.qml` around line 183 (the `s` key handler),
+`qml/Service.qml` (how the panel invokes the CLI), `qml/Model.js`
+`footerText`.
+
+Decided design (do not re-open):
+
+- Sets are defined in `config.toml`, not in shell settings, so the CLI works
+  without the shell: `[sets]` maps a set name to a list of calendar ids as
+  they appear in `omagenda calendars --json` (for example `work = ["google/x@group.calendar.google.com", "personal"]`).
+  `ARCHITECTURE.md` currently shows `"sets": {}` under the shell defaults;
+  remove that entry and document the config.toml table instead.
+- The active set is runtime state, not config: one file,
+  `$OMAGENDA_STATE/active-set` (plain text, the set name, absent means all).
+  `omagenda set <name>` writes it, `omagenda set --clear` removes it,
+  `omagenda set` with no argument prints the active set and the defined
+  ones; `--json` on all three. A name that is not defined exits non-zero
+  with a one-line error.
+- After writing the file, `omagenda set` rebuilds agenda.json immediately
+  (reuse the indexer the watcher calls) so the panel updates through its
+  existing agenda.json watch. The watcher must also pick up the file on its
+  next tick; do not add a second inotify watch for it.
+- agenda.json: `activeSet` carries the name; `events` and `calendars` are
+  filtered to the set's calendars. An empty or unknown set means all,
+  and an unknown one is also reported in `doctor` as a warning.
+- Panel: `1`–`9` switch to the Nth defined set in `[sets]` order, `0`
+  clears, wired next to the existing `s` handler and going through the CLI
+  like `sync` does. The footer already renders `Set: <name>`; leave the
+  hint text as specified in `PLAN.md`.
+- The per-set Quick Add default calendar from `PLAN.md` is deferred to a
+  later task; do not build it.
+- Tests: Python for the state file, filtering, the unknown-name error and
+  the `--json` shapes; `Model.js` if `footerText` changes. Run
+  `python tools/test-isolated.py` and the Node suite.
+
+Also in this session, local housekeeping only: `git worktree remove` the
+`omagenda-reliability` worktree and delete the local `reliability-review`
+and `integrate-google-timezone` branches (both fully merged). Remote branch
+deletion is the PM's command, not yours.
+
+Done when: `omagenda set work` changes the panel within a second on the
+PM's machine, `omagenda set --clear` restores everything, and `doctor` is
+clean.
+
+### 4b-2 — iCloud acceptance script
+
+Read list: `tools/google-acceptance.py` whole (232 lines; it is the
+template), `omagenda/sync.py` lines 55–110 (the pimsync path),
+`omagenda/accounts.py` `generate_pimsync_config` and
+`pimsync_config_path`, `docs/reviewer-checklist.md`, and `man 5 pimsync.conf`
+plus `man 1 pimsync` on this machine (pimsync is installed at
+`/usr/bin/pimsync`; the PM's real config at
+`~/.config/pimsync/omagenda-family.scfg` is a working example — read it,
+never modify it, never sync it).
+
+Deliver `tools/icloud-acceptance.py --run-live`, mirroring the Google
+script's shape and safeguards:
+
+- Requires exactly one configured `icloud` account. Read its password the
+  way `sync.py` does (`secret-tool lookup service omagenda account <id>`);
+  never print it, never write it to disk, pass it to pimsync through the
+  `cmd` form the real config already uses.
+- Discover the calendar home over CalDAV (`PROPFIND` for
+  `current-user-principal`, then `calendar-home-set`) and create one
+  disposable calendar with `MKCALENDAR` under a uuid path named
+  `Omagenda acceptance <hex>`. Do not retry the create. Write the recovery
+  receipt before and after, as the Google script does.
+- Everything else isolated: temporary `OMAGENDA_CONFIG`, `OMAGENDA_VDIR`,
+  `OMAGENDA_STATE`, and a temporary pimsync `.scfg` whose pair is
+  restricted to the disposable collection only and whose `status_path`
+  is inside the temp folder. Verify the collection-restriction syntax
+  against `pimsync.conf(5)` before relying on it.
+- Scenarios, each a `check(...)`: CLI `add` reaches iCloud exactly once
+  (verify with a CalDAV `GET` or calendar-query `REPORT`, not by trusting
+  pimsync's exit code); a remote time change downloads; a local title
+  edit uploads; a remote recurring series with one moved and one cancelled
+  occurrence downloads as one file with `EXDATE` and a `RECURRENCE-ID`
+  component; local deletion reaches iCloud; remote deletion removes the
+  local file; and the watcher round trip with a two-second interval, as in
+  the Google script. Conflicts are pimsync's business under
+  `conflict_resolution keep b`; check only that a simultaneous edit ends
+  with the remote title on both sides and no error.
+- `DELETE` the disposable calendar in `finally`; keep the temp folder and
+  print the receipt path if that fails.
+
+Then hand the PM the command, read the pasted output, and record the
+result in `docs/reviewer-checklist.md` and `STATUS.md` exactly as the
+Google run was recorded: candidate commit, date, which checks passed, and
+what the run does not establish. If it fails, record the failure and the
+stage; do not patch the script until it passes and call that a pass.
+
+Done when: the recorded run lists every check passing and the calendar
+deleted, on a commit that is on the PM's branch.
+
+### 4b-3 — release prep for v0.2.0
+
+Read list: `docs/publishing.md`, `STATUS.md`, `manifest.json`, `README.md`
+(install and screenshot sections only), `tools/demo-vdir.py` docstring,
+and the commit message of `93b5fcf` (`git show -s 93b5fcf`), which records
+the screenshot recipe that works.
+
+Deliver, only after 4b-1 and 4b-2 are merged:
+
+- `manifest.json` version `0.2.0`, and any version string the README or
+  docs repeat.
+- Regenerate `docs/screenshots/quick-add.png` from demo data: it still
+  shows the previous simulated text field (`docs/publishing.md` says so).
+  Run `omagenda calendars --set-default personal` on the demo vdir first so
+  no real calendar id appears in the destination line. Crop to the
+  plugin's own bounds. Nothing real may be in frame; compare against the
+  rule in "The maintainer's own calendar is not test data".
+- `STATUS.md`: rewrite the summary for the candidate. The line saying
+  iCloud setup is absent on this machine is stale (an `icloud` account
+  and pimsync have been set up since); replace it with what the 4b-2 run
+  recorded. List what is still unverified: fresh-machine install, full
+  overlay, reboot and source-update behaviour. The PM does the
+  fresh-install run on a second machine and submits the listings.
+- Tick the items in `docs/publishing.md` that are now true; leave the
+  fresh-machine item for the PM.
+- Create an annotated tag `v0.2.0` on the final commit. Do not push it.
+
+Done when: `omarchy plugin validate .` is clean, both suites pass, the
+new screenshot contains invented data only, and `git tag -n1 v0.2.0`
+shows the tag on the reviewed commit.
+
 ## Phase 5 — Microsoft bridge
 
 Read list: `ARCHITECTURE.md` §11, `omagenda/bridges/google.py` and its tests, Microsoft Graph reference for `calendarView/delta`, `events` create/update/delete, and the recurrence object (fetch once). The PM supplies the Entra app (client) id.
