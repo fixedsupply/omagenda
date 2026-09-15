@@ -3,7 +3,7 @@
 
 Resolves the omagenda/ package next to this script (so the plugin runs
 in place without installation) and dispatches subcommands: agenda, next,
-parse, add, calendars, account, sync, index, watch, doctor. See
+parse, add, calendars, set, account, sync, index, watch, doctor. See
 ARCHITECTURE.md §1 and PLAN.md §6.4.
 
 Every command accepts --json for machine output and exits non-zero with a
@@ -71,7 +71,7 @@ def cmd_agenda(args) -> int:
     from omagenda.index import build_agenda
 
     start = date.fromisoformat(args.date_from) if args.date_from else date.today()
-    agenda = build_agenda(days=args.days, start=start)
+    agenda = build_agenda(days=args.days, start=start, active_set=args.calendar_set)
     if args.json:
         print(json.dumps(agenda))
         return 0
@@ -244,6 +244,31 @@ def cmd_add(args) -> int:
     if not args.json:
         for warning in result["warnings"]:
             print(f"  ! {warning}")
+    return 0
+
+
+def cmd_set(args) -> int:
+    from omagenda.index import index
+    from omagenda.sets import defined_sets, read_active, write_active
+
+    sets = defined_sets()
+    name = args.name
+    if args.number is not None:
+        if not 1 <= args.number <= min(9, len(sets)):
+            return _fail("no calendar set at that number")
+        name = list(sets)[args.number - 1]
+    if name is not None and (not name or name not in sets):
+        return _fail("unknown calendar set: " + repr(name))
+    if name is not None or args.clear:
+        write_active("" if args.clear else name)
+        index()
+    result = {"activeSet": read_active(), "sets": sets}
+    if args.json:
+        print(json.dumps(result))
+    else:
+        print("Active set: " + (result["activeSet"] or "all"))
+        for number, (set_name, calendars) in enumerate(sets.items(), 1):
+            print(f"{number}. {set_name}: {', '.join(calendars) or 'all'}")
     return 0
 
 
@@ -708,6 +733,14 @@ def build_parser() -> argparse.ArgumentParser:
                              help="go back to using the first writable calendar")
     p_calendars.add_argument("--json", action="store_true")
     p_calendars.set_defaults(func=cmd_calendars)
+
+    p_set = sub.add_parser("set", help="list, select, or clear the active calendar set")
+    selection = p_set.add_mutually_exclusive_group()
+    selection.add_argument("name", nargs="?")
+    selection.add_argument("--clear", action="store_true")
+    selection.add_argument("--number", type=int, help="select the Nth defined set (1–9)")
+    p_set.add_argument("--json", action="store_true")
+    p_set.set_defaults(func=cmd_set)
 
     p_doctor = sub.add_parser("doctor", help="dependencies, vdir, sync tool, keyring, plugin enabled")
     p_doctor.add_argument("--json", action="store_true")

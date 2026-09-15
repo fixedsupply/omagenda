@@ -169,11 +169,16 @@ def _cache_key(ics_path: Path, start: date, days: int) -> str:
 
 
 def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = None,
-                  active_set: str = "", last_sync: str | None = None, state_dir=None,
+                  active_set: str | None = None, last_sync: str | None = None, state_dir=None,
                   use_cache: bool = True) -> dict:
     start = start or date.today()
     end_span = timedelta(days=days)
     calendars = vdir.discover_calendars(vdir_root)
+    from omagenda.sets import defined_sets, read_active
+
+    if active_set is None:
+        active_set = read_active(state_dir)
+    selected_calendars = defined_sets().get(active_set, [])
 
     if last_sync is None:
         # The panel footer has always had a "synced HH:MM" slot; nothing
@@ -271,6 +276,12 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
         _save_cache(fresh_cache, state_dir)
 
     events.sort(key=_sort_key)
+
+    # Keep the complete expansion cache so switching sets does not reparse
+    # calendars that were hidden by the previous selection.
+    if selected_calendars:
+        calendars = [c for c in calendars if c["id"] in selected_calendars]
+        events = [e for e in events if e["calendar"] in selected_calendars]
 
     return {
         "generatedAt": datetime.now().astimezone().isoformat(timespec="seconds"),

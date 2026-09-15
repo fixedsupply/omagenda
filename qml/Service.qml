@@ -60,6 +60,14 @@ Item {
     syncProc.running = true
   }
 
+  function selectSet(number) {
+    if (setProc.running) return
+    setProc.command = number === 0
+      ? [root.binPath, "set", "--clear", "--json"]
+      : [root.binPath, "set", "--number", String(number), "--json"]
+    setProc.running = true
+  }
+
   function paletteColor(name, fallback) {
     return Model.paletteColor(root.palette, name, fallback)
   }
@@ -172,6 +180,14 @@ Item {
     id: syncProc
     command: [root.binPath, "sync"]
     onExited: root.reload()
+  }
+
+  Process {
+    id: setProc
+    onExited: root.reload()
+    stderr: StdioCollector {
+      onStreamFinished: if (text.trim() !== "") root.lastError = text.trim()
+    }
   }
 
   Timer {

@@ -1,4 +1,18 @@
-# Omagenda reliability pass — 2026-09-14
+# Calendar sets — 2026-09-15
+
+Phase 4b-1 implementation is complete on `calendar-sets`, based on
+`b805ec1`. Sets use `config.toml`; the active choice uses the state file.
+CLI selection immediately rebuilds the filtered agenda, the watcher reads
+the choice each tick, and panel keys `1`–`9` select sets while `0` clears.
+Unknown saved names fall back to all calendars and produce a doctor warning.
+
+Verification: 211 isolated Python tests passed (including ten new calendar
+set tests); both Node test files passed, including QML syntax validation.
+Live panel latency, keyboard behaviour and the PM's doctor result remain
+unverified; see `docs/reviewer-checklist.md`. No live calendar or syncing
+watcher was used. Per-set Quick Add defaults remain deferred.
+
+## Previous reliability pass — 2026-09-14
 
 Implementation and automated verification are complete for this pass.
 Google's disposable-calendar acceptance script passed on candidate `8f8a026`
@@ -61,6 +75,6 @@ then check the full overlay, reboot and source-update behaviour on the candidate
 Do not claim fresh-install or iCloud round-trip success until recorded.
 
 Inline coloured highlighting is deferred; native editing and the live
-interpretation preview remain. Calendar sets, templates and Microsoft stay
-deferred. Refresh the historical Quick Add screenshot before publication.
+interpretation preview remain. Templates and Microsoft stay deferred.
+Refresh the historical Quick Add screenshot before publication.
 The existing v0.1.0 tag was not moved and does not include this pass.

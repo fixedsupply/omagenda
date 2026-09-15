@@ -71,7 +71,7 @@ These are the tiebreakers for any decision the implementer faces.
 | Natural language event entry with live highlighting | **Keep, this is the product** | Quick Add overlay (like the Reminders and Emoji overlays), global hotkey, tokens light up in the accent color as you type, preview card shows the parsed event |
 | DayTicker (horizontal day strip + list below) | Keep, renamed | Seven-day "ticker" strip of date pills with event dots, agenda for the selected day beneath it |
 | Up Next with countdown | Keep | Pill text: `Standup · 12m`; header of the panel: hero with title, time, and Join |
-| Calendar Sets | Keep, simplified | Named sets in `shell.json`; switch with number keys in the panel or `omagenda set work`; optional per-set default calendar for Quick Add |
+| Calendar Sets | Keep, simplified | Named sets in `config.toml`; switch with number keys in the panel or `omagenda set work`; per-set default calendar for Quick Add deferred |
 | Conference call detection and Join | Keep | Regex over location, description, `CONFERENCE`, and `X-GOOGLE-CONFERENCE` for Meet, Zoom, Teams, Webex, Jitsi, Whereby; Join opens the browser and appears on the notification |
 | Time zone support | Keep, small | Store `TZID`, display local, show the source zone when it differs; parser accepts `3pm EST` and `at 15:00 Europe/Berlin` |
 | Templates | Adapt | Saved sentences: `omagenda add --template standup` and a `/` picker in Quick Add; a template is just a sentence with blanks |

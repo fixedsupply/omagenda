@@ -131,8 +131,16 @@ def _check_sign_in() -> dict:
 
 
 def run() -> dict:
+    from omagenda.sets import read_active
+
     config = read_config()
+    active = read_active()
+    known = not active or active in config.get("sets", {})
     return {
+        "activeSet": {"ok": known,
+                      "detail": (active or "all") if known else
+                      f"warning: unknown calendar set {active!r}; showing all calendars. "
+                      "Run omagenda set --clear."},
         "packages": _check_packages(),
         "vdir": _check_vdir(),
         "signIn": _check_sign_in(),

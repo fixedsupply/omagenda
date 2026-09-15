@@ -56,10 +56,43 @@ full shell interaction, fresh installation, reboot/source update and iCloud
 acceptance remain unverified. The watcher used an accelerated two-second
 sync interval.
 
-Calendar sets, templates, inline syntax highlighting and Microsoft support
-are deferred. Local editing of recurring series with exceptions is refused.
+Calendar sets are implemented; live panel acceptance remains pending below.
+Templates, inline syntax highlighting and Microsoft support are deferred.
+Local editing of recurring series with exceptions is refused.
 A recurrence delta currently requires a full calendar download. A passed
 mocked sync suite cannot substitute for the provider checks above.
+
+## Calendar sets acceptance — pending
+
+Phase 4b-1 passed 211 isolated Python tests and both Node test files on
+2026-09-15. This includes fixture filtering, immediate CLI reindexing and
+a mocked watcher tick with sync disabled; it does not establish live panel
+latency or keyboard interaction.
+
+After reviewing and installing the candidate, define `[sets]` in
+`~/.config/omagenda/config.toml` using ids from `omagenda calendars --json`.
+Include a `work` set containing a subset of calendars. In a normal terminal:
+
+```sh
+omagenda set --json
+omarchy-shell shell toggle fixedsupply.omagenda
+omagenda set work
+```
+
+- Confirm the open panel shows only that set within one second and its
+  footer reads `Set: work`. Keep it open past the next watcher tick and
+  confirm the choice persists.
+- Focus the panel and press `1`–`9` for defined sets, checking the order
+  matches `omagenda set`; press `0` to restore all calendars.
+
+```sh
+omagenda set --clear
+omagenda doctor
+```
+
+- Confirm clear restores all calendars and the footer reads `Set: all`.
+- Confirm doctor is clean. Record the reviewed commit and outcome here;
+  do not paste calendar contents or capture the live desktop.
 
 ## Opt-in Google acceptance script
 

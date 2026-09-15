@@ -26,7 +26,6 @@
       "alwaysShow": false,
       "showCountdown": true,
       "days": 7,
-      "activeSet": "",
       "defaultCalendar": "",
       "timeFormat": "system",
       "collapseWhenIdle": false

@@ -181,6 +181,7 @@ Panel {
   function handleTextKey(text) {
     if (text === "t") resetToToday()
     else if (text === "s") sync()
+    else if (/^[0-9]$/.test(text) && service) service.selectSet(Number(text))
     else if (text === "n") quickAdd()
     else if (text === "o") openSelected()
     else if (text === "e") editSelected()

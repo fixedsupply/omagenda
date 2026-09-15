@@ -79,10 +79,8 @@ No build step. Installation is `omarchy plugin add <git-url>` plus `omarchy pkg 
       "alwaysShow": false,
       "showCountdown": true,
       "days": 7,
-      "activeSet": "",
       "defaultCalendar": "",
-      "timeFormat": "system",
-      "sets": {}
+      "timeFormat": "system"
     },
     "schema": [
       { "key": "leadMinutes", "type": "integer", "label": "Show the pill this many minutes before an event", "min": 0, "max": 240, "step": 5, "defaultValue": 30 },
@@ -229,6 +227,24 @@ default_lead = "PT10M"      # used when an event has no VALARM
 ```
 
 `omagenda calendars` prints the merged view so QML has one place to ask.
+
+Calendar sets belong to `[sets]` in `config.toml`, in definition order.
+Each value is a list of calendar ids from `omagenda calendars --json`.
+The active choice lives in `$OMAGENDA_STATE/active-set` (default:
+`~/.local/state/omagenda/active-set`), as a plain-text name; an absent file
+means all calendars. `omagenda set <name>` selects a defined set and
+immediately rebuilds `agenda.json`; `omagenda set --clear` removes the file
+and rebuilds. `omagenda set` lists the active choice and definitions.
+All three accept `--json` and return `{"activeSet": "", "sets": {}}`
+with the current name and configured mapping. Unknown names are errors.
+
+`agenda.json` retains the name in `activeSet` and filters both `events`
+and `calendars`. An empty list or unknown saved name shows all calendars;
+`doctor` warns about unknown saved names. The watcher rereads the choice
+on its next tick. `omagenda agenda --set <name>` overrides the choice for
+that query without changing state. Panel keys `1`–`9` invoke
+`omagenda set --number N` in definition order; `0` clears. Per-set Quick
+Add defaults are deferred.
 
 ## 6. Natural-language parser
 
