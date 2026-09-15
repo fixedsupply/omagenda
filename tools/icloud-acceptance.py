@@ -3,12 +3,15 @@
 
 Run in a normal terminal with --run-live. Requires one configured iCloud
 account and its desktop keyring password. Never reads personal events or syncs
-an installed pair. Private recovery receipts and logs must not be published.
+an installed pair. Pauses real watcher sync only through the installed CLI.
+Private recovery receipts and logs must not be published.
 """
 from __future__ import annotations
 
 import argparse
 import base64
+import fcntl
+import shlex
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -108,6 +111,83 @@ def cli_command(folder: Path, *args: str) -> list[str]:
             str(folder / 'pimsync-state'), str(folder / 'secrets'), str(ROOT / 'bin/omagenda'), *args]
 
 
+def installed_cli() -> Path:
+    return Path.home() / '.config/omarchy/plugins/fixedsupply.omagenda/bin/omagenda'
+
+
+def installed_sync(*args: str) -> dict:
+    # Inherit the PM's environment, never the disposable provider environment.
+    result = subprocess.run([str(installed_cli()), 'sync', *args, '--json'],
+                            capture_output=True, text=True, timeout=260)
+    if result.returncode:
+        raise RuntimeError('Installed sync command failed')
+    return json.loads(result.stdout)
+
+
+def require_pause_support() -> None:
+    try:
+        result = subprocess.run([str(installed_cli()), 'sync', '--help'],
+                                capture_output=True, text=True, timeout=20)
+        if result.returncode == 0 and '--pause' in result.stdout:
+            return
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    print('This branch must be merged and installed first: the installed CLI must support sync --pause.',
+          file=sys.stderr)
+    raise RuntimeError('Installed pause support missing')
+
+
+def watcher_running(state: Path) -> bool:
+    # Opening read-only avoids creating or changing any real state file.
+    try:
+        handle = (state / 'watch.lock').open('r')
+    except FileNotFoundError:
+        return False
+    with handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(handle, fcntl.LOCK_UN)
+    return False
+
+
+def confirm_watcher_pause(state: Path, until: str) -> None:
+    if not watcher_running(state):
+        return
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        try:
+            if json.loads((state / 'agenda.json').read_text()).get('syncPausedUntil') == until:
+                return
+        except (OSError, ValueError, UnicodeError, AttributeError):
+            pass
+        time.sleep(1)
+    print('Running watcher did not confirm the pause within 90 seconds; update the watcher before retrying.',
+          file=sys.stderr)
+    raise TimeoutError('Watcher pause confirmation')
+
+
+def real_vdir_orphans(config: dict, vdir: Path, collection_id: str) -> list[Path]:
+    return [vdir / account['id'] / collection_id for account in config.get('accounts', [])
+            if account.get('type') in ('icloud', 'caldav')
+            and (vdir / account['id'] / collection_id).is_dir()]
+
+
+def stop_watcher(watcher) -> None:
+    # Stop the whole group so a surviving pimsync child cannot recreate the calendar.
+    try:
+        os.killpg(watcher.pid, signal.SIGTERM)
+        watcher.wait(timeout=10)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        pass
+    try:
+        os.killpg(watcher.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    watcher.wait(timeout=10)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-live', action='store_true')
@@ -118,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
 
     from omagenda.doctor import read_config
     from omagenda.accounts import write_config
+    from omagenda.index import resolve_state_dir
+    from omagenda.vdir import resolve_vdir_root
     import icalendar
 
     folder = None
@@ -128,6 +210,12 @@ def main(argv: list[str] | None = None) -> int:
     success = False
     passed: list[str] = []
     stage = 'account and keyring preflight'
+    pause_attempted = False
+    real_sync_paused = False
+    real_sync_resumed = False
+    orphan = None
+    cleanup_failed = None
+    failed_stage = None
 
     def check(label: str, condition: bool = True) -> None:
         if not condition:
@@ -137,7 +225,13 @@ def main(argv: list[str] | None = None) -> int:
             print('PASS: ' + label, flush=True)
 
     try:
-        account = select_account(read_config())
+        real_config = read_config()
+        account = select_account(real_config)
+        real_state = resolve_state_dir()
+        real_vdir = resolve_vdir_root()
+        stage = 'installed pause support preflight'
+        require_pause_support()
+        stage = 'account and keyring preflight'
         if not shutil.which('pimsync'):
             raise RuntimeError('pimsync is required')
         credential = subprocess.run(['secret-tool', 'lookup', 'service', 'omagenda',
@@ -174,6 +268,16 @@ def main(argv: list[str] | None = None) -> int:
                     if href:
                         return trusted_url(urljoin(url, href))
             raise RuntimeError('DAV discovery property missing')
+
+        stage = 'pause real watcher sync'
+        pause_attempted = True
+        until = installed_sync('--pause', '30m').get('pausedUntil')
+        if not isinstance(until, str) or datetime.fromisoformat(until).utcoffset() is None:
+            raise RuntimeError('Installed CLI did not return a pause timestamp')
+        real_sync_paused = True
+        stage = 'watcher pause confirmation'
+        confirm_watcher_pause(real_state, until)
+        check('real watcher sync paused')
 
         stage = 'CalDAV home discovery'
         principal = prop(account.get('url', 'https://caldav.icloud.com/'), 'current-user-principal')
@@ -368,35 +472,65 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError('Isolated watcher reported a sync error')
         success = True
     except Exception as exc:
+        failed_stage = stage
         print('FAIL: ' + stage + ' (' + type(exc).__name__ + ')', file=sys.stderr, flush=True)
     finally:
-        if watcher is not None:
-            # Stop the process group, including any in-flight pimsync child,
-            # before deleting the collection so no sync can recreate it.
-            try:
-                os.killpg(watcher.pid, signal.SIGTERM)
-                watcher.wait(timeout=10)
-            except (ProcessLookupError, subprocess.TimeoutExpired):
-                pass
-            try:
-                os.killpg(watcher.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            watcher.wait(timeout=10)
-        if attempted:
-            try:
-                request('DELETE', calendar_url)
-                cleaned = True
-                check('deleted disposable iCloud calendar')
-            except Exception as exc:
-                print('CLEANUP NEEDED: ' + str(receipt) + ' (' + type(exc).__name__ + ')', file=sys.stderr, flush=True)
-        if cleaned:
-            shutil.rmtree(folder)
-    print(json.dumps({'passed_checks': len(passed), 'checks': passed, 'success': success and cleaned,
-                      'failed_stage': ('calendar cleanup' if success and not cleaned else
-                                       None if success else stage), 'calendar_cleaned_up': cleaned,
-                      'recovery_receipt': str(receipt) if attempted and not cleaned else None}), flush=True)
-    return 0 if success and cleaned else 1
+        try:
+            if watcher is not None:
+                try:
+                    stop_watcher(watcher)
+                except Exception:
+                    cleanup_failed = 'isolated watcher cleanup'
+                    print('FAIL: isolated watcher cleanup', file=sys.stderr)
+            if attempted:
+                try:
+                    request('DELETE', calendar_url)
+                    cleaned = True
+                    check('deleted disposable iCloud calendar')
+                except Exception as exc:
+                    cleanup_failed = cleanup_failed or 'calendar cleanup'
+                    print('CLEANUP NEEDED: ' + str(receipt) + ' (' + type(exc).__name__ + ')',
+                          file=sys.stderr, flush=True)
+                try:
+                    orphans = real_vdir_orphans(real_config, real_vdir, token)
+                    orphan = str(orphans[0]) if orphans else None
+                    for path in orphans:
+                        print(f'ORPHAN: {path}; remove with: rm -rf -- {shlex.quote(str(path))}',
+                              file=sys.stderr, flush=True)
+                    check('no disposable calendar in real vdir', not orphans)
+                except Exception:
+                    cleanup_failed = cleanup_failed or 'real vdir orphan check'
+        finally:
+            if pause_attempted:
+                try:
+                    result = installed_sync('--resume')
+                    if result != {'pausedUntil': None}:
+                        raise RuntimeError('Installed CLI did not confirm resume')
+                    real_sync_resumed = True
+                    check('real watcher sync resumed')
+                except Exception:
+                    cleanup_failed = cleanup_failed or 'real sync resume'
+                    print('RESUME NEEDED: ' + shlex.quote(str(installed_cli())) + ' sync --resume',
+                          file=sys.stderr, flush=True)
+        success = success and cleaned and not cleanup_failed and real_sync_resumed
+        if folder is not None:
+            if success:
+                try:
+                    shutil.rmtree(folder)
+                except OSError:
+                    success = False
+                    cleanup_failed = 'temporary folder cleanup'
+            if not success:
+                print('Temporary folder retained: ' + str(folder), file=sys.stderr, flush=True)
+    print(json.dumps({'passed_checks': len(passed), 'checks': passed, 'success': success,
+                      'failed_stage': None if success else failed_stage or cleanup_failed,
+                      'cleanup_failed_stage': cleanup_failed,
+                      'calendar_cleaned_up': cleaned,
+                      'real_sync_paused': real_sync_paused, 'real_sync_resumed': real_sync_resumed,
+                      'real_vdir_orphan': orphan,
+                      'temporary_folder': str(folder) if folder is not None and not success else None,
+                      'recovery_receipt': str(receipt) if attempted and not success else None}), flush=True)
+    return 0 if success else 1
 
 
 if __name__ == '__main__':

@@ -161,7 +161,9 @@ through a file (`git commit -F`), never an inline double-quoted string.
 
 Live provider scripts cannot run inside the Codex sandbox (no network, no
 keyring). Print the exact command for the PM to run in a normal terminal,
-then read the output they paste back. Never run a syncing watcher against
+then read the output they paste back. The iCloud acceptance script may
+write only the real sync pause, through the installed CLI with the PM's own
+environment; all other test writes stay isolated. Never run a syncing watcher against
 the real vdir, and never point anything at the real `family` pimsync pair.
 
 ### 4b-1 — calendar sets
@@ -237,6 +239,11 @@ script's shape and safeguards:
   disposable calendar with `MKCALENDAR` under a uuid path named
   `Omagenda acceptance <hex>`. Do not retry the create. Write the recovery
   receipt before and after, as the Google script does.
+- The only permitted real-state write is a 30-minute sync pause through
+  `~/.config/omarchy/plugins/fixedsupply.omagenda/bin/omagenda`, using the PM's
+  own environment. Require installed `sync --pause` support first. If the
+  real watcher holds `watch.lock`, wait up to 90 seconds for its agenda to
+  confirm the same `syncPausedUntil` before creating a calendar.
 - Everything else isolated: temporary `OMAGENDA_CONFIG`, `OMAGENDA_VDIR`,
   `OMAGENDA_STATE`, and a temporary pimsync `.scfg` whose pair is
   restricted to the disposable collection only and whose `status_path`
@@ -252,8 +259,11 @@ script's shape and safeguards:
   the Google script. Conflicts are pimsync's business under
   `conflict_resolution keep b`; check only that a simultaneous edit ends
   with the remote title on both sides and no error.
-- `DELETE` the disposable calendar in `finally`; keep the temp folder and
-  print the receipt path if that fails.
+- In `finally`, stop the isolated watcher, `DELETE` the disposable calendar,
+  check the real iCloud/CalDAV vdir folders for an orphan collection without
+  changing them, then resume through the installed CLI even if cleanup fails.
+  Keep the temporary folder and print its path on any failure; remove it only
+  on full success.
 
 Then hand the PM the command, read the pasted output, and record the
 result in `docs/reviewer-checklist.md` and `STATUS.md` exactly as the

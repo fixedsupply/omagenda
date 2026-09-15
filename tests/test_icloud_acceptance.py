@@ -8,6 +8,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import fcntl
+import os
+from tests.test_sync import WithVdir
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,6 +20,9 @@ SPEC.loader.exec_module(acceptance)
 
 
 class ICloudAcceptanceTests(unittest.TestCase):
+    def setUp(self):
+        self.vdir = self.enterContext(WithVdir())
+
     def test_requires_explicit_live_flag(self):
         with patch.object(acceptance.subprocess, 'run') as run, contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as raised:
@@ -107,7 +113,8 @@ class ICloudAcceptanceTests(unittest.TestCase):
             self.assertEqual(result.stdout.splitlines()[1], str(folder / 'secrets'))
             self.assertEqual(result.stdout.splitlines()[2], "['watch', '--sync-interval', '2']")
 
-    def test_missing_keyring_password_stops_before_discovery(self):
+    @patch.object(acceptance, 'require_pause_support')
+    def test_missing_keyring_password_stops_before_discovery(self, support):
         account = {'id': 'test', 'type': 'icloud', 'username': 'you@example.com'}
         with patch('omagenda.doctor.read_config', return_value={'accounts': [account]}), \
                 patch.object(acceptance.shutil, 'which', return_value='/usr/bin/pimsync'), \
@@ -119,8 +126,8 @@ class ICloudAcceptanceTests(unittest.TestCase):
             opener.assert_not_called()
 
     def test_uncertain_creation_is_not_retried_and_cleanup_is_scoped(self):
-        for cleanup_fails in (False, True):
-            with self.subTest(cleanup_fails=cleanup_fails), tempfile.TemporaryDirectory() as tmp:
+        for cleanup_fails, has_orphan in ((False, False), (True, False), (False, True)):
+            with self.subTest(cleanup_fails=cleanup_fails, has_orphan=has_orphan), tempfile.TemporaryDirectory() as tmp:
                 folder = Path(tmp) / 'receipt-folder'
                 folder.mkdir(mode=0o700)
                 calls = []
@@ -129,8 +136,8 @@ class ICloudAcceptanceTests(unittest.TestCase):
                 def response(req, timeout):
                     calls.append((req.method, req.full_url))
                     if req.method == 'PROPFIND':
-                        tag, href = ('current-user-principal', '/principal/') if len(calls) == 1 else ('calendar-home-set', '/home/')
-                        prefix = 'd' if len(calls) == 1 else 'c'
+                        tag, href = ('current-user-principal', '/principal/') if len(calls) == 2 else ('calendar-home-set', '/home/')
+                        prefix = 'd' if len(calls) == 2 else 'c'
                         body = (f'<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
                                 f'<d:response><d:propstat><d:prop><{prefix}:{tag}><d:href>{href}</d:href>'
                                 f'</{prefix}:{tag}></d:prop><d:status>HTTP/1.1 200 OK</d:status>'
@@ -140,6 +147,9 @@ class ICloudAcceptanceTests(unittest.TestCase):
                         receipt = json.loads((folder / 'recovery.json').read_text())
                         self.assertEqual(receipt['phase'], 'creation pending')
                         self.assertEqual(receipt['calendar_url'], req.full_url)
+                        if has_orphan:
+                            collection = req.full_url.rstrip('/').split('/')[-1]
+                            (self.vdir / account['id'] / collection).mkdir(parents=True)
                         raise TimeoutError('uncertain response')
                     self.assertEqual(req.method, 'DELETE')
                     self.assertEqual(req.full_url, calls[-2][1])
@@ -147,7 +157,20 @@ class ICloudAcceptanceTests(unittest.TestCase):
                         raise TimeoutError('cleanup failed')
                     return io.BytesIO(b'')
 
-                with patch('omagenda.doctor.read_config', return_value={'accounts': [account]}), \
+                def installed(*args):
+                    calls.append(('PAUSE' if args[0] == '--pause' else 'RESUME', 'installed'))
+                    return {'pausedUntil': '2099-01-01T00:00:00+00:00' if args[0] == '--pause' else None}
+
+                original_orphans = acceptance.real_vdir_orphans
+                def orphans(*args):
+                    calls.append(('ORPHAN CHECK', 'local'))
+                    return original_orphans(*args)
+
+                with patch.object(acceptance, 'require_pause_support'), \
+                        patch.object(acceptance, 'real_vdir_orphans', side_effect=orphans), \
+                        patch.object(acceptance, 'installed_sync', side_effect=installed), \
+                        patch.object(acceptance, 'confirm_watcher_pause'), \
+                        patch('omagenda.doctor.read_config', return_value={'accounts': [account]}), \
                         patch.object(acceptance.shutil, 'which', return_value='/usr/bin/pimsync'), \
                         patch.object(acceptance.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, b'invented-password', b'')), \
                         patch.object(acceptance.tempfile, 'mkdtemp', return_value=str(folder)), \
@@ -155,11 +178,22 @@ class ICloudAcceptanceTests(unittest.TestCase):
                         contextlib.redirect_stdout(io.StringIO()) as output, contextlib.redirect_stderr(io.StringIO()) as errors:
                     opener.return_value.open.side_effect = response
                     self.assertEqual(acceptance.main(['--run-live', '--json']), 1)
-                self.assertEqual([method for method, url in calls], ['PROPFIND', 'PROPFIND', 'MKCALENDAR', 'DELETE'])
+                self.assertEqual([method for method, url in calls], ['PAUSE', 'PROPFIND', 'PROPFIND', 'MKCALENDAR', 'DELETE', 'ORPHAN CHECK', 'RESUME'])
                 report = json.loads(output.getvalue())
                 self.assertEqual(report['failed_stage'], 'create disposable calendar')
                 self.assertEqual(report['calendar_cleaned_up'], not cleanup_fails)
-                self.assertEqual(folder.exists(), cleanup_fails)
+                self.assertTrue(folder.exists())
+                self.assertEqual(report['temporary_folder'], str(folder))
+                self.assertIn(str(folder), errors.getvalue())
+                self.assertTrue(report['real_sync_paused'])
+                self.assertTrue(report['real_sync_resumed'])
+                if has_orphan:
+                    orphan = Path(report['real_vdir_orphan'])
+                    self.assertTrue(orphan.is_dir())
+                    self.assertIn(f'rm -rf -- {orphan}', errors.getvalue())
+                    self.assertEqual(report['cleanup_failed_stage'], 'real vdir orphan check')
+                else:
+                    self.assertIsNone(report['real_vdir_orphan'])
                 self.assertNotIn('invented-password', output.getvalue() + errors.getvalue())
                 if cleanup_fails:
                     self.assertEqual(report['recovery_receipt'], str(folder / 'recovery.json'))
@@ -200,3 +234,135 @@ class ICloudAcceptanceTests(unittest.TestCase):
             self.assertIn('UID:invented', next(local.glob('*.ics')).read_text())
             self.assertFalse((local.parent / 'unrelated').exists())
             self.assertTrue((unrelated / 'other.ics').exists())
+
+
+class RealPauseSafeguardsTest(unittest.TestCase):
+    def setUp(self):
+        self.vdir = self.enterContext(WithVdir())
+        self.state = Path(os.environ['OMAGENDA_STATE'])
+        self.account = {'id': 'test', 'type': 'icloud', 'username': 'you@example.com'}
+        self.enterContext(patch('omagenda.doctor.read_config', return_value={'accounts': [self.account]}))
+        self.run = self.enterContext(patch.object(acceptance.subprocess, 'run'))
+        self.opener = self.enterContext(patch.object(acceptance.urllib.request, 'build_opener'))
+        self.mkdir = self.enterContext(patch.object(acceptance.tempfile, 'mkdtemp'))
+
+    def main(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            code = acceptance.main(['--run-live', '--json'])
+        return code, json.loads(out.getvalue()), err.getvalue()
+
+    def test_missing_support_stops_before_any_write(self):
+        self.run.return_value = subprocess.CompletedProcess([], 0, 'sync --json', '')
+        code, report, err = self.main()
+        self.assertEqual(code, 1)
+        self.assertEqual(report['failed_stage'], 'installed pause support preflight')
+        self.assertIn('merged and installed first', err)
+        self.assertFalse(report['real_sync_paused'])
+        self.assertFalse(report['real_sync_resumed'])
+        self.assertEqual(self.run.call_args.args[0], [str(acceptance.installed_cli()), 'sync', '--help'])
+        self.assertEqual(self.run.call_count, 1)
+        self.opener.assert_not_called()
+        self.mkdir.assert_not_called()
+        self.assertFalse(self.state.exists())
+
+    def test_missing_installed_cli_has_same_preflight_message(self):
+        self.run.side_effect = FileNotFoundError
+        self.assertIn('merged and installed first', self.main()[2])
+        self.mkdir.assert_not_called()
+
+    def test_confirmation_timeout_resumes_before_any_icloud_write(self):
+        commands = []
+        def run(command, **kwargs):
+            commands.append(command)
+            if command[0] == 'secret-tool':
+                return subprocess.CompletedProcess([], 0, b'fake-password', b'')
+            self.assertNotIn('env', kwargs)
+            if '--help' in command:
+                output = 'sync --pause DURATION --resume'
+            else:
+                output = json.dumps({'pausedUntil': '2099-01-01T00:00:00+00:00' if '--pause' in command else None})
+            return subprocess.CompletedProcess([], 0, output, '')
+        self.run.side_effect = run
+        with patch.object(acceptance.shutil, 'which', return_value='pimsync'), \
+             patch.object(acceptance, 'watcher_running', return_value=True), \
+             patch.object(acceptance.time, 'monotonic', side_effect=[0, 0, 91]), \
+             patch.object(acceptance.time, 'sleep'):
+            code, report, err = self.main()
+        self.assertEqual(code, 1)
+        self.assertEqual(report['failed_stage'], 'watcher pause confirmation')
+        self.assertTrue(report['real_sync_paused'])
+        self.assertTrue(report['real_sync_resumed'])
+        self.assertEqual(commands[-1], [str(acceptance.installed_cli()), 'sync', '--resume', '--json'])
+        self.assertIn('90 seconds', err)
+        self.opener.return_value.open.assert_not_called()
+        self.mkdir.assert_not_called()
+
+    def test_pause_failure_still_attempts_resume(self):
+        with patch.object(acceptance, 'require_pause_support'), \
+             patch.object(acceptance.shutil, 'which', return_value='pimsync'), \
+             patch.object(acceptance, 'installed_sync', side_effect=[TimeoutError, {'pausedUntil': None}]) as installed:
+            self.run.return_value = subprocess.CompletedProcess([], 0, b'fake-password', b'')
+            _, report, _ = self.main()
+        self.assertFalse(report['real_sync_paused'])
+        self.assertTrue(report['real_sync_resumed'])
+        self.assertEqual(installed.call_args.args, ('--resume',))
+        self.opener.return_value.open.assert_not_called()
+
+    def test_failed_resume_prints_exact_command(self):
+        with patch.object(acceptance, 'require_pause_support'), \
+             patch.object(acceptance.shutil, 'which', return_value='pimsync'), \
+             patch.object(acceptance, 'installed_sync', side_effect=[{'pausedUntil': '2099-01-01T00:00:00+00:00'}, OSError]), \
+             patch.object(acceptance, 'confirm_watcher_pause', side_effect=TimeoutError):
+            self.run.return_value = subprocess.CompletedProcess([], 0, b'fake-password', b'')
+            _, report, err = self.main()
+        self.assertFalse(report['real_sync_resumed'])
+        self.assertIn(str(acceptance.installed_cli()) + ' sync --resume', err)
+
+    def test_watch_lock_probe_never_creates_file_and_releases_lock(self):
+        self.assertFalse(acceptance.watcher_running(self.state))
+        self.assertFalse(self.state.exists())
+        self.state.mkdir()
+        lock = self.state / 'watch.lock'
+        lock.write_text('invented pid')
+        with lock.open('r') as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.assertTrue(acceptance.watcher_running(self.state))
+        self.assertFalse(acceptance.watcher_running(self.state))
+        with lock.open('r') as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.assertEqual(lock.read_text(), 'invented pid')
+
+    def test_confirmation_requires_exact_timestamp(self):
+        self.state.mkdir()
+        agenda = self.state / 'agenda.json'
+        agenda.write_text('{"syncPausedUntil":"different"}')
+        until = '2099-01-01T00:00:00+00:00'
+        def tick(seconds):
+            agenda.write_text(json.dumps({'syncPausedUntil': until}))
+        with patch.object(acceptance, 'watcher_running', return_value=True), \
+             patch.object(acceptance.time, 'sleep', side_effect=tick) as sleep:
+            acceptance.confirm_watcher_pause(self.state, until)
+        sleep.assert_called_once_with(1)
+
+    def test_no_watcher_needs_no_confirmation(self):
+        with patch.object(acceptance.time, 'sleep') as sleep:
+            acceptance.confirm_watcher_pause(self.state, 'future')
+        sleep.assert_not_called()
+
+    def test_orphan_detection_is_read_only_and_account_scoped(self):
+        config = {'accounts': [self.account, {'id': 'dav', 'type': 'caldav'}, {'id': 'google', 'type': 'google'}]}
+        for name in ('test', 'dav', 'google', 'unconfigured'):
+            (self.vdir / name / 'uuid').mkdir(parents=True)
+        found = acceptance.real_vdir_orphans(config, self.vdir, 'uuid')
+        self.assertEqual(found, [self.vdir / 'test/uuid', self.vdir / 'dav/uuid'])
+        self.assertTrue(all(p.exists() for p in found))
+        self.assertEqual(acceptance.real_vdir_orphans(config, self.vdir, 'absent'), [])
+
+    def test_stop_watcher_stops_process_group_and_waits(self):
+        from unittest.mock import Mock
+        watcher = Mock(pid=123456)
+        order = []
+        watcher.wait.side_effect = lambda **kwargs: order.append('wait')
+        with patch.object(acceptance.os, 'killpg', side_effect=lambda pid, sig: order.append(sig)):
+            acceptance.stop_watcher(watcher)
+        self.assertEqual(order, [acceptance.signal.SIGTERM, 'wait', acceptance.signal.SIGKILL, 'wait'])
