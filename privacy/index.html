@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omagenda Privacy Policy</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;line-height:1.55;max-width:42rem;margin:2rem auto;padding:0 1rem;color:#111}
+h1,h2{line-height:1.25} a{color:#0b57d0} ul{padding-left:1.25rem}
+</style>
+</head>
+<body>
+<h1>Omagenda Privacy Policy</h1>
+<p><strong>Effective:</strong> 2026-09-15</p>
+<p>Fixed Supply is operated by Calvin Symes.</p>
+<p>Contact: <a href="mailto:support@fixedsupply.dev">support@fixedsupply.dev</a></p>
+<p><a href="../">Omagenda</a> · <a href="../terms/">Terms</a></p>
+
+<h2>What Omagenda is</h2>
+<p>Omagenda is a plugin for the Omarchy Linux desktop, written and maintained by one developer, published under the Fixed Supply name. It shows the next calendar event in the desktop’s top bar, a seven-day agenda panel, and a Quick Add box that turns a typed sentence into an event. It is free and open source under the MIT license.</p>
+
+<h2>How data is handled</h2>
+<ul>
+<li>Omagenda runs entirely on your own computer. There is no Omagenda server. The developer receives no calendar data, account data, usage data, or crash reports. There is no telemetry and no analytics.</li>
+<li>Calendar events are stored as standard <code>.ics</code> files in a folder on your computer.</li>
+<li>Sign-in tokens and passwords are stored in the desktop’s system keyring. If no keyring is available, they are stored in a file readable only by you.</li>
+<li>Omagenda connects only to the calendar services you choose to add: Google (accounts.google.com, oauth2.googleapis.com, www.googleapis.com), Apple iCloud’s CalDAV service through the separate <code>pimsync</code> tool, and any calendar subscription addresses you enter.</li>
+</ul>
+
+<h2>Google data</h2>
+<ul>
+<li>Omagenda requests the Google Calendar scope <code>https://www.googleapis.com/auth/calendar</code>.</li>
+<li>It uses that access only to show your own events on your own computer, and to create, change, and delete events when you ask it to.</li>
+<li>Google data is never sent anywhere except back to Google, never sold, never used for advertising, and never used to train any AI or machine-learning model.</li>
+</ul>
+<p>Omagenda's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h2>How to stop and delete</h2>
+<ul>
+<li>Revoke Omagenda’s access at <a href="https://myaccount.google.com/permissions">https://myaccount.google.com/permissions</a>.</li>
+<li>Remove the account in Omagenda with <code>omagenda account remove &lt;id&gt;</code>.</li>
+<li>Delete the local calendar folder, by default <code>~/.local/share/calendars/&lt;id&gt;/</code>.</li>
+</ul>
+<p>Removing the account in Omagenda does not currently delete the stored Google sign-in token because of a known bug; a fix is still pending. Revoking access in your Google account still stops Omagenda from using Google on your behalf.</p>
+
+<h2>This website</h2>
+<p>This site is hosted on GitHub Pages, which may keep standard server logs such as IP addresses under GitHub’s own privacy statement. The site sets no cookies and has no analytics.</p>
+</body>
+</html>
