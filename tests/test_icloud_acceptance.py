@@ -23,6 +23,53 @@ class ICloudAcceptanceTests(unittest.TestCase):
     def setUp(self):
         self.vdir = self.enterContext(WithVdir())
 
+    def test_report_skips_collection_and_preserves_item_with_explicit_port(self):
+        calendar_url = 'https://p01-caldav.icloud.com:443/home/disposable/'
+        for trailing_slash in ('', '/'):
+            with self.subTest(trailing_slash=trailing_slash):
+                body = f'''<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+                  <d:response><d:href>/home/disposable{trailing_slash}</d:href>
+                    <d:propstat><d:prop><d:getetag>"collection"</d:getetag></d:prop>
+                      <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+                  <d:response><d:href>/home/disposable/invented.ics</d:href>
+                    <d:propstat><d:prop><c:calendar-data>BEGIN:VCALENDAR
+END:VCALENDAR</c:calendar-data></d:prop>
+                      <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+                </d:multistatus>'''.encode()
+                self.assertEqual(acceptance.parse_events_report(body, calendar_url),
+                                 {calendar_url + 'invented.ics': b'BEGIN:VCALENDAR\nEND:VCALENDAR'})
+
+    def test_report_rejects_other_collection(self):
+        body = b'''<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+          <d:response><d:href>/home/disposable-other/invented.ics</d:href>
+            <d:propstat><d:prop><c:calendar-data>invented</c:calendar-data></d:prop>
+              <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+        </d:multistatus>'''
+        with self.assertRaisesRegex(RuntimeError, 'outside the disposable calendar'):
+            acceptance.parse_events_report(body, 'https://p01-caldav.icloud.com:443/home/disposable/')
+
+    def test_report_rejects_item_without_calendar_data(self):
+        body = b'''<d:multistatus xmlns:d="DAV:">
+          <d:response><d:href>/home/disposable/invented.ics</d:href>
+            <d:propstat><d:prop><d:getetag>"item"</d:getetag></d:prop>
+              <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+        </d:multistatus>'''
+        with self.assertRaisesRegex(RuntimeError, 'REPORT omitted calendar data'):
+            acceptance.parse_events_report(body, 'https://p01-caldav.icloud.com:443/home/disposable/')
+
+    def test_failure_line_includes_script_exception_messages(self):
+        for exception in (RuntimeError, AssertionError, TimeoutError, ValueError):
+            with self.subTest(exception=exception):
+                self.assertEqual(acceptance.failure_line('offline check', exception('Fixed script message')),
+                                 f'FAIL: offline check ({exception.__name__}: Fixed script message)')
+
+    def test_failure_line_hides_library_exception_messages(self):
+        private_url = 'https://p01-caldav.icloud.com/123/calendars/invented/'
+        for exc in (OSError(private_url), json.JSONDecodeError(private_url, '', 0)):
+            with self.subTest(exception=type(exc)):
+                self.assertEqual(acceptance.failure_line('offline check', exc),
+                                 f'FAIL: offline check ({type(exc).__name__})')
+
     def test_requires_explicit_live_flag(self):
         with patch.object(acceptance.subprocess, 'run') as run, contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as raised:

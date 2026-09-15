@@ -62,6 +62,31 @@ def trusted_url(url: str) -> str:
     return url
 
 
+def parse_events_report(body: bytes, calendar_url: str) -> dict[str, bytes]:
+    root = ET.fromstring(body)
+    found = {}
+    for response in root.findall('d:response', NS):
+        href = trusted_url(urljoin(calendar_url, response.findtext('d:href', '', NS)))
+        # iCloud includes the collection itself without calendar data in this REPORT.
+        if href.rstrip('/') == calendar_url.rstrip('/'):
+            continue
+        if not href.startswith(calendar_url.rstrip('/') + '/'):
+            raise RuntimeError('REPORT returned a resource outside the disposable calendar')
+        data = response.findtext('.//c:calendar-data', None, NS)
+        if data is None:
+            raise RuntimeError('REPORT omitted calendar data')
+        found[href] = data.encode()
+    return found
+
+
+def failure_line(stage: str, exc: Exception) -> str:
+    detail = type(exc).__name__
+    # Library exception subclasses can include private URLs in their messages.
+    if type(exc) in (RuntimeError, AssertionError, TimeoutError, ValueError):
+        detail += ': ' + str(exc)
+    return 'FAIL: ' + stage + ' (' + detail + ')'
+
+
 def generate_scfg(folder: Path, account: dict, calendar_url: str) -> str:
     trusted_url(calendar_url)
     # pimsync.conf(5), COLLECTION SECTIONS: id_a selects the local directory;
@@ -328,18 +353,8 @@ def main(argv: list[str] | None = None) -> int:
             body = (f'<c:calendar-query xmlns:c="{NS["c"]}" xmlns:d="DAV:">'
                     '<d:prop><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR">'
                     '<c:comp-filter name="VEVENT"/></c:comp-filter></c:filter></c:calendar-query>').encode()
-            root = ET.fromstring(request('REPORT', calendar_url, body,
-                                {'Depth': '1', 'Content-Type': 'application/xml'}))
-            found = {}
-            for response in root.findall('d:response', NS):
-                href = trusted_url(urljoin(calendar_url, response.findtext('d:href', '', NS)))
-                if not href.startswith(calendar_url) or href == calendar_url:
-                    raise RuntimeError('REPORT returned a resource outside the disposable calendar')
-                data = response.findtext('.//c:calendar-data', None, NS)
-                if data is None:
-                    raise RuntimeError('REPORT omitted calendar data')
-                found[href] = data.encode()
-            return found
+            return parse_events_report(request('REPORT', calendar_url, body,
+                                       {'Depth': '1', 'Content-Type': 'application/xml'}), calendar_url)
 
         def components(data: bytes) -> list:
             return icalendar.Calendar.from_ical(data).walk('VEVENT')
@@ -473,7 +488,7 @@ def main(argv: list[str] | None = None) -> int:
         success = True
     except Exception as exc:
         failed_stage = stage
-        print('FAIL: ' + stage + ' (' + type(exc).__name__ + ')', file=sys.stderr, flush=True)
+        print(failure_line(stage, exc), file=sys.stderr, flush=True)
     finally:
         try:
             if watcher is not None:
