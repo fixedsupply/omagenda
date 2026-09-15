@@ -264,6 +264,13 @@ show-all, hides, then shows. Writes immediately rebuild agenda.json.
 The JSON calendar listing adds `hiddenCalendars` and a `hidden` boolean on
 each calendar; text marks hidden rows `[hidden]`.
 
+Discovery leaves out reminder lists: collections holding VTODO items and no
+events. iCloud exposes legacy Reminders lists over CalDAV, with a warning
+sign in their names, and pimsync syncs them like calendars, but they never
+show events and iCloud refuses events written to them. They still sync.
+They are absent from the panel, the pick list, Quick Add and `omagenda add`,
+and doctor names them. An empty collection still counts as a calendar.
+
 agenda.json retains all discovered calendars with `hidden` flags, but excludes
 hidden events. `calendarCount` and `visibleCalendarCount` drive the footer.
 Sync selection is unchanged. Quick Add skips hidden calendars during Tab

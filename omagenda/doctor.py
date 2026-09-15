@@ -55,11 +55,15 @@ def _check_vdir() -> dict:
     root = resolve_vdir_root()
     if not root.is_dir():
         return {"ok": False, "detail": f"{root} doesn't exist yet"}
-    calendars = discover_calendars(root)
+    everything = discover_calendars(root, include_reminder_lists=True)
+    calendars = [c for c in everything if not c["reminderList"]]
+    skipped = [c for c in everything if c["reminderList"]]
+    note = ("; skipped reminder list(s) with no events: " + ", ".join(c["id"] for c in skipped)
+            if skipped else "")
     if not calendars:
-        return {"ok": False, "detail": f"{root} exists but has no calendars in it"}
+        return {"ok": False, "detail": f"{root} exists but has no calendars in it{note}"}
     names = ", ".join(c["id"] for c in calendars)
-    return {"ok": True, "detail": f"{len(calendars)} calendar(s) at {root}: {names}"}
+    return {"ok": True, "detail": f"{len(calendars)} calendar(s) at {root}: {names}{note}"}
 
 
 def _check_sync_tool(config: dict) -> dict:

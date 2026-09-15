@@ -45,6 +45,56 @@ class DiscoverCalendarsTest(unittest.TestCase):
     def test_missing_vdir_root_returns_empty(self):
         self.assertEqual(discover_calendars("/nonexistent/path/for/sure"), [])
 
+    def _collection(self, root, name, *components, color=None):
+        path = root / "family" / name
+        path.mkdir(parents=True)
+        (path / "displayname").write_text(name.title())
+        if color:
+            (path / "color").write_text(color)
+        for index, component in enumerate(components):
+            (path / f"item{index}.ics").write_text(
+                f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:{component}\r\nUID:{name}-{index}\r\n"
+                f"SUMMARY:x\r\nEND:{component}\r\nEND:VCALENDAR\r\n")
+        return path
+
+    def test_reminder_only_collections_are_not_calendars(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._collection(root, "events", "VEVENT", "VEVENT")
+            self._collection(root, "reminders", "VTODO", "VTODO")
+            self._collection(root, "mixed", "VTODO", "VEVENT")
+            self._collection(root, "empty")
+            ids = [c["id"] for c in discover_calendars(root)]
+            self.assertEqual(ids, ["family/empty", "family/events", "family/mixed"])
+            everything = discover_calendars(root, include_reminder_lists=True)
+            self.assertEqual({c["id"]: c["reminderList"] for c in everything},
+                             {"family/empty": False, "family/events": False,
+                              "family/mixed": False, "family/reminders": True})
+            self.assertNotIn("reminderList", discover_calendars(root)[0])
+
+    def test_doctor_names_skipped_reminder_lists(self):
+        from unittest import mock
+        from omagenda import doctor
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._collection(root, "events", "VEVENT")
+            self._collection(root, "reminders", "VTODO")
+            with mock.patch("omagenda.vdir.resolve_vdir_root", return_value=root):
+                result = doctor._check_vdir()
+            self.assertTrue(result["ok"])
+            self.assertIn("1 calendar(s)", result["detail"])
+            self.assertIn("skipped reminder list(s) with no events: family/reminders", result["detail"])
+
+    def test_skipping_a_reminder_list_keeps_other_colours(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._collection(root, "a-reminders", "VTODO")
+            self._collection(root, "b-events", "VEVENT")
+            self._collection(root, "c-events", "VEVENT")
+            with_lists = {c["id"]: c["color"] for c in discover_calendars(root, include_reminder_lists=True)}
+            without = {c["id"]: c["color"] for c in discover_calendars(root)}
+            self.assertEqual(without, {k: v for k, v in with_lists.items() if k != "family/a-reminders"})
+
 
 class ColorMappingTest(unittest.TestCase):
     def test_named_color_passes_through(self):

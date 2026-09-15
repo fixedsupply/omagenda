@@ -88,11 +88,38 @@ def _is_calendar_dir(path: Path) -> bool:
     return any(path.glob("*.ics"))
 
 
-def discover_calendars(vdir_root: Path | str | None = None) -> list[dict]:
+def is_reminder_list(path: Path | str) -> bool:
+    """A collection that holds reminders (VTODO) and no events.
+
+    iCloud still exposes legacy Reminders lists over CalDAV, with a warning
+    sign Apple appends to their names, and pimsync syncs them like any
+    calendar. They never contain events and iCloud refuses events written to
+    them, so they are not calendars as far as Omagenda is concerned. An
+    empty collection is not a reminder list: a new calendar starts empty.
+    Stops at the first event file, so a real calendar costs one read."""
+    saw_reminder = False
+    for ics in Path(path).glob("*.ics"):
+        try:
+            data = ics.read_bytes()
+        except OSError:
+            continue
+        if b"BEGIN:VEVENT" in data:
+            return False
+        if b"BEGIN:VTODO" in data:
+            saw_reminder = True
+    return saw_reminder
+
+
+def discover_calendars(vdir_root: Path | str | None = None,
+                       include_reminder_lists: bool = False) -> list[dict]:
     """Discover every calendar under the vdir root.
 
     Returns a list of {id, name, path, color, readOnly, source} dicts,
     sorted by id. `color` is always one of THEME_COLOR_ORDER's names.
+    Reminder lists (see `is_reminder_list`) are left out unless
+    `include_reminder_lists`, in which case every entry also carries
+    `reminderList`. Colours are assigned before they are left out, so
+    skipping one never changes another calendar's colour.
     """
     root = Path(vdir_root).expanduser() if vdir_root else resolve_vdir_root()
     if not root.is_dir():
@@ -116,14 +143,20 @@ def discover_calendars(vdir_root: Path | str | None = None) -> list[dict]:
         name = _read_text_file(path / "displayname") or cal_id
         explicit_color = map_color_to_theme(_read_text_file(path / "color"))
         color = explicit_color or THEME_COLOR_ORDER[index % len(THEME_COLOR_ORDER)]
-        calendars.append({
+        reminder_list = is_reminder_list(path)
+        if reminder_list and not include_reminder_lists:
+            continue
+        calendar = {
             "id": cal_id,
             "name": name,
             "path": str(path),
             "color": color,
             "readOnly": not os.access(path, os.W_OK),
             "source": "vdir",
-        })
+        }
+        if include_reminder_lists:
+            calendar["reminderList"] = reminder_list
+        calendars.append(calendar)
     return calendars
 
 
