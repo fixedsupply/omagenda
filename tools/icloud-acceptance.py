@@ -353,8 +353,16 @@ def main(argv: list[str] | None = None) -> int:
                'PYTHONDONTWRITEBYTECODE': '1'}
 
         def cli(*args: str) -> dict:
+            started = time.monotonic()
             result = subprocess.run(cli_command(folder, *args, '--json'), env=env,
                                     capture_output=True, text=True, timeout=150)
+            # Kept only in the private temporary folder, which is retained on
+            # failure: the isolated CLI's own detail says which step failed.
+            log = folder / 'isolated-cli.log'
+            with os.fdopen(os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), 'a') as stream:
+                stream.write(json.dumps({'args': list(args), 'exit': result.returncode,
+                                         'seconds': round(time.monotonic() - started, 1),
+                                         'stdout': result.stdout[-4000:], 'stderr': result.stderr[-4000:]}) + '\n')
             if result.returncode:
                 raise RuntimeError('Isolated CLI command failed')
             return json.loads(result.stdout)

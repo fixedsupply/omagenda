@@ -143,21 +143,58 @@ class RealPimsyncConflictTest(unittest.TestCase):
         self.assertTrue(first["ok"], first)
         self.assertEqual((self.a / "e.ics").read_bytes(), event("Original"))
 
+        (self.b / "displayname").write_text("Remote name")
+        self.assertTrue(sync._sync_caldav(self.account)["ok"])
+
         replace(self.a / "e.ics", event("Local conflict copy"))
         replace(self.b / "e.ics", event("Remote conflict winner"))
+        # A calendar renamed on both sides too: resolve-conflicts prompts for
+        # properties and, unanswered, repeats that prompt forever.
+        (self.a / "displayname").write_text("Local rename")
+        (self.b / "displayname").write_text("Remote rename")
         result = sync._sync_caldav(self.account)
 
         self.assertTrue(result["ok"], result)
         self.assertEqual(result.get("conflicts"), 1)
+        self.assertEqual(result.get("propertyConflicts"), 1)
+        self.assertEqual((self.a / "displayname").read_text(), "Remote rename")
         self.assertEqual((self.a / "e.ics").read_bytes(), event("Remote conflict winner"))
         self.assertEqual((self.b / "e.ics").read_bytes(), event("Remote conflict winner"))
         saved = list((self.state / "conflicts" / "conflicttest").glob("*.conflict.ics"))
         self.assertEqual(len(saved), 1)
         self.assertEqual(saved[0].read_bytes(), event("Local conflict copy"))
-        self.assertEqual(sorted(p.name for p in self.a.iterdir()), ["e.ics"])
-        self.assertEqual(sorted(p.name for p in self.b.iterdir()), ["e.ics"])
+        self.assertEqual(sorted(p.name for p in self.a.glob("*.ics")), ["e.ics"])
+        self.assertEqual(sorted(p.name for p in self.b.glob("*.ics")), ["e.ics"])
         self.assertNotIn("keep b", accounts.pimsync_config_path("conflicttest").read_text())
 
         again = sync._sync_caldav(self.account)
         self.assertTrue(again["ok"], again)
         self.assertNotIn("conflicts", again)
+
+    def test_property_conflict_alone_is_resolved_to_the_server_value(self):
+        (self.b / "e.ics").write_bytes(event("Original"))
+        (self.b / "displayname").write_text("Remote name")
+        self.assertTrue(sync._sync_caldav(self.account)["ok"])
+        (self.a / "displayname").write_text("Local rename")
+        (self.b / "displayname").write_text("Remote rename")
+        result = sync._sync_caldav(self.account)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual((result.get("conflicts"), result.get("propertyConflicts")), (0, 1))
+        self.assertEqual((self.a / "displayname").read_text(), "Remote rename")
+        self.assertFalse((self.state / "conflicts").exists())
+        self.assertNotIn("propertyConflicts", sync._sync_caldav(self.account))
+
+
+class ConflictParsingTest(unittest.TestCase):
+    def test_counts_items_and_properties_separately(self):
+        stdout = ("Plan:\n-> Item x1: conflict\n-> Item x2: conflict\n"
+                  '-> Property display name: conflict (a: "A", b: "B")\n3 conflicts detected\n')
+        self.assertEqual(sync.pimsync_conflicts(stdout), (2, 1))
+        self.assertEqual(sync.pimsync_conflicts("0 conflicts detected\n"), (0, 0))
+        self.assertEqual(sync.pimsync_conflicts(None), (0, 0))
+
+    def test_answers_cover_every_prompt_in_any_order(self):
+        answers = sync.pimsync_resolve_answers(2, 1).split()
+        self.assertGreaterEqual(answers.count("y"), 2 * 2)
+        self.assertGreaterEqual(answers.count("b"), 2 * 1)
+        self.assertEqual(set(answers), {"y", "b"})

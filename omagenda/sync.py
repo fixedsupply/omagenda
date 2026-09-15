@@ -79,22 +79,30 @@ def _sync_caldav(account: dict) -> dict:
             )
 
         result = pimsync("sync")
-        match = _PIMSYNC_CONFLICTS.search(result.stdout or "")
-        conflicts = int(match.group(1)) if match else 0
-        if result.returncode != 0 and conflicts:
-            # `sync` never applies conflict_resolution itself; the resolver
-            # only runs under `resolve-conflicts`. stdin is closed so its
-            # per-item prompt cannot wait on a terminal.
-            pimsync("resolve-conflicts", stdin=subprocess.DEVNULL)
+        items, properties = pimsync_conflicts(result.stdout)
+        if items or properties:
+            # `sync` never applies conflict_resolution itself; it only runs
+            # under `resolve-conflicts`, which prompts for every conflict.
+            # Its output is discarded because a prompt that is never
+            # answered repeats without end.
+            subprocess.run(
+                [binary, "-c", str(config_path), "resolve-conflicts", _safe_pair_name(account["id"])],
+                input=pimsync_resolve_answers(items, properties), text=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60,
+            )
             result = pimsync("sync")
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"ok": False, "detail": f"{tool} failed to run: {exc}"}
     if result.returncode != 0:
         return {"ok": False, "detail": f"{tool} exited {result.returncode}: {result.stderr.strip()[:200]}"}
-    if conflicts:
-        return {"ok": True, "conflicts": conflicts,
-                "detail": f"{tool} sync ok; kept the server version of {conflicts} conflicting "
-                          f"event{'s' if conflicts != 1 else ''} and saved yours"}
+    if items or properties:
+        kept = []
+        if items:
+            kept.append(f"{items} conflicting event{'s' if items != 1 else ''} (yours saved)")
+        if properties:
+            kept.append(f"{properties} calendar setting{'s' if properties != 1 else ''}")
+        return {"ok": True, "conflicts": items, "propertyConflicts": properties,
+                "detail": f"{tool} sync ok; kept the server version of " + " and ".join(kept)}
     return {"ok": True, "detail": f"{tool} sync ok"}
 
 
@@ -157,7 +165,30 @@ def preserve_pimsync_conflict(account_id: str, local: Path, remote: Path, state_
     return path
 
 
-_PIMSYNC_CONFLICTS = re.compile(r"^(\d+) conflicts? detected", re.MULTILINE)
+_PIMSYNC_ITEM_CONFLICT = re.compile(r"^-> Item .*: conflict\b", re.MULTILINE)
+_PIMSYNC_PROPERTY_CONFLICT = re.compile(r"^-> Property .*: conflict\b", re.MULTILINE)
+
+
+def pimsync_conflicts(stdout: str) -> tuple[int, int]:
+    """(event conflicts, collection property conflicts) listed by `pimsync sync`.
+
+    Its "N conflicts detected" total mixes the two, and a property conflict
+    alone (a calendar renamed or recoloured on both sides) still exits 0."""
+    text = stdout or ""
+    return len(_PIMSYNC_ITEM_CONFLICT.findall(text)), len(_PIMSYNC_PROPERTY_CONFLICT.findall(text))
+
+
+def pimsync_resolve_answers(items: int, properties: int) -> str:
+    """Answers for `pimsync resolve-conflicts`, which asks per conflict.
+
+    Items: "Resolve it manually? (Y)es, (N)o, or (Q)uit" -> y runs the `cmd`
+    resolver. Properties: "Keep (A), (B), (E)dit, (S)kip, or (Q)uit" -> b,
+    the server, which is Omagenda's policy. Neither prompt accepts the other's
+    answer and each simply asks again, so alternating y and b answers every
+    prompt in any order. The supply is finite on purpose: at end of input a
+    property prompt repeats forever, so it must never run out early, and the
+    caller's timeout is the backstop."""
+    return "y\nb\n" * (2 * (items + properties) + 4)
 
 
 _UID_LINE = re.compile(rb"^UID:.*(?:\r?\n[ \t].*)*\r?\n", re.MULTILINE)
