@@ -13,6 +13,12 @@ with tempfile.TemporaryDirectory(prefix="omagenda-tests-") as tmp:
     base = Path(tmp)
     os.environ.update(OMAGENDA_CONFIG=str(base / "config.toml"),
                       OMAGENDA_STATE=str(base / "state"), OMAGENDA_VDIR=str(base / "calendars"))
+    guard_bin = base / "bin"
+    guard_bin.mkdir()
+    secret_tool = guard_bin / "secret-tool"
+    secret_tool.write_text("#!/bin/sh\nexit 1\n")
+    secret_tool.chmod(0o700)
+    os.environ["PATH"] = str(guard_bin) + os.pathsep + os.environ["PATH"]
     from omagenda import accounts, doctor
     with patch.object(accounts, "SECRETS_DIR", base / "secrets"), \
          patch.object(accounts, "PIMSYNC_CONFIG_DIR", base / "pimsync"), \

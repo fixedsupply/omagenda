@@ -56,7 +56,10 @@ class AddRemoveAccountTest(unittest.TestCase):
     def test_add_writes_and_reads_back_via_explicit_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.toml"
-            with mock.patch("omagenda.doctor.CONFIG_PATH", path):
+            with mock.patch("omagenda.doctor.CONFIG_PATH", path), \
+                 mock.patch("omagenda.accounts.get_secret", return_value=None), \
+                 mock.patch("omagenda.accounts.delete_secret"), \
+                 mock.patch("omagenda.accounts.PIMSYNC_CONFIG_DIR", Path(tmp)) :
                 add_account({"id": "g", "type": "google", "email": "calvin@example.com"}, path)
                 accounts = list_accounts()
                 self.assertEqual([a["id"] for a in accounts], ["g"])

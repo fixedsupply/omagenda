@@ -608,10 +608,18 @@ def cmd_account_list(args) -> int:
 def cmd_account_remove(args) -> int:
     from omagenda.accounts import remove_account
 
-    if remove_account(args.id):
+    result = remove_account(args.id)
+    if result is None:
+        return _fail(f"no account named '{args.id}'")
+    if result["revoked"] is False:
+        print("Warning: Google revocation failed; revoke access at https://myaccount.google.com/permissions", file=sys.stderr)
+    if args.json:
+        print(json.dumps(result))
+    else:
         print(f"Removed '{args.id}'.")
-        return 0
-    return _fail(f"no account named '{args.id}'")
+    print(f"Local calendar folder retained; you may delete it: {result['calendarFolder']}",
+          file=sys.stderr if args.json else sys.stdout)
+    return 0
 
 
 def cmd_sync(args) -> int:
@@ -779,6 +787,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_account_remove = account_sub.add_parser("remove", help="remove an account")
     p_account_remove.add_argument("id")
+    p_account_remove.add_argument("--json", action="store_true")
     p_account_remove.set_defaults(func=cmd_account_remove)
 
     for name, phase in NOT_YET_IMPLEMENTED.items():

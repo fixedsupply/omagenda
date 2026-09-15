@@ -16,6 +16,9 @@ import json
 import os
 import shutil
 import sys
+import subprocess
+import shlex
+import re
 from pathlib import Path
 
 CONFIG_PATH = Path(os.environ.get("OMAGENDA_CONFIG", Path.home() / ".config" / "omagenda" / "config.toml"))
@@ -130,6 +133,39 @@ def _check_sign_in() -> dict:
     return {"ok": True, "detail": f"last synced {record.get('at', '?')}"}
 
 
+def _check_leftover_tokens(config: dict) -> dict:
+    from omagenda.accounts import SECRETS_DIR
+
+    suffix = "-refresh-token"
+    names = {p.name for p in SECRETS_DIR.glob("*" + suffix) if p.is_file()}
+    skipped = False
+    binary = shutil.which("secret-tool")
+    try:
+        if not binary:
+            skipped = True
+        else:
+            result = subprocess.run([binary, "search", "--all", "service", "omagenda"],
+                                    capture_output=True, text=True, timeout=10)
+            if result.returncode:
+                skipped = True
+            else:
+                # Search prints secrets too. Only account attributes leave this scope.
+                names.update(re.findall(r"^attribute\.account = (.+)$", result.stdout, re.MULTILINE))
+            del result
+    except (OSError, subprocess.TimeoutExpired):
+        skipped = True
+    configured = {a["id"] for a in config.get("accounts", [])}
+    leftovers = sorted(name for name in names if name.endswith(suffix) and name[:-len(suffix)] not in configured)
+    details = []
+    for name in leftovers:
+        details.append(f"{name[:-len(suffix)]}: secret-tool clear service omagenda account {shlex.quote(name)}; "
+                       f"rm -f {shlex.quote(str(SECRETS_DIR / name))}")
+    if skipped:
+        details.append("keyring check skipped (unavailable or locked)")
+    return {"ok": not leftovers, "skipped": skipped,
+            "detail": "; ".join(details) or "no leftover tokens"}
+
+
 def run() -> dict:
     from omagenda.sets import read_active
 
@@ -141,6 +177,7 @@ def run() -> dict:
                       "detail": (active or "all") if known else
                       f"warning: unknown calendar set {active!r}; showing all calendars. "
                       "Run omagenda set --clear."},
+        "leftoverTokens": _check_leftover_tokens(config),
         "packages": _check_packages(),
         "vdir": _check_vdir(),
         "signIn": _check_sign_in(),

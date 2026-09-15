@@ -22,6 +22,11 @@ examples, not guessed.
 from __future__ import annotations
 
 import re
+import os
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
 import shutil
 import subprocess
 from pathlib import Path
@@ -29,7 +34,7 @@ from pathlib import Path
 from omagenda.doctor import CONFIG_PATH, read_config
 
 SERVICE = "omagenda"
-SECRETS_DIR = Path.home() / ".local" / "state" / "omagenda" / "secrets"
+SECRETS_DIR = Path(os.environ.get("OMAGENDA_STATE", Path.home() / ".local/state/omagenda")) / "secrets"
 PIMSYNC_CONFIG_DIR = Path.home() / ".config" / "pimsync"
 PIMSYNC_STATUS_DIR = Path.home() / ".local" / "share" / "pimsync" / "status"
 
@@ -96,17 +101,49 @@ def add_account(account: dict, path: Path | None = None) -> None:
     write_config(config, path)
 
 
-def remove_account(account_id: str, path: Path | None = None) -> bool:
+def _revoke_google_token(token: str) -> bool:
+    request = urllib.request.Request(
+        "https://oauth2.googleapis.com/revoke",
+        data=urllib.parse.urlencode({"token": token}).encode("utf-8"),
+        headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status == 200
+    except urllib.error.HTTPError as exc:
+        try:
+            return exc.code == 400 and json.loads(exc.read()).get("error") == "invalid_token"
+        except Exception:
+            return False
+        finally:
+            exc.close()
+    except Exception:
+        # Transport exceptions can contain the credential; never relay them.
+        return False
+
+
+def remove_account(account_id: str, path: Path | None = None) -> dict | None:
     config = read_config()
     accounts = config.get("accounts", [])
     remaining = [a for a in accounts if a["id"] != account_id]
     if len(remaining) == len(accounts):
-        return False
+        return None
+    account = next(a for a in accounts if a["id"] == account_id)
+    revoked = None
+    if account.get("type") == "google":
+        from omagenda.bridges.google import _TOKEN_SECRET_SUFFIX
+
+        token = get_secret(account_id + _TOKEN_SECRET_SUFFIX)
+        if token:
+            revoked = _revoke_google_token(token)
+        delete_secret(account_id + _TOKEN_SECRET_SUFFIX)
+    delete_secret(account_id)
     config["accounts"] = remaining
     write_config(config, path)
-    delete_secret(account_id)
     pimsync_config_path(account_id).unlink(missing_ok=True)
-    return True
+    from omagenda.vdir import resolve_vdir_root
+
+    return {"removed": True, "revoked": revoked,
+            "calendarFolder": str(resolve_vdir_root() / account_id)}
 
 
 def list_accounts() -> list[dict]:
@@ -143,12 +180,15 @@ def store_secret(account_id: str, secret: str) -> bool:
 def get_secret(account_id: str) -> str | None:
     binary = shutil.which("secret-tool")
     if binary:
-        result = subprocess.run(
-            [binary, "lookup", "service", SERVICE, "account", account_id],
-            capture_output=True, text=True,
-        )
-        if result.returncode == 0 and result.stdout:
-            return result.stdout
+        try:
+            result = subprocess.run(
+                [binary, "lookup", "service", SERVICE, "account", account_id],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout:
+                return result.stdout
+        except (OSError, subprocess.TimeoutExpired):
+            pass
     try:
         return _secret_file_path(account_id).read_text(encoding="utf-8")
     except OSError:
@@ -158,7 +198,11 @@ def get_secret(account_id: str) -> str | None:
 def delete_secret(account_id: str) -> None:
     binary = shutil.which("secret-tool")
     if binary:
-        subprocess.run([binary, "clear", "service", SERVICE, "account", account_id], capture_output=True)
+        try:
+            subprocess.run([binary, "clear", "service", SERVICE, "account", account_id],
+                           capture_output=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
     _secret_file_path(account_id).unlink(missing_ok=True)
 
 
