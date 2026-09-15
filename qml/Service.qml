@@ -93,6 +93,7 @@ Item {
     onLoaded: {
       try {
         root.agenda = JSON.parse(text())
+        visibilityProc.failure = Model.visibilityFailureAfterLoad(visibilityProc.failure, visibilityProc.running, root.visibilityPending)
         if (visibilityProc.failure === "") root.lastError = ""
       } catch (e) {
         root.lastError = "agenda.json is not valid JSON: " + e

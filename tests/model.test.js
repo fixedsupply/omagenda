@@ -492,6 +492,16 @@ test("visibility queue retains rapid toggles in order and overlays the latest in
   assert.deepEqual(Model.calendarRows(agenda, []).map(c => c.hidden), [false, false])
 })
 
+test("visibility failure clears on a successful load after the queue drains", () => {
+  const failure = "Calendar visibility update failed"
+  const queue = [{ id: "a", hidden: true }]
+  assert.equal(Model.visibilityFailureAfterLoad(failure, true, []), failure)
+  assert.equal(Model.visibilityFailureAfterLoad(failure, false, queue), failure)
+  const drained = Model.visibilityQueue(queue, { type: "complete" })
+  assert.equal(Model.visibilityFailureAfterLoad(failure, false, drained), "")
+  assert.deepEqual(Model.calendarRows({ calendars: [{ id: "a", hidden: false }] }, drained).map(c => c.hidden), [false])
+})
+
 test("calendar groups preserve discovery order within the first-seen account order", () => {
   const ids = ["google/z", "personal", "google/a", "cloud/work", "other"]
   assert.deepEqual(Model.calendarRows({ calendars: ids.map(id => ({ id })) }, []).map(c => c.id),

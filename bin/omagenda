@@ -145,16 +145,18 @@ def cmd_calendars(args) -> int:
     config = read_config()
 
     known = {c["id"] for c in calendars}
-    if any(c not in known for c in args.hide + args.show):
-        return _fail("unknown calendar id")
+    for calendar_id in args.hide + args.show:
+        if calendar_id not in known:
+            return _fail(f"no calendar named '{calendar_id}'")
     if args.clear_default:
         config.pop("default_calendar", None)
     if args.set_default:
         target = next((c for c in calendars if c["id"] == args.set_default), None)
         if target is None:
-            return _fail("unknown calendar id")
+            names = ", ".join(c["id"] for c in calendars) or "none"
+            return _fail(f"no calendar named '{args.set_default}' (have: {names})")
         if target["readOnly"]:
-            return _fail("default calendar is read-only")
+            return _fail(f"'{args.set_default}' is read-only, so new events can't go there")
         config["default_calendar"] = target["id"]
     hidden = list(config.get("hidden_calendars", []))
     if args.show_all:
@@ -174,6 +176,19 @@ def cmd_calendars(args) -> int:
 
     if args.json:
         print(json.dumps({"calendars": calendars, "defaultCalendar": config.get("default_calendar"), "hiddenCalendars": hidden}))
+        return 0
+    confirmations = []
+    if args.clear_default:
+        confirmations.append("Cleared the default calendar. New events go to the first writable calendar.")
+    if args.set_default:
+        confirmations.append(f"New events now go to '{args.set_default}' unless a sentence says otherwise.")
+    if args.show_all:
+        confirmations.append("Showing all calendars")
+    names = {c["id"]: c["name"] for c in calendars}
+    confirmations.extend(f"Hidden: {names[c]}" for c in args.hide)
+    confirmations.extend(f"Showing: {names[c]}" for c in args.show)
+    if confirmations:
+        print("\n".join(confirmations))
         return 0
     if not calendars:
         print("No calendars found. Create one under ~/.local/share/calendars/<name>/.")

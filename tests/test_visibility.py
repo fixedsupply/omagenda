@@ -79,13 +79,48 @@ class VisibilityTest(unittest.TestCase):
         result = json.loads(self.command('calendars', '--show-all', '--json'))
         self.assertEqual(result['hiddenCalendars'], [])
 
+    def test_mutations_print_only_confirmations(self):
+        for arguments, expected in [
+            (['--set-default', 'personal'], "New events now go to 'personal' unless a sentence says otherwise."),
+            (['--clear-default'], 'Cleared the default calendar. New events go to the first writable calendar.'),
+            (['--hide', 'personal'], 'Hidden: Personal'),
+            (['--show', 'personal'], 'Showing: Personal'),
+            (['--show-all'], 'Showing all calendars'),
+        ]:
+            with self.subTest(arguments=arguments):
+                self.assertEqual(self.command('calendars', *arguments), expected + '\n')
+
+    def test_default_mutations_keep_json_output(self):
+        for arguments, expected in [(['--set-default', 'personal'], 'personal'),
+                                    (['--clear-default'], None)]:
+            result = json.loads(self.command('calendars', *arguments, '--json'))
+            self.assertEqual(result['defaultCalendar'], expected)
+            self.assertIn('calendars', result)
+            self.assertEqual(result['hiddenCalendars'], [])
+
+    def test_default_errors_are_helpful_and_do_not_write(self):
+        original = self.config.read_bytes()
+        calendars = [{'id': 'personal', 'name': 'Personal', 'readOnly': True}]
+        for calendar_id, expected in [
+            ('missing', "no calendar named 'missing' (have: personal)"),
+            ('personal', "'personal' is read-only, so new events can't go there"),
+        ]:
+            error = io.StringIO()
+            with patch('omagenda.vdir.discover_calendars', return_value=calendars), contextlib.redirect_stderr(error):
+                args = cli.build_parser().parse_args(['calendars', '--set-default', calendar_id])
+                self.assertNotEqual(args.func(args), 0)
+            self.assertEqual(error.getvalue(), 'omagenda: ' + expected + '\n')
+            self.assertEqual(self.config.read_bytes(), original)
+
     def test_unknown_id_has_one_safe_error_and_no_write(self):
         original = self.config.read_bytes()
-        result = subprocess.run([sys.executable, str(ROOT / 'bin/omagenda'), 'calendars', '--hide', 'not-known'],
-                                env=self.env, text=True, capture_output=True)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(result.stderr.splitlines(), ['omagenda: unknown calendar id'])
-        self.assertEqual(self.config.read_bytes(), original)
+        for flag in ['--hide', '--show']:
+            result = subprocess.run([sys.executable, str(ROOT / 'bin/omagenda'), 'calendars', flag, 'not-known'],
+                                    env=self.env, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, '')
+            self.assertEqual(result.stderr.splitlines(), ["omagenda: no calendar named 'not-known'"])
+            self.assertEqual(self.config.read_bytes(), original)
 
     def test_every_config_rewrite_preserves_visibility(self):
         self.save(['work', 'missing'])

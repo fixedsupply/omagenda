@@ -446,6 +446,11 @@ function visibilityQueue(queue, action) {
   return queue.slice()
 }
 
+// A successful agenda load acknowledges recovery only after every write finishes.
+function visibilityFailureAfterLoad(failure, running, queue) {
+  return running || queue.length > 0 ? failure : ""
+}
+
 function calendarRows(agenda, queue) {
   var groups = []
   var rows = []
@@ -499,6 +504,7 @@ if (typeof module !== "undefined") {
     secondLine: secondLine,
     footerText: footerText,
     visibilityQueue: visibilityQueue,
+    visibilityFailureAfterLoad: visibilityFailureAfterLoad,
     calendarRows: calendarRows,
     destinationText: destinationText,
     escapeHtml: escapeHtml,
