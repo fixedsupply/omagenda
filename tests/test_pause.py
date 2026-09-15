@@ -133,3 +133,21 @@ class PauseTest(unittest.TestCase):
     def test_flags_mutually_exclusive(self):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             cli.build_parser().parse_args(['sync', '--pause', '1h', '--resume'])
+
+    def test_failed_sync_waits_for_interval_before_retrying(self):
+        self.config.write_text('[[accounts]]\nid="demo"\ntype="icloud"\n')
+        now = [1000.0]
+        calls_per_tick = []
+        def tick(*args, **kwargs):
+            calls_per_tick.append(attempt.call_count)
+            if len(calls_per_tick) == 3:
+                raise KeyboardInterrupt
+            now[0] = 1001.0 if len(calls_per_tick) == 1 else 1300.0
+            return False
+        with patch.object(sync, 'sync_all', side_effect=OSError('network down')) as attempt, \
+             patch('time.monotonic', side_effect=lambda: now[0]), \
+             patch.object(cli, '_wait_for_vdir_change', side_effect=tick), \
+             patch('omagenda.alarms.check_and_fire'), \
+             contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.cmd_watch(cli.build_parser().parse_args(['watch'])), 0)
+        self.assertEqual(calls_per_tick, [1, 1, 2])

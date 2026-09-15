@@ -381,7 +381,7 @@ def _sync_once() -> bool:
             return False
     except Exception as exc:  # noqa: BLE001 -- a watcher must not die of this
         print(f"omagenda watch: sync failed, will retry: {exc}", file=sys.stderr)
-        return False
+        return True
     broken = {k: v for k, v in results.items() if not v.get("ok", False)}
     for account_id, result in sorted(broken.items()):
         print(f"omagenda watch: sync failed for '{account_id}': "
