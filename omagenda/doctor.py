@@ -167,16 +167,19 @@ def _check_leftover_tokens(config: dict) -> dict:
 
 
 def run() -> dict:
+    from omagenda.pause import read_pause
     from omagenda.sets import read_active
 
     config = read_config()
     active = read_active()
+    paused = read_pause()
     known = not active or active in config.get("sets", {})
     return {
         "activeSet": {"ok": known,
                       "detail": (active or "all") if known else
                       f"warning: unknown calendar set {active!r}; showing all calendars. "
                       "Run omagenda set --clear."},
+        "syncPause": {"ok": True, "detail": f"paused until {paused}" if paused else "not paused"},
         "leftoverTokens": _check_leftover_tokens(config),
         "packages": _check_packages(),
         "vdir": _check_vdir(),

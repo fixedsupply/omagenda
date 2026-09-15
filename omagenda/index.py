@@ -174,6 +174,7 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
     start = start or date.today()
     end_span = timedelta(days=days)
     calendars = vdir.discover_calendars(vdir_root)
+    from omagenda.pause import read_pause
     from omagenda.sets import defined_sets, read_active
 
     if active_set is None:
@@ -291,6 +292,7 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
         "needsReauth": needs_reauth,
         "syncRemedy": sync_remedy,
         "activeSet": active_set,
+        "syncPausedUntil": read_pause(state_dir),
         "calendars": [{k: v for k, v in c.items()} for c in calendars],
         "events": events,
     }

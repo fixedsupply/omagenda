@@ -470,3 +470,14 @@ test("needsReauth is only true when an account actually needs it", () => {
   assert.equal(Model.needsReauth({ needsReauth: [] }), false)
   assert.equal(Model.needsReauth(null), false)
 })
+
+test("footerText gives an active sync pause precedence over every sync status", () => {
+  for (const state of [{}, { lastSync: "2026-09-08T13:45:00" }, { syncOk: false }]) {
+    assert.equal(Model.footerText({ activeSet: "work", ...state,
+      syncPausedUntil: "2026-09-08T15:30:00" }, "24h"),
+      "Set: work · sync paused until 15:30")
+  }
+  assert.equal(Model.footerText({ syncPausedUntil: "2026-09-08T15:30:00" }, "12h"),
+    "Set: all · sync paused until " + Model.formatTime("2026-09-08T15:30:00", "12h"))
+  assert.equal(Model.footerText({ syncPausedUntil: null }, "24h"), "Set: all · not synced")
+})

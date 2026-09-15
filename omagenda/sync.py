@@ -505,8 +505,13 @@ def _sync_lock(state_dir=None, timeout: float = 240.0):
         handle.close()  # closing releases the flock
 
 
-def sync_all(config: dict | None = None, state_dir=None) -> dict:
+def sync_all(config: dict | None = None, state_dir=None, respect_pause: bool = False) -> dict:
+    from omagenda.pause import read_pause
+
     with _sync_lock(state_dir):
+        paused_until = read_pause(state_dir) if respect_pause else None
+        if paused_until:
+            return {"_pause": {"ok": True, "skipped": True, "pausedUntil": paused_until}}
         return _sync_all_locked(config, state_dir)
 
 

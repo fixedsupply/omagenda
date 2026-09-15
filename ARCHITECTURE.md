@@ -124,6 +124,7 @@ Written atomically (temp file + rename). Times are RFC 3339 with offset; all-day
   "range": { "from": "2026-09-07", "to": "2026-09-21" },
   "lastSync": "2026-09-07T14:05:12-06:00",
   "activeSet": "work",
+  "syncPausedUntil": null,
   "calendars": [
     { "id": "personal", "name": "Personal", "path": "/home/crs/.local/share/calendars/personal", "color": "blue", "readOnly": false, "source": "vdir" }
   ],
@@ -227,6 +228,22 @@ default_lead = "PT10M"      # used when an event has no VALARM
 ```
 
 `omagenda calendars` prints the merged view so QML has one place to ask.
+
+Watcher sync can be paused with `omagenda sync --pause 30m` and resumed
+with `omagenda sync --resume`. Durations are positive integers with `s`, `m`
+or `h`, capped at 24 hours. Both flags accept `--json`, returning
+`{"pausedUntil": "<ISO timestamp>"}` or `{"pausedUntil": null}`.
+The mutually exclusive flags do not perform a sync. Manual `omagenda sync`
+still runs during a pause and prints a note on stderr.
+
+`$OMAGENDA_STATE/sync-paused-until` contains an ISO-8601 timestamp with a UTC
+offset, written atomically. Pause waits for the existing sync lock before
+returning; watcher sync checks the timestamp inside that same lock. Expired
+or unreadable files mean not paused. The watcher leaves the file untouched
+and preserves pending local changes through skipped syncs. At each index,
+`agenda.json.syncPausedUntil` carries the active timestamp or null; the footer
+shows `sync paused until HH:MM` using the configured time format. `doctor`
+reports the state in `syncPause`.
 
 Calendar sets belong to `[sets]` in `config.toml`, in definition order.
 Each value is a list of calendar ids from `omagenda calendars --json`.
