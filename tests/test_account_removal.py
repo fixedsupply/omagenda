@@ -50,8 +50,20 @@ class RemovalTest(unittest.TestCase):
         self.assertTrue((self.vdir / 'demo/event.ics').exists())
         return out.getvalue(), err.getvalue()
 
+    def test_default_is_local_only(self):
+        out, _ = self.remove('--json')
+        self.assertIsNone(json.loads(out)['revoked'])
+        self.network.assert_not_called()
+        self.assertFalse((self.secrets / 'demo-refresh-token').exists())
+
+    def test_default_text(self):
+        out, _ = self.remove()
+        self.assertEqual(len(out.splitlines()), 1)
+        self.assertIn("access to Google was not revoked", out)
+        self.network.assert_not_called()
+
     def test_success_and_json(self):
-        out, err = self.remove('--json')
+        out, err = self.remove('--json', '--revoke')
         self.assertEqual(json.loads(out), {'removed': True, 'revoked': True,
                                          'calendarFolder': str(self.vdir / 'demo')})
         self.assertFalse((self.secrets / 'demo-refresh-token').exists())
@@ -66,12 +78,12 @@ class RemovalTest(unittest.TestCase):
     def test_already_invalid(self):
         self.network.side_effect = urllib.error.HTTPError('unused', 400, 'bad', {},
             io.BytesIO(b'{"error":"invalid_token"}'))
-        out, _ = self.remove('--json')
+        out, _ = self.remove('--json', '--revoke')
         self.assertTrue(json.loads(out)['revoked'])
 
     def test_offline_removes_and_warns_without_exception_contents(self):
         self.network.side_effect = OSError('fake-private-token')
-        out, err = self.remove('--json')
+        out, err = self.remove('--json', '--revoke')
         self.assertFalse(json.loads(out)['revoked'])
         self.assertIn('https://myaccount.google.com/permissions', err)
         self.assertEqual(sum(line.startswith('Warning:') for line in err.splitlines()), 1)
@@ -79,18 +91,18 @@ class RemovalTest(unittest.TestCase):
 
     def test_other_response_is_failure(self):
         self.network.return_value.__enter__.return_value.status = 503
-        out, _ = self.remove('--json')
+        out, _ = self.remove('--json', '--revoke')
         self.assertFalse(json.loads(out)['revoked'])
 
     def test_no_token(self):
         (self.secrets / 'demo-refresh-token').unlink()
-        out, _ = self.remove('--json')
+        out, _ = self.remove('--json', '--revoke')
         self.assertIsNone(json.loads(out)['revoked'])
         self.network.assert_not_called()
 
     def test_non_google(self):
         self.configure('icloud')
-        out, _ = self.remove('--json')
+        out, _ = self.remove('--json', '--revoke')
         self.assertIsNone(json.loads(out)['revoked'])
         self.network.assert_not_called()
 

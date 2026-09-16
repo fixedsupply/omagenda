@@ -249,3 +249,9 @@ and is marked `(hidden)` in the destination line.
 `omagenda calendars --hide ID`, `--show ID` (repeatable), and `--show-all`
 save visibility in the top-level `hidden_calendars` config preference.
 `omagenda calendars --json` includes hidden flags and the saved ids.
+
+Account removal with `omagenda account remove <id>` deletes local credentials
+and configuration only; local calendar files remain. For Google, use
+`omagenda account remove <id> --revoke` instead to revoke access everywhere.
+Revoking signs Omagenda out on every computer using that Google account.
+After local removal, revoke access through https://myaccount.google.com/permissions.

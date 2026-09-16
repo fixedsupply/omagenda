@@ -116,7 +116,7 @@ def _revoke_google_token(token: str) -> bool:
         return False
 
 
-def remove_account(account_id: str, path: Path | None = None) -> dict | None:
+def remove_account(account_id: str, path: Path | None = None, *, revoke: bool = False) -> dict | None:
     config = read_config()
     accounts = config.get("accounts", [])
     remaining = [a for a in accounts if a["id"] != account_id]
@@ -127,7 +127,7 @@ def remove_account(account_id: str, path: Path | None = None) -> dict | None:
     if account.get("type") == "google":
         from omagenda.bridges.google import _TOKEN_SECRET_SUFFIX
 
-        token = get_secret(account_id + _TOKEN_SECRET_SUFFIX)
+        token = get_secret(account_id + _TOKEN_SECRET_SUFFIX) if revoke else None
         if token:
             revoked = _revoke_google_token(token)
         delete_secret(account_id + _TOKEN_SECRET_SUFFIX)

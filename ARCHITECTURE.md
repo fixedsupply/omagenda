@@ -476,7 +476,7 @@ All rows accept `--help`; JSON support is listed explicitly.
 | `watch` | `--days`, `--poll-seconds`, `--sync-interval`, `--no-sync` |
 | `account add google\|icloud\|caldav\|ics` | `--id`, `--email` (Google), `--username` (CalDAV/iCloud), `--url` (CalDAV/ICS), `--color` (ICS) |
 | `account list` | `--json` |
-| `account remove ID` | `--json` |
+| `account remove ID` | `--json`, `--revoke` |
 | `resolve-conflict --account ID LOCAL REMOTE` | Internal pimsync helper; no JSON mode. |
 
 Use the hidden prompt for subscription URLs rather than passing credentials
@@ -548,8 +548,9 @@ Sync state per calendar lives in `~/.local/state/omagenda/sync/<account>/<calend
 
 A Google echo with the last recorded ETag preserves a pending local edit for
 upload; only a new remote version conflicts. Timed/all-day PATCH transitions
-explicitly clear the previous date form. Removing a Google account attempts
-revocation and removes stored refresh tokens; doctor checks for leftovers.
+explicitly clear the previous date form. Removing an account deletes local configuration and credentials without network access.
+Google revocation requires `--revoke` and warns that every computer is signed out.
+The JSON `revoked` field stays null unless revocation is attempted; doctor checks for leftovers.
 
 Google local edits to files containing multiple VEVENT components are
 refused until instance-level editing is implemented. Partial updates leave

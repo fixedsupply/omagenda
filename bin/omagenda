@@ -653,9 +653,12 @@ def cmd_account_list(args) -> int:
 
 
 def cmd_account_remove(args) -> int:
-    from omagenda.accounts import remove_account
+    from omagenda.accounts import list_accounts, remove_account
 
-    result = remove_account(args.id)
+    google = any(a["id"] == args.id and a["type"] == "google" for a in list_accounts())
+    if args.revoke and google:
+        print("Revoking signs Omagenda out on every computer that uses this Google account.", file=sys.stderr)
+    result = remove_account(args.id, revoke=args.revoke)
     if result is None:
         return _fail(f"no account named '{args.id}'")
     if result["revoked"] is False:
@@ -663,9 +666,12 @@ def cmd_account_remove(args) -> int:
     if args.json:
         print(json.dumps(result))
     else:
-        print(f"Removed '{args.id}'.")
-    print(f"Local calendar folder retained; you may delete it: {result['calendarFolder']}",
-          file=sys.stderr if args.json else sys.stdout)
+        message = f"Removed '{args.id}'."
+        if google and not args.revoke:
+            message += (" Omagenda's access to Google was not revoked; to revoke it everywhere, "
+                        f"run: omagenda account remove {args.id} --revoke, or visit "
+                        "https://myaccount.google.com/permissions")
+        print(message)
     return 0
 
 
@@ -870,6 +876,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_account_remove = account_sub.add_parser("remove", help="remove an account")
     p_account_remove.add_argument("id")
     p_account_remove.add_argument("--json", action="store_true")
+    p_account_remove.add_argument("--revoke", action="store_true", help="revoke Google access on every computer")
     p_account_remove.set_defaults(func=cmd_account_remove)
 
     for name, phase in NOT_YET_IMPLEMENTED.items():

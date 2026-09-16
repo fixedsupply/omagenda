@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.1 — unreleased
+
+- Account removal is local by default; Google revocation requires `--revoke`
+  and warns that it signs out every computer. Local calendars remain.
+
 ## v0.2.0 — unreleased
 
 ### Added

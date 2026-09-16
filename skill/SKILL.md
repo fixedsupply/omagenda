@@ -165,3 +165,9 @@ under `$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics
 (default `~/.local/state/omagenda`), replaces atomically and rebuilds the agenda.
 The watcher handles provider sync. In edit mode Enter saves, Escape cancels,
 and Tab and Shift+Enter are disabled. Normal Quick Add resets to add mode.
+
+Account removal with `omagenda account remove <id>` deletes local credentials
+and configuration only; local calendar files remain. For Google, use
+`omagenda account remove <id> --revoke` instead to revoke access everywhere.
+Revoking signs Omagenda out on every computer using that Google account.
+After local removal, revoke access through https://myaccount.google.com/permissions.
