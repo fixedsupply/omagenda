@@ -457,6 +457,83 @@ class ConcurrencyTest(unittest.TestCase):
         self.assertTrue(result["ok"])
 
 
+class EditVersusEchoTest(unittest.TestCase):
+    """Editing an event you had only just created used to be reverted.
+
+    Reported 2026-09-16: Quick Add created a Google event, the sync pushed
+    it and adopted Google's id, and the user edited it before the next
+    pull. That pull carried Google's echo of the new event, in Google's
+    own formatting, so its bytes differed from the file Omagenda wrote.
+    It was judged a remote change, the local edit became a conflict copy,
+    and the event went back to its original time.
+    """
+
+    LOCAL = (b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Omagenda//EN\r\nBEGIN:VEVENT\r\n"
+             b"UID:draft@omagenda\r\nSUMMARY:Lunch\r\nSEQUENCE:0\r\n"
+             b"DTSTART;TZID=America/Edmonton:20260917T130000\r\nDTEND;TZID=America/Edmonton:20260917T140000\r\n"
+             b"END:VEVENT\r\nEND:VCALENDAR\r\n")
+    GOOGLE_ECHO = (b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:new-remote-id\r\n"
+                   b"SUMMARY:Lunch\r\nDTSTART;TZID=America/Edmonton:20260917T130000\r\n"
+                   b"DTEND;TZID=America/Edmonton:20260917T140000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+
+    def _created(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        path = root / "acct" / "cal-1"
+        path.mkdir(parents=True)
+        (path / "draft@omagenda.ics").write_bytes(self.LOCAL)
+        calendar = RemoteCalendar(id="cal-1", name="Primary")
+        creating = FakeBridge()
+        _sync_one_calendar(creating, {"id": "acct"}, calendar, path, state_dir=root / "state")
+        self.assertEqual(len(creating.push_create_calls), 1)
+        self.assertTrue((path / "new-remote-id.ics").exists())
+        return root, path, calendar
+
+    def _edit(self, path):
+        edited = (path / "new-remote-id.ics").read_bytes().replace(b"T140000", b"T150000")
+        temporary = path / "edit.tmp"
+        temporary.write_bytes(edited)
+        os.replace(temporary, path / "new-remote-id.ics")
+        return edited
+
+    def test_an_edit_survives_the_server_echoing_the_new_event_back(self):
+        root, path, calendar = self._created()
+        edited = self._edit(path)
+        echo = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="new-remote-id", ics_bytes=self.GOOGLE_ECHO,
+            ref=RemoteRef(remote_id="new-remote-id", etag="etag-1"))])])
+        counts = _sync_one_calendar(echo, {"id": "acct"}, calendar, path, state_dir=root / "state")
+
+        self.assertEqual(counts["conflicts"], 0)
+        self.assertEqual(list(path.glob("*.conflict.ics")), [])
+        self.assertEqual([body for body, _ in echo.push_update_calls], [edited])
+        self.assertEqual(echo.push_update_calls[0][1].etag, "etag-1")
+        self.assertEqual((path / "new-remote-id.ics").read_bytes(), edited)
+
+    def test_a_real_remote_change_still_conflicts_with_a_local_edit(self):
+        root, path, calendar = self._created()
+        edited = self._edit(path)
+        remote = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="new-remote-id", ics_bytes=self.GOOGLE_ECHO.replace(b"SUMMARY:Lunch", b"SUMMARY:Lunch moved"),
+            ref=RemoteRef(remote_id="new-remote-id", etag="etag-2"))])])
+        counts = _sync_one_calendar(remote, {"id": "acct"}, calendar, path, state_dir=root / "state")
+
+        self.assertEqual(counts["conflicts"], 1)
+        self.assertEqual([p.read_bytes() for p in path.glob("*.conflict.ics")], [edited])
+        self.assertIn(b"SUMMARY:Lunch moved", (path / "new-remote-id.ics").read_bytes())
+
+    def test_an_unedited_echo_still_refreshes_to_the_server_copy(self):
+        root, path, calendar = self._created()
+        echo = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="new-remote-id", ics_bytes=self.GOOGLE_ECHO,
+            ref=RemoteRef(remote_id="new-remote-id", etag="etag-1"))])])
+        counts = _sync_one_calendar(echo, {"id": "acct"}, calendar, path, state_dir=root / "state")
+        self.assertEqual((counts["conflicts"], counts["pulled"]), (0, 1))
+        self.assertEqual(echo.push_update_calls, [])
+        self.assertEqual((path / "new-remote-id.ics").read_bytes(), self.GOOGLE_ECHO)
+
+
 class DeleteVersusEchoTest(unittest.TestCase):
     """Deleting an event you had only just created used to bring it back.
 

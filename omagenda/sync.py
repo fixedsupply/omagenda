@@ -303,6 +303,22 @@ def _sync_calendar_contents(bridge, account: dict, calendar, calendar_path: Path
     for change in pull_result.changed:
         digest = hashlib.sha256(change.ics_bytes).hexdigest()
         entry = state.items.get(change.uid)
+        # An echo, not a change: the server handing back the very version we
+        # last pushed or pulled (same etag), in its own formatting. After a
+        # create, Google's next pull always includes the new event, and its
+        # bytes never match the file Omagenda wrote. Treating that as a remote
+        # change turned a quick edit of a new event into a "conflict", reverted
+        # it and filed the edit as a conflict copy. A real remote change always
+        # carries a new etag, so it still reaches the conflict handling below.
+        # The rule applies only when there is a local edit to protect; without
+        # one the file is refreshed to the server's copy exactly as before, and
+        # a file deleted since the last sync is never in local_edits, so the
+        # snapshot-based deletion further down still sees it. Step 2 below then
+        # pushes the edit with the etag this echo just confirmed.
+        if (change.uid in local_edits and entry is not None and change.ref.etag
+                and entry.get("etag") == change.ref.etag):
+            counts["unchanged"] = counts.get("unchanged", 0) + 1
+            continue
         if change.uid in local_edits and entry is not None and entry["localHash"] != digest:
             preserve(change.uid, local_edits.pop(change.uid))
         # A "changed" event whose bytes are what we already hold is not a
