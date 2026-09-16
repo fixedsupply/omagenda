@@ -108,14 +108,22 @@ class RemovalTest(unittest.TestCase):
 
     def test_doctor_search_discards_secret_values(self):
         self.secret_run.return_value = subprocess.CompletedProcess([], 0,
-            '[item]\nsecret = fake-private-token\nattribute.account = old-refresh-token\n'
-            'attribute.account = demo-refresh-token\n', '')
+            '[item]\nsecret = fake-private-token\n',
+            'attribute.account = google-2-refresh-token\nattribute.account = demo-refresh-token\n')
         report = doctor._check_leftover_tokens(doctor.read_config())
         self.assertFalse(report['ok'])
         self.assertNotIn('fake-private-token', json.dumps(report))
-        self.assertIn('secret-tool clear service omagenda account old-refresh-token', report['detail'])
-        self.assertIn(f'rm -f {self.secrets}/old-refresh-token', report['detail'])
+        self.assertIn('secret-tool clear service omagenda account google-2-refresh-token', report['detail'])
+        self.assertIn(f'rm -f {self.secrets}/google-2-refresh-token', report['detail'])
         self.assertNotIn('demo', report['detail'])
+
+    def test_doctor_accepts_attributes_on_stdout_too(self):
+        self.secret_run.return_value = subprocess.CompletedProcess([], 0,
+            'secret = fake-private-token\nattribute.account = old-refresh-token\n', '')
+        report = doctor._check_leftover_tokens(doctor.read_config())
+        self.assertFalse(report['ok'])
+        self.assertIn('old:', report['detail'])
+        self.assertNotIn('fake-private-token', json.dumps(report))
 
     def test_fallback_orphan_and_skipped_keyring(self):
         (self.secrets / 'old-refresh-token').write_text('fake-private-token')

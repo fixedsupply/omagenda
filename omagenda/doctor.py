@@ -154,7 +154,9 @@ def _check_leftover_tokens(config: dict) -> dict:
                 skipped = True
             else:
                 # Search prints secrets too. Only account attributes leave this scope.
-                names.update(re.findall(r"^attribute\.account = (.+)$", result.stdout, re.MULTILINE))
+                for stream in (result.stderr, result.stdout):
+                    names.update(re.findall(r"^attribute\.account = (.+)$", stream, re.MULTILINE))
+                del stream
             del result
     except (OSError, subprocess.TimeoutExpired):
         skipped = True
