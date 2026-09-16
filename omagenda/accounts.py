@@ -134,7 +134,7 @@ def remove_account(account_id: str, path: Path | None = None, *, revoke: bool = 
         token = get_secret(account_id + _TOKEN_SECRET_SUFFIX) if revoke else None
         if token:
             revoked = _revoke_google_token(token)
-        delete_secret(account_id + _TOKEN_SECRET_SUFFIX)
+    delete_secret(account_id + "-refresh-token")
     delete_secret(account_id)
     config["accounts"] = remaining
     write_config(config, path)

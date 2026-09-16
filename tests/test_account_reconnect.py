@@ -69,7 +69,7 @@ class ReconnectTest(unittest.TestCase):
         for kind in ('icloud', 'caldav', 'ics'):
             with self.subTest(kind=kind):
                 original = {'id': 'demo', 'type': kind, 'username': 'you@example.com',
-                            'url': 'https://example.com/demo.ics', 'sync': 'pimsync'}
+                            'url': 'https://example.com/demo.ics', 'sync': 'vdirsyncer'}
                 accounts.write_config({'accounts': [original]})
                 result, out = self.run_add(kind, '--id', 'demo')
                 self.assertEqual(result, 0, out)

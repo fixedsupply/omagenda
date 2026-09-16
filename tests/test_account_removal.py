@@ -106,6 +106,17 @@ class RemovalTest(unittest.TestCase):
         self.assertIsNone(json.loads(out)['revoked'])
         self.network.assert_not_called()
 
+    def test_non_google_default_removes_both_secret_names_without_google_text(self):
+        self.configure('icloud')
+        out, err = self.remove()
+        self.assertEqual(out, "Removed 'demo'.\n")
+        self.assertEqual(err, '')
+        self.assertFalse((self.secrets / 'demo-refresh-token').exists())
+        self.network.assert_not_called()
+        calls = [c.args[0] for c in self.secret_run.call_args_list]
+        for name in ('demo', 'demo-refresh-token'):
+            self.assertIn(['secret-tool', 'clear', 'service', 'omagenda', 'account', name], calls)
+
     def test_doctor_search_discards_secret_values(self):
         self.secret_run.return_value = subprocess.CompletedProcess([], 0,
             '[item]\nsecret = fake-private-token\n',

@@ -600,7 +600,7 @@ def cmd_account_add(args) -> int:
         if not username:
             return _fail("icloud accounts need --username")
         account["username"] = username
-        account["sync"] = "pimsync"
+        account.setdefault("sync", "pimsync")
         password = getpass.getpass("App-specific password (from appleid.apple.com): ")
         add_account(account, reconnect=reconnect)
         store_secret(account_id, password)
@@ -616,7 +616,7 @@ def cmd_account_add(args) -> int:
         account["url"] = url
         if args.username:
             account["username"] = args.username
-        account["sync"] = "pimsync"
+        account.setdefault("sync", "pimsync")
         password = getpass.getpass("Password: ")
         add_account(account, reconnect=reconnect)
         store_secret(account_id, password)
