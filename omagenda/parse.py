@@ -456,6 +456,11 @@ def _extract_time_range(cursor: Cursor) -> tuple[tuple[int, int] | None, tuple[i
 _CLOCK_WITH_MINUTES_RE = re.compile(r"\bat\s+(\d{1,2})[:.](\d{2})\s*(am|pm)?\b", re.I)
 _CLOCK_BARE_RE = re.compile(r"\bat\s+(\d{1,2})\s*(am|pm)?\b", re.I)
 _CLOCK_STANDALONE_RE = re.compile(r"\b(\d{1,2}):(\d{2})\s*(am|pm)?\b")
+# "Coffee 10am tomorrow", "Call Friday 3pm", "Lunch 1.30pm": a time without
+# "at". am/pm is required, so ordinary numbers ("table for 10", "Room 12")
+# stay in the title. Documented in nl_grammar.md as plain `1pm`, and the
+# bare-hour warning above tells people to type exactly this.
+_CLOCK_AMPM_STANDALONE_RE = re.compile(r"\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b", re.I)
 
 
 def _extract_time(cursor: Cursor) -> tuple[tuple[int, int] | None, list[str]]:
@@ -501,6 +506,13 @@ def _extract_time(cursor: Cursor) -> tuple[tuple[int, int] | None, list[str]]:
         h, _ = _clock_to_24h(hour, m.group(3))
         cursor.claim(m.start(), m.end(), "time")
         return (h, int(m.group(2))), warnings
+
+    for m in _CLOCK_AMPM_STANDALONE_RE.finditer(cursor.text):
+        hour, minute = int(m.group(1)), int(m.group(2) or 0)
+        if 1 <= hour <= 12 and minute < 60 and cursor.free(m.start(), m.end()):
+            h, _ = _clock_to_24h(hour, m.group(3))
+            cursor.claim(m.start(), m.end(), "time")
+            return (h, minute), warnings
 
     return None, warnings
 

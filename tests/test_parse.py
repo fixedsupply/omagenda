@@ -72,6 +72,16 @@ TIME_CASES = [
     ("Lunch at 1 pm", {"start": "2026-09-07T13:00"}),
     ("Lunch at 1.30pm", {"start": "2026-09-07T13:30"}),
     ("Lunch at 13:00", {"start": "2026-09-07T13:00"}),
+    # A time needs no "at" when it says am or pm (reported 2026-09-16).
+    ("Coffee 10am tomorrow", {"title": "Coffee", "start": "2026-09-08T10:00", "end": "2026-09-08T11:00"}),
+    ("Coffee tomorrow 10am", {"title": "Coffee", "start": "2026-09-08T10:00"}),
+    ("Coffee tomorrow 10 am", {"title": "Coffee", "start": "2026-09-08T10:00"}),
+    ("Call Friday 3pm", {"title": "Call", "start": "2026-09-11T15:00"}),
+    ("Lunch 1.30pm", {"title": "Lunch", "start": "2026-09-07T13:30"}),
+    ("Dinner 7pm for 2h", {"title": "Dinner", "start": "2026-09-07T19:00", "end": "2026-09-07T21:00"}),
+    # Numbers without am/pm are still title text.
+    ("Dinner table for 10 tomorrow", {"title": "Dinner table for 10", "start": "2026-09-08", "allDay": True}),
+    ("Room 12 cleanup tomorrow", {"title": "Room 12 cleanup", "start": "2026-09-08", "allDay": True}),
     ("Lunch at noon", {"start": "2026-09-07T12:00"}),
     ("Wake up at midnight", {"start": "2026-09-07T00:00"}),
     ("Run in the morning", {"start": "2026-09-07T09:00"}),

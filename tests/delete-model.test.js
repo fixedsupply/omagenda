@@ -64,3 +64,13 @@ test("a pending delete cannot prompt or confirm an event removed by reload", () 
   assert.equal(next.confirm, "")
   assert.equal(next.pending, "")
 })
+
+test("an unchanged delete state is recognised, so cancelling nothing writes nothing", () => {
+  const empty = { pending: "", message: "", confirm: "" }
+  assert.equal(M.sameDeleteState(empty, { pending: "", message: "", confirm: "" }), true)
+  assert.equal(M.sameDeleteState(empty, {}), true)
+  assert.equal(M.sameDeleteState(empty, { pending: "/x.ics", message: "", confirm: "" }), false)
+  assert.equal(M.sameDeleteState({ message: "a" }, { message: "b" }), false)
+  const cancelled = M.deleteTransition(empty, "day", {}, null, false)
+  assert.equal(M.sameDeleteState(cancelled, empty), true)
+})

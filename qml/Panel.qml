@@ -54,7 +54,8 @@ Panel {
   readonly property string actionHints: Model.eventActionHints(agenda, selectedEvent)
 
   function cancelDelete(action) {
-    deleteState = Model.deleteTransition(deleteState, action, agenda, selectedEvent, choosingCalendars)
+    var next = Model.deleteTransition(deleteState, action, agenda, selectedEvent, choosingCalendars)
+    if (!Model.sameDeleteState(next, deleteState)) deleteState = next
   }
 
   function requestDelete() {

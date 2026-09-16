@@ -469,6 +469,16 @@ function deleteTransition(state, action, agenda, event, choosingCalendars) {
   return { pending: event.file, message: "", confirm: "" }
 }
 
+// Assigning a new but identical state still notifies every binding that
+// reads it. Panel.cancelDelete runs from property-change handlers, some
+// of them during the first evaluation of `deleteHint` itself, and that
+// no-op write was the "Binding loop detected for property deleteHint".
+function sameDeleteState(a, b) {
+  a = a || {}; b = b || {}
+  return (a.pending || "") === (b.pending || "") && (a.message || "") === (b.message || "")
+    && (a.confirm || "") === (b.confirm || "")
+}
+
 function deleteHint(state, event) {
   if (state.pending && event && state.pending === event.file) {
     var title = (event.title || "Untitled").toUpperCase()
@@ -551,6 +561,7 @@ if (typeof module !== "undefined") {
     eventActionHints: eventActionHints,
     deleteTransition: deleteTransition,
     deleteHint: deleteHint,
+    sameDeleteState: sameDeleteState,
     dateKey: dateKey,
     addDays: addDays,
     isAllDayString: isAllDayString,
