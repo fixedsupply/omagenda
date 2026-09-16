@@ -53,33 +53,36 @@ def parse_sentence(sentence: str, reference: datetime) -> dict:
 
 
 def describe_event(event_file: str, reference: datetime) -> dict:
-    from omagenda.sync import _sync_lock
-
-    with _sync_lock():
-        _, calendar, _, event = validate_event_file(event_file, "edit")
-        values = event_values(event, reference)
-        start = values["start"]
-        month = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()[start.month - 1]
-        day = f"{month} {start.day}" + (f" {start.year}" if start.year != reference.year else "")
-        sentence = f"{values['title']} on {day}"
-        if values["allDay"]:
-            sentence += " all day"
-        else:
-            minutes = int((values["end"] - start).total_seconds() / 60)
-            duration = f"{minutes // 60}h" if minutes % 60 == 0 else f"{minutes}m"
-            clock = str(start.hour % 12 or 12) + (f":{start.minute:02}" if start.minute else "")
-            sentence += f" at {clock}{'pm' if start.hour >= 12 else 'am'} for {duration}"
-        if values["location"]:
-            sentence += f" at {values['location']}"
-        try:
-            parsed = parse_sentence(sentence, reference)
-            actual = parsed_values(parsed, reference)
-            matches = all(same_value(values[key], actual[key]) for key in values)
-        except (ValueError, OverflowError):
-            matches = False
-        if not matches:
-            raise ValueError("This event can't be described as a sentence yet")
-        return {"sentence": sentence, "calendar": calendar["id"]}
+    # Read-only, so no sync lock: sync writes by atomic replace, and waiting
+    # behind a background sync made `e` look unresponsive for up to a minute.
+    # `edit_event` re-validates under the lock before writing anything.
+    _, calendar, _, event = validate_event_file(event_file, "edit")
+    values = event_values(event, reference)
+    start = values["start"]
+    month = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()[start.month - 1]
+    # A bare "Sep 10" means the next Sep 10, so a past date must name its year.
+    start_date = start if values["allDay"] else start.date()
+    needs_year = start.year != reference.year or start_date < reference.date()
+    day = f"{month} {start.day}" + (f" {start.year}" if needs_year else "")
+    sentence = f"{values['title']} on {day}"
+    if values["allDay"]:
+        sentence += " all day"
+    else:
+        minutes = int((values["end"] - start).total_seconds() / 60)
+        duration = f"{minutes // 60}h" if minutes % 60 == 0 else f"{minutes}m"
+        clock = str(start.hour % 12 or 12) + (f":{start.minute:02}" if start.minute else "")
+        sentence += f" at {clock}{'pm' if start.hour >= 12 else 'am'} for {duration}"
+    if values["location"]:
+        sentence += f" at {values['location']}"
+    try:
+        parsed = parse_sentence(sentence, reference)
+        actual = parsed_values(parsed, reference)
+        matches = all(same_value(values[key], actual[key]) for key in values)
+    except (ValueError, OverflowError):
+        matches = False
+    if not matches:
+        raise ValueError("This event can't be described as a sentence yet")
+    return {"sentence": sentence, "calendar": calendar["id"]}
 
 
 def replace_properties(content: bytes, properties: dict) -> bytes:

@@ -341,10 +341,21 @@ def _extract_date(cursor: Cursor, reference: datetime) -> tuple[date | None, lis
         return _ordinal_this_or_next_month(rd, int(m.group(1))), warnings
 
     m = re.search(rf"\b({'|'.join(MONTH_NAMES + MONTH_ABBR)})\s+(\d{{1,2}})(?:\s+(\d{{4}}))?\b", text, re.I)
-    if m and cursor.free(m.start(), m.end()):
-        cursor.claim(m.start(), m.end(), "date")
-        return (date(int(m.group(3)), _month_index(m.group(1)), int(m.group(2))) if m.group(3)
-                else _month_day_this_or_next_year(rd, _month_index(m.group(1)), int(m.group(2)))), warnings
+    if m and cursor.free(m.start(), m.end(2)):
+        month, day = _month_index(m.group(1)), int(m.group(2))
+        # "Sep 14 2027" names a year. Four digits outside a plausible range
+        # ("Dinner Sep 14 1900", "Call Sep 14 0000") are not a year: they stay
+        # in the title, exactly as before explicit years were understood.
+        if m.group(3) and 1970 <= int(m.group(3)) <= 2099 and cursor.free(m.start(), m.end()):
+            try:
+                explicit = date(int(m.group(3)), month, day)
+            except ValueError:
+                explicit = None
+            if explicit is not None:
+                cursor.claim(m.start(), m.end(), "date")
+                return explicit, warnings
+        cursor.claim(m.start(), m.end(2), "date")
+        return _month_day_this_or_next_year(rd, month, day), warnings
 
     m = re.search(rf"\b(\d{{1,2}})\s+({'|'.join(MONTH_NAMES + MONTH_ABBR)})\b", text, re.I)
     if m and cursor.free(m.start(), m.end()):

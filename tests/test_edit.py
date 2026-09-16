@@ -87,12 +87,48 @@ class EditTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "can't be described as a sentence yet"):
             self.describe()
 
-    def test_past_current_year_seconds_and_ambiguous_titles_refuse(self):
-        for title, start in (("Dentist", REFERENCE.replace(month=8)), ("Dentist", REFERENCE.replace(day=17, second=12)),
+    def test_seconds_and_ambiguous_titles_refuse(self):
+        for title, start in (("Dentist", REFERENCE.replace(day=17, second=12)),
                              ("Meeting tomorrow", REFERENCE.replace(day=18)), ("Meet at cafe", REFERENCE.replace(day=17))):
             self.write_event(title=title, start=start)
             with self.assertRaisesRegex(ValueError, "can't be described as a sentence yet"):
                 self.describe()
+
+    def test_past_events_name_their_year_and_can_be_edited(self):
+        for start in (REFERENCE.replace(month=8), REFERENCE.replace(day=10), REFERENCE.replace(year=2025, month=12)):
+            with self.subTest(start=start):
+                self.write_event(title="Dentist", start=start.replace(hour=15))
+                sentence = self.describe()
+                self.assertIn(f" {start.year} at 3pm", sentence)
+                self.assertFalse(self.edit(sentence)["updated"])
+                result = self.edit(sentence.replace("Dentist", "Dentist follow-up"))
+                self.assertEqual(result["changed"], ["SUMMARY"])
+                self.assertEqual(str(self.event()["SUMMARY"]), "Dentist follow-up")
+
+    def test_parser_year_needs_a_plausible_real_date(self):
+        from datetime import date
+        today = date.today()
+        next_sep_14 = date(today.year if (today.month, today.day) <= (9, 14) else today.year + 1, 9, 14).isoformat()
+        cases = {
+            "Dinner on Sep 14 2027 at 7pm": ("Dinner", "2027-09-14T19:00"),
+            "Dinner Sep 14 1900": ("Dinner 1900", next_sep_14),
+            "Call Sep 14 0000": ("Call 0000", next_sep_14),
+            "Party on Feb 30 2027": None,
+        }
+        for sentence, expected in cases.items():
+            with self.subTest(sentence=sentence):
+                result = subprocess.run([sys.executable, str(CLI), "parse", sentence, "--json"],
+                                        capture_output=True, text=True, env=dict(os.environ, TZ="America/Edmonton"))
+                if expected is None:
+                    # Invalid with a year behaves exactly as the same date without one.
+                    bare = subprocess.run([sys.executable, str(CLI), "parse", sentence.replace(" 2027", ""), "--json"],
+                                          capture_output=True, text=True)
+                    self.assertEqual(result.returncode, bare.returncode)
+                    continue
+                self.assertEqual(result.returncode, 0, result.stderr)
+                parsed = json.loads(result.stdout)
+                parsed = parsed.get("event", parsed)
+                self.assertEqual((parsed["title"], parsed["start"]), expected)
 
     def test_individual_changes_and_location_removal(self):
         for sentence, changed in (
