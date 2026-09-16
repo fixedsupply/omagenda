@@ -1,0 +1,79 @@
+# Changelog
+
+## v0.2.0 — unreleased
+
+### Added
+
+- Calendar pick list on `c`, with persistent visibility choices. Hidden calendars
+  keep syncing but leave the agenda, pill and alarms. Quick Add skips them when
+  cycling destinations and labels a hidden default.
+- Delete a selected event with `x`, then `x` again to confirm, or use
+  `omagenda delete`. A private safety copy is saved before removal. Recurring,
+  read-only, multiple-event and unsafe files are refused.
+- Edit with `e` through a pre-filled Quick Add sentence, or use `describe` and
+  `edit` in the CLI. Previous versions are saved privately; unchanged saves
+  write nothing. Editing refuses recurrence, guests, read-only calendars,
+  unsafe files and sentences that cannot preserve the original event.
+- Expiring watcher sync pauses: `omagenda sync --pause 30m` and `--resume`.
+  Manual sync remains available during a pause.
+- Disposable-calendar acceptance scripts for Google and iCloud, with recorded
+  successful runs and cleanup in the reviewer checklist.
+
+### Changed
+
+- Quick Add uses native text editing for cursor movement, selection, undo and
+  paste. Failed saves retain the text and interpretation preview.
+- Google account removal attempts to revoke sign-in and removes stored refresh
+  tokens. Local calendars remain; doctor checks for leftover tokens.
+- iCloud/CalDAV conflicts keep the server version and save the local version
+  outside the calendar. A command resolver works around pimsync 0.5.7's broken
+  `keep b` behavior; existing generated config lines migrate on the next sync.
+  Calendar-property conflicts keep the server value with bounded resolution.
+- Reminder-only collections are excluded from calendar discovery and Quick Add;
+  they continue syncing. Empty calendars remain available.
+
+### Fixed
+
+- Times without “at”, such as `Coffee 10am tomorrow`, now parse as timed events.
+  Explicit years work in named dates, including descriptions of past events.
+- Google's echo of a newly created event no longer overwrites a pending local
+  edit or produces a false conflict. Pending edits and deletes follow provider
+  filename changes through short-lived aliases.
+- Switching a Google event between all-day and timed clears the previous time
+  form, avoiding an invalid-start-time error.
+- Google timestamps retain their instant when an offset differs from the named
+  timezone. Conditional updates preserve unrelated remote metadata; real
+  conflicts retain the local version. Recurrence exceptions and remote removals
+  survive snapshot reconciliation, and read-only calendars are not uploaded.
+- Event files are replaced atomically so pimsync detects same-second changes.
+- Clicking a day in the week strip completes navigation even when the clicked
+  item is replaced. Delete confirmation no longer causes a binding loop.
+- Panel closing supports both older and newer shell hover APIs. Calendar
+  visibility failures recover, and failed watcher syncs respect the retry interval.
+
+### Known limitations
+
+- Moving events between calendars, editing events with guests, and editing or
+  deleting individual recurring occurrences are deferred. The panel/CLI refuse
+  recurring edits and deletes; Google writes of series with exception components
+  are also refused. Recurrence changes may require a full calendar download.
+- Templates, Microsoft support and inline syntax highlighting are deferred.
+  Native editing and the interpretation preview are available. Multi-day all-day
+  events and other sentences that cannot round-trip are refused by `describe`.
+- Google remains a reviewer preview requiring approved test users; Testing-mode
+  sign-in expires after seven days. Expired-auth UX and guest-metadata acceptance
+  remain unverified. Generated CalDAV configs require a working `secret-tool`
+  keyring even when account setup used the private-file credential fallback.
+- A fresh-machine install, reboot, source update, the full overlay, iOS property
+  conflicts, multi-calendar iCloud discovery through the real pair, installed
+  config migration and the normal five-minute watcher interval remain unverified.
+  Today's panel checks do not establish every step of the longer acceptance lists.
+- Alarm notifications require an explicit alarm on a timed event; all-day
+  alarms and configurable default lead times are not implemented.
+- Screenshots and the hosted privacy page still need the release handoff. See
+  [STATUS.md](STATUS.md) and [reviewer checks](docs/reviewer-checklist.md) for
+  evidence and remaining work.
+
+## v0.1.0
+
+Initial preview: [v0.1.0 tag](https://github.com/fixedsupply/omagenda/tree/v0.1.0).

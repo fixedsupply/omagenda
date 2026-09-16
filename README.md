@@ -2,6 +2,8 @@
 
 *Type a sentence, get an event. What's next, always in the bar.*
 
+**v0.2.0 candidate:** See [changes and known limitations](CHANGELOG.md).
+
 **Reviewer preview:** Google access currently requires an approved test user;
 sign-in expires after seven days in Testing mode. See
 [reviewer checks and limitations](docs/reviewer-checklist.md) before connecting calendars.
@@ -24,15 +26,15 @@ palette rather than shipping one:
 ## Install
 
 ```bash
-omarchy pkg add python-icalendar python-dateutil python-recurring-ical-events inotify-tools
+omarchy pkg add python-icalendar python-dateutil python-recurring-ical-events inotify-tools libsecret
 omarchy plugin add https://github.com/fixedsupply/omagenda.git --enable --yes
 ```
 
-The pill and the panel work at this point. The `omagenda` command does
-not yet, because nothing puts a plugin's `bin/` on your path; link it
-once:
+The pill and panel can open at this point; events appear after a calendar is connected.
+A plugin's `bin/` is not added to your PATH automatically; link the CLI once:
 
 ```bash
+mkdir -p ~/.local/bin
 ln -sf ~/.config/omarchy/plugins/fixedsupply.omagenda/bin/omagenda ~/.local/bin/omagenda
 ```
 
@@ -97,6 +99,9 @@ Use `j`/`k` or Up/Down to select an event, and `h`/`l` or Left/Right to change d
 | `n` | Quick Add on the selected day. |
 | `s` | Sync. |
 | `t` | Return to today. |
+| `Enter` | Expand or collapse event details; toggle the selected calendar in the pick list. |
+| `Esc` | Cancel pending deletion, leave the pick list, or close the panel, in that order. |
+| `Tab` / `Shift+Tab` | Switch to the next / previous shell panel. |
 
 Moving the selection, changing day, opening the calendar list or Quick Add,
 or closing the panel also cancels deletion. The footer shows available event actions.
@@ -110,6 +115,8 @@ lunch with Sam tomorrow at 1pm at Cafe Torino
 standup every weekday at 9:30
 dentist on 14/9 at 10am for 45m
 review 2-3pm /work
+Coffee 10am tomorrow
+appointment on Sep 14 2027 at 10am
 ```
 
 The line underneath previews the date, time and title that will be written. Ambiguous times such as "at 3" produce a warning. The preview lets you
@@ -119,6 +126,7 @@ check the interpretation before saving.
 - `Tab` cycles which calendar it goes to, among those that can accept an
   event.
 - A `/tag` in the sentence names a calendar directly.
+- `Esc` cancels without saving.
 
 Press `e` on an event to edit its sentence. `Enter` updates that same event;
 `Esc` cancels. The destination says `(editing)`, and Tab and Shift+Enter are
@@ -128,7 +136,7 @@ Editing refuses read-only calendars, recurring events, events with guests,
 multiple-event files, conflict files and unsafe paths. If the title, dates or
 location cannot round-trip through the parser, the panel explains why it
 cannot open the event. One-day all-day events are supported; multi-day all-day
-events and past dates in the current year cannot currently be described.
+events cannot currently be described. Explicit years allow editing past dates.
 
 Previous versions are saved privately before replacement at
 `$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics`
@@ -146,8 +154,9 @@ Remove `--dry-run` to save. An unchanged sentence writes nothing. Edit keeps
 the event's calendar and metadata; calendar moves and changes to recurrence
 or alerts are refused. Changed times use the local timezone.
 
-Everything the panel does, `omagenda` does, and every command takes
-`--json`.
+The panel uses the same CLI. Data commands support `--json`; interactive
+`account add`, the long-running `watch`, and the internal `resolve-conflict`
+helper do not. Use `omagenda --help` or a subcommand's `--help` for flags.
 
 ```bash
 omagenda agenda --days 3          # what the panel shows
@@ -182,7 +191,7 @@ Thursday" and add events the same way the panel does.
 the conventional [vdir](https://vdirsyncer.pimutils.org/en/stable/vdir.html)
 layout, alongside `displayname` and `color`. The pill, the panel, Quick
 Add, the CLI, and anything else that speaks vdir — `khal`, for instance —
-all read and write that directory and nothing else.
+share that event directory. Configuration, credentials and sync state live separately.
 
 A background watcher reindexes when a file changes and syncs every five
 minutes, and within about ten seconds of a change you make. Google syncs
@@ -211,8 +220,10 @@ Omarchy 4.0.x, and the Python packages in the install line above.
 cannot tell a file change from a timer tick, so an event you add reaches
 the server on the next five-minute sync instead of within seconds.
 
-Run `omagenda doctor` if anything looks wrong; it names what is missing
-and the command that fixes it.
+iCloud and CalDAV also require `pimsync`; see the sync setup guide.
+Run `omagenda doctor` if anything looks wrong. On an empty install, no
+calendars and no previous sync are expected; connect an account and sync.
+Doctor reads the last sync result, so it does not test sign-in over the network.
 
 ## Not affiliated with Flexibits
 
@@ -220,6 +231,10 @@ Fantastical is a Flexibits product and the name is theirs. It is
 mentioned here once, descriptively, to say where the idea came from.
 Omagenda is an independent project, contains no Flexibits code, icons, or
 assets, and is not endorsed by them.
+
+[Homepage](https://fixedsupply.dev/omagenda/) ·
+[Privacy](https://fixedsupply.dev/omagenda/privacy/) ·
+[Terms](https://fixedsupply.dev/omagenda/terms/)
 
 ## License
 

@@ -1,4 +1,30 @@
-# v0.2 candidate — 2026-09-15
+# v0.2.0 release candidate — 2026-09-16
+
+Repository release prep is based on `2fd4a01`; see [CHANGELOG.md](CHANGELOG.md).
+Recorded provider evidence: Google candidate `8f8a026` passed all 10 checks
+on 2026-09-14; iCloud candidate `d57be3d` passed all 16 on 2026-09-15.
+Both disposable calendars were deleted. These runs predate later fixes;
+[the reviewer checklist](docs/reviewer-checklist.md) records their scope.
+The PM reports live checks today of delete, sentence edit, the calendar pick
+list, clicking days and times without “at” on the code leading to `2fd4a01`.
+No broader provider or overlay acceptance is inferred from that report.
+
+Local verification: 313 isolated Python tests and 90 Node tests (89 model
+checks and one QML parsing check) pass; plugin validation and whitespace
+checks pass. Node's default isolated report counts four passing files;
+`--test-isolation=none` exposes the 90 individual checks.
+
+Still unverified: fresh-machine install, reboot, source update, full overlay,
+iOS property conflicts, multi-calendar iCloud discovery through the real pair,
+installed config migration, normal five-minute watcher sync, expired-auth UX
+and guest-metadata acceptance. Detailed panel acceptance steps remain where
+not covered by the PM's report. Claude owns the two refreshed screenshots,
+gh-pages privacy update, final review and annotated tag; the PM decides push.
+Offline clone results will be recorded after the candidate commit.
+
+The dated sections below are historical evidence, not the current test count.
+
+## Historical candidate — 2026-09-15
 
 Candidate `d57be3d` merges calendar visibility with the iCloud acceptance
 and pimsync conflict fixes. It passed `tools/icloud-acceptance.py
@@ -17,7 +43,7 @@ each cleaned up fully. Details are in `docs/reviewer-checklist.md`.
 - pimsync 0.5.7's `conflict_resolution keep b` wedges on a real conflict.
 - Its `resolve-conflicts` loops forever on an unanswered property prompt.
 
-Still unverified: live panel acceptance of calendar visibility, the
+At that date, still unverified: live panel acceptance of calendar visibility, the
 installed watcher migrating the real `family` pair's conflict setting, a
 fresh install, reboot and source update. The two pimsync bugs have not yet
 been reported upstream; a draft report exists outside the repository.
@@ -27,7 +53,7 @@ been reported upstream; a draft report exists outside the repository.
 Persistent per-calendar visibility replaces the previous selection layer.
 The panel pick list supports queued toggles, and hidden events leave the
 agenda, pill and alarms while calendars keep syncing. Quick Add preserves
-a hidden default and labels it. Live panel acceptance remains pending;
+a hidden default and labels it. Live panel acceptance was pending at that date;
 see `docs/reviewer-checklist.md`. Verification: 252 isolated Python tests and 68 Model.js tests plus QML syntax
 validation passed; plugin validation and whitespace checks are clean.
 All development used isolated state.
@@ -38,8 +64,9 @@ Implementation and automated verification are complete for this pass.
 Google's disposable-calendar acceptance script passed on candidate `8f8a026`
 on 2026-09-14, including all ten checks and calendar cleanup. Remaining
 provider and fresh-desktop acceptance checks are recorded in
-`docs/reviewer-checklist.md`. iCloud setup is absent on this machine:
-no configured iCloud account and no installed pimsync executable.
+`docs/reviewer-checklist.md`. At that date iCloud setup was absent; this
+was superseded by the configured account, installed pimsync and passing
+2026-09-15 acceptance run above.
 
 ## Google timezone integration review
 
@@ -92,7 +119,8 @@ The offscreen input tests do not exercise the complete running shell overlay.
 
 Follow `docs/reviewer-checklist.md` with disposable Google/iCloud calendars,
 then check the full overlay, reboot and source-update behaviour on the candidate.
-Do not claim fresh-install or iCloud round-trip success until recorded.
+Fresh-install success remains unrecorded; the iCloud script round trip was
+subsequently recorded on 2026-09-15.
 
 Inline coloured highlighting is deferred; native editing and the live
 interpretation preview remain. Templates and Microsoft stay deferred.

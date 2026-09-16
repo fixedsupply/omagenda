@@ -8,11 +8,15 @@ are recorded for the candidate commit.
 
 ## Before submitting
 
-- [ ] `omarchy plugin validate .` is clean
-- [ ] Both suites pass (`python tools/test-isolated.py`,
+- [x] `omarchy plugin validate .` is clean
+- [x] Both suites pass (`python tools/test-isolated.py`,
       `node --test 'tests/**/*.test.js'`)
 - [ ] `preview.png` and every screenshot contain invented data only,
       regenerated from `tools/demo-vdir.py`
+- [x] Repository version and changelog prepared for v0.2.0
+- [ ] Screenshots regenerated for v0.2.0 (Claude)
+- [ ] Hosted privacy page updated on gh-pages (Claude)
+- [ ] Final go/no-go review and annotated v0.2.0 tag (Claude)
 - [ ] The version in `manifest.json` matches the git tag
 - [ ] A fresh-machine run of the README's install block actually works
 
@@ -44,7 +48,7 @@ are recorded for the candidate commit.
 > renCal or OmaCal for the month grid, keep them.
 
 **Screenshots:** `preview.png`,
-`docs/screenshots/panel-tokyo-night.png`
+`docs/screenshots/panel.png`, `docs/screenshots/quick-add.png` (refresh pending)
 
 ## awesome-omarchy
 
@@ -63,3 +67,12 @@ Flexibits icon, screenshot, or copy.
 
 The existing quick-add screenshot shows the previous simulated text field.
 Replace it with an isolated, fictional-data capture before using it in a listing.
+
+The PM decides when to push and submits both listings. Repository preparation
+must not create the tag or publish the branch. The offline clone check is
+not the fresh-machine install check above.
+
+Canonical links: [homepage](https://fixedsupply.dev/omagenda/),
+[privacy](https://fixedsupply.dev/omagenda/privacy/),
+[terms](https://fixedsupply.dev/omagenda/terms/). The hosted privacy page update
+belongs to Claude's separate gh-pages handoff.

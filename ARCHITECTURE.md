@@ -57,15 +57,17 @@ No build step. Installation is `omarchy plugin add <git-url>` plus `omarchy pkg 
   "schemaVersion": 1,
   "id": "fixedsupply.omagenda",
   "name": "Omagenda",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Calvin Symes",
   "license": "MIT",
   "description": "Type a sentence, get an event. What's next, always in the bar.",
-  "kinds": ["bar-widget", "overlay", "service"],
+  "kinds": [
+    "bar-widget",
+    "service"
+  ],
   "keepLoaded": true,
   "entryPoints": {
     "barWidget": "qml/BarWidget.qml",
-    "overlay": "qml/QuickAdd.qml",
     "service": "qml/Service.qml"
   },
   "barWidget": {
@@ -80,15 +82,62 @@ No build step. Installation is `omarchy plugin add <git-url>` plus `omarchy pkg 
       "showCountdown": true,
       "days": 7,
       "defaultCalendar": "",
-      "timeFormat": "system"
+      "timeFormat": "system",
+      "collapseWhenIdle": false
     },
     "schema": [
-      { "key": "leadMinutes", "type": "integer", "label": "Show the pill this many minutes before an event", "min": 0, "max": 240, "step": 5, "defaultValue": 30 },
-      { "key": "alwaysShow", "type": "boolean", "label": "Always show the pill", "defaultValue": false },
-      { "key": "showCountdown", "type": "boolean", "label": "Countdown in the pill", "defaultValue": true },
-      { "key": "days", "type": "integer", "label": "Days in the ticker", "min": 3, "max": 14, "step": 1, "defaultValue": 7 },
-      { "key": "defaultCalendar", "type": "string", "label": "Calendar Quick Add writes to" },
-      { "key": "timeFormat", "type": "enum", "label": "Clock", "options": ["system", "24h", "12h"], "defaultValue": "system" }
+      {
+        "key": "leadMinutes",
+        "type": "integer",
+        "label": "Show the pill this many minutes before an event",
+        "min": 0,
+        "max": 240,
+        "step": 5,
+        "defaultValue": 30
+      },
+      {
+        "key": "alwaysShow",
+        "type": "boolean",
+        "label": "Always show the next event, even when it is hours away",
+        "defaultValue": false
+      },
+      {
+        "key": "collapseWhenIdle",
+        "type": "boolean",
+        "label": "Hide the pill completely when nothing is coming up",
+        "description": "Off by default: the pill keeps a calendar icon so the agenda stays one click away."
+      },
+      {
+        "key": "showCountdown",
+        "type": "boolean",
+        "label": "Countdown in the pill",
+        "defaultValue": true
+      },
+      {
+        "key": "days",
+        "type": "integer",
+        "label": "Days in the ticker",
+        "min": 3,
+        "max": 14,
+        "step": 1,
+        "defaultValue": 7
+      },
+      {
+        "key": "defaultCalendar",
+        "type": "string",
+        "label": "Calendar Quick Add writes to"
+      },
+      {
+        "key": "timeFormat",
+        "type": "enum",
+        "label": "Clock",
+        "options": [
+          "system",
+          "24h",
+          "12h"
+        ],
+        "defaultValue": "system"
+      }
     ]
   }
 }
@@ -112,7 +161,7 @@ Rules:
 - QML never parses `.ics`. It reads `~/.local/state/omagenda/agenda.json` through a `FileView { watchChanges: true }` exactly as the weather panel reads its location file.
 - Every Python invocation from QML uses `Quickshell.Io.Process` with an argv array, never a shell string, and reads stdout as JSON.
 - `omagenda watch` is started by `Service.qml` on load and restarted with backoff if it exits. Only one instance runs; it takes a lock file.
-- The countdown ticks in QML from the timestamps in the index (a 1 s `Timer` while the panel is open, 30 s for the pill); the index is not rewritten every minute.
+- The countdown ticks in QML from the timestamps in the index (a 1 s `Timer` while the panel is open, 60 s for the pill); the index is not rewritten every minute.
 
 ## 4. `agenda.json`
 
@@ -163,9 +212,10 @@ Two homes, by ownership:
 ```toml
 vdir = "~/.local/share/calendars"
 hidden_calendars = []
-default_calendar = "google-calvin/primary"   # set by `omagenda calendars --set-default`
+default_calendar = "google/primary"   # set by `omagenda calendars --set-default`
 sync_interval = 300        # seconds between syncs in `omagenda watch`; 0 disables
 sync_workers = 8           # calendars synced at once (see below)
+```
 
 
 `omagenda watch` runs the sync, not just the reindex: on `sync_interval`,
@@ -202,17 +252,17 @@ evidence: a delete made shortly after a create used to vanish, because
 the server echoed the newly created event back, the pull rewrote the file
 the user had just deleted, and the deletion was never sent.
 
+```toml
 [[accounts]]
-id = "google-calvin"
-type = "google"            # google | microsoft | icloud | caldav | ics
-email = "calvin@example.com"
-calendars = ["primary", "family@group.calendar.google.com"]   # empty = all writable calendars
-sync_minutes = 5
+id = "google"
+type = "google"            # google | icloud | caldav | ics; Microsoft is deferred
+email = "you@example.com"
+calendars = ["you@example.com"]   # empty = all writable calendars
 
 [[accounts]]
 id = "icloud-family"
 type = "icloud"
-username = "calvin@icloud.com"   # app-specific password lives in the keyring under omagenda/icloud-family
+username = "you@example.com"   # app-specific password lives in the keyring under omagenda/icloud-family
 sync = "pimsync"                 # Omagenda writes ~/.config/pimsync/omagenda-icloud-family.scfg
 
 [[accounts]]
@@ -220,9 +270,6 @@ id = "holidays"
 type = "ics"
 url = "https://…/canada-holidays.ics"
 color = "yellow"
-
-[alarms]
-default_lead = "PT10M"      # used when an event has no VALARM
 ```
 
 Pimsync's vdir storage identifies local changes by whole-second modification time and inode, so an in-place edit in the same second as a sync can be invisible.
@@ -234,6 +281,10 @@ pimsync 0.5.7 cannot do that with `conflict_resolution keep b`: an item changed 
 `resolve-conflicts` prompts for every conflict: events are answered `y` (run the resolver) and calendar properties such as a display name `b` (keep the server's).
 Answers are supplied up front and its output discarded, because an unanswered property prompt repeats forever; property conflicts alone do not make `sync` fail, so they are detected from its `-> Property ...: conflict` lines.
 The losing local version is saved under `$OMAGENDA_STATE/conflicts/<account>/<uid>.conflict.ics`, never in the vdir, where pimsync would upload it as a duplicate event.
+
+`$OMAGENDA_STATE/adopted.json` records event-path aliases for 24 hours when a
+provider assigns its own identity. Pending describe/edit/delete requests
+follow those aliases through the same path and event validation.
 
 `omagenda calendars` prints the merged view so QML has one place to ask.
 
@@ -310,8 +361,8 @@ omagenda parse "Lunch with Sarah tomorrow at 1pm for 90 min at Cafe Linnea /pers
 
 Grammar (document fully in `omagenda/nl_grammar.md`; the corpus in `tests/test_parse.py` is the spec):
 
-- **Dates**: `today`, `tomorrow`, `tmrw`, weekday names and abbreviations, `next <weekday>` (the one after the coming one, Fantastical's rule), `this <weekday>`, `on the 14th`, `Sep 14`, `14 Sep`, `14/9` (locale order from `LC_TIME`, documented), `2026-09-14`, `in 3 days`, `in 2 weeks`, `end of month`.
-- **Times**: `1pm`, `1 pm`, `13:00`, `1.30pm`, `noon`, `midnight`, `morning` (09:00), `afternoon` (14:00), `evening` (19:00), `tonight` (20:00), ranges `1-2pm`, `1pm to 2pm`, `from 9 to 10:30`, `at 3` (a time if followed by nothing that looks like a place; a bare `at 3` is a time).
+- **Dates**: `today`, `tomorrow`, `tmrw`, weekday names and abbreviations, `next <weekday>` (the one after the coming one, Fantastical's rule), `this <weekday>`, `on the 14th`, `Sep 14`, `14 Sep`, `Sep 14 2027`, `14/9` (locale order from `LC_TIME`, documented), `2026-09-14`, `in 3 days`, `in 2 weeks`, `end of month`.
+- **Times** (no `at` needed for am/pm forms, such as `Coffee 10am tomorrow`): `1pm`, `1 pm`, `13:00`, `1.30pm`, `noon`, `midnight`, `morning` (09:00), `afternoon` (14:00), `evening` (19:00), `tonight` (20:00), ranges `1-2pm`, `1pm to 2pm`, `from 9 to 10:30`, `at 3` (a time if followed by nothing that looks like a place; a bare `at 3` is a time).
 - **Duration**: `for 45 min`, `for 2h`, `for 1.5 hours`; default 60 min, all-day when no time is given.
 - **All-day**: no time, or the words `all day`.
 - **Recurrence**: `every day`, `daily`, `every weekday`, `every monday`, `every mon and wed`, `weekly`, `every 2 weeks`, `monthly on the 1st`, `every month`, `yearly`, `until <date>`, `for 6 weeks` after a recurrence means COUNT.
@@ -331,9 +382,9 @@ Spans never overlap; the earliest longest match wins.
 - Alarms as `VALARM` with `ACTION:DISPLAY`.
 - Write to a temp file in the same directory, `fsync`, rename. Then reindex synchronously and print the new event as JSON so the overlay can confirm.
 - Existing files change through `omagenda edit <event file> "<sentence>" [--dry-run] [--json]` or `omagenda delete <event file> [--json]`.
-- Deletion resolves and validates a regular `.ics` file directly inside a discovered calendar; parent traversal, symlinks and `.conflict.ics` files are refused. Read-only calendars, any RRULE/RDATE/RECURRENCE-ID and files without exactly one VEVENT are refused.
+- Deletion resolves and validates a regular `.ics` file directly inside a discovered calendar; parent traversal, symlinks within the vdir and `.conflict.ics` files are refused. Read-only calendars, any RRULE/RDATE/RECURRENCE-ID and files without exactly one VEVENT are refused.
 - Under the existing sync lock, save the original bytes atomically to `$OMAGENDA_STATE/deleted/<sanitised-calendar-id>/<original-stem>.<UTC-timestamp>.ics` (directories 0700, file 0600, outside the vdir), then unlink and run the watcher's indexer. Calendar ids use underscores for characters other than letters, digits, `_` and `-`; timestamps include UTC microseconds.
-- Deletion never initiates sync. The watcher settle window sends missing files through the existing Google/pimsync deletion paths. JSON returns `deleted`, `title`, `calendar` and `copy`; failures are one-line stderr errors with non-zero exit.
+- Deletion never initiates sync. The watcher settle window sends missing files through the existing Google/pimsync deletion paths. JSON returns `deleted`, `title`, `calendar`, `copy` and the actual `file`; failures are one-line stderr errors with non-zero exit.
 - Restore by copying the saved file back into its calendar folder under its original name; the next sync uploads it again.
 - The panel routes `PanelKeyCatcher.deleteRequested` (`x`/`X`) through pure Model.js eligibility and confirmation transitions. A second `x` confirms the same file; Escape, movement, day changes, `c`, `t`, `n`, selection changes and closing cancel. Refusals appear for four seconds. Service runs the CLI and reloads the agenda; the CLI remains authoritative. Event hints advertise only available edit, delete and open actions.
 
@@ -352,8 +403,8 @@ Errors keep the text open. Normal Quick Add resets to add mode.
 single-VEVENT validation. Edit and describe additionally refuse any ATTENDEE.
 Describe parses its generated sentence and compares title, start, end,
 all-day status and location before returning it. Named dates accept an explicit
-year. One-day all-day events use `all day`; multi-day spans, current-year past
-dates and any other lossy descriptions are refused rather than guessed.
+year, including for past dates. One-day all-day events use `all day`; multi-day
+spans and other lossy descriptions are refused rather than guessed.
 
 Edit uses add's parser and local reference but keeps the source calendar when
 no calendar is named. A different calendar, recurrence or alert changes are
@@ -370,7 +421,7 @@ Under the sync lock, save the previous bytes to
 (directories 0700, file 0600, fsynced), then atomically replace via a same-folder
 temporary file and rebuild the agenda. A new inode makes same-second edits
 visible to pimsync. No sync is initiated. No changes means no file write and
-no index rebuild. JSON returns `{updated, title, calendar, changed, copy}`.
+no index rebuild. JSON returns `{updated, title, calendar, changed, copy, file}`.
 
 ## 8. QML surfaces: what to imitate, exactly
 
@@ -395,7 +446,43 @@ selection, undo, clipboard and input methods remain Qt's responsibility.
 The parser's interpretation appears below it. Inline coloured highlighting
 is deferred; the old simulated caret is removed.
 
-IPC: `Service.qml` registers `IpcHandler { target: "omagenda" }` with `toggle`, `quickAdd`, `sync`, `next` so `omarchy-shell omagenda quickAdd` and `omarchy-shell shell toggle fixedsupply.omagenda` both work from keybindings.
+IPC: `Service.qml` registers `IpcHandler { target: "omagenda" }` with `sync`, `reload`, `quickAdd`, `quickAddOn(dateKey)` and `status` so `omarchy-shell omagenda quickAdd` and `omarchy-shell shell toggle fixedsupply.omagenda` both work from keybindings.
+
+Panel keys: `e` edits, `x` arms/confirms deletion, `o` opens a link, `c` toggles
+the calendar list, `n` opens Quick Add, `s` syncs and `t` selects today. Enter
+expands/collapses details (or toggles a calendar); Escape cancels deletion,
+leaves the list or closes the panel. Tab/Shift+Tab switch shell panels.
+
+## CLI reference
+
+Checked against `bin/omagenda --help` and each subcommand's `--help`.
+All rows accept `--help`; JSON support is listed explicitly.
+`OMAGENDA_CONFIG` names a config **file**; `OMAGENDA_STATE` and
+`OMAGENDA_VDIR` name directories.
+
+| Command / arguments | Optional flags |
+| --- | --- |
+| `index` | `--days`, `--json` |
+| `agenda` | `--days`, `--from`, `--json` |
+| `next` | `--json` |
+| `parse SENTENCE` | `--json` |
+| `add SENTENCE` | `--calendar`, `--dry-run`, `--json` |
+| `describe FILE` | `--json` |
+| `edit FILE SENTENCE` | `--dry-run`, `--json` |
+| `delete FILE` | `--json` |
+| `calendars` | `--set-default ID`, `--clear-default`, repeatable `--hide ID` / `--show ID`, `--show-all`, `--json` |
+| `doctor` | `--json` |
+| `sync` | mutually exclusive `--pause DURATION` / `--resume`, `--json` |
+| `watch` | `--days`, `--poll-seconds`, `--sync-interval`, `--no-sync` |
+| `account add google\|icloud\|caldav\|ics` | `--id`, `--email` (Google), `--username` (CalDAV/iCloud), `--url` (CalDAV/ICS), `--color` (ICS) |
+| `account list` | `--json` |
+| `account remove ID` | `--json` |
+| `resolve-conflict --account ID LOCAL REMOTE` | Internal pimsync helper; no JSON mode. |
+
+Use the hidden prompt for subscription URLs rather than passing credentials
+as arguments. `watch`, `account add` and `resolve-conflict` have no `--json`.
+Alarm notifications currently use explicit VALARMs on timed events only;
+all-day alarms and configurable default lead times are not implemented.
 
 ## 9. Testing and debugging
 
@@ -424,7 +511,11 @@ Sample data for development lives in `tests/fixtures/vdir/` (three calendars, re
   on every vdir change, so warm is the case that matters.
 - `omagenda parse`: under 50 ms including interpreter start; the overlay debounces at 60 ms and cancels the previous process if still running.
 - Panel open to first paint: under 100 ms; the index is already in memory in `Service.qml`.
-- The plugin never runs `sudo`, never writes outside `~/.local/share/calendars`, `~/.local/state/omagenda`, and `~/.config/omagenda`, and never phones home. Subscriptions fetch only the URLs the user wrote in their config.
+- Calendar data, state and config default to `~/.local/share/calendars`,
+  `~/.local/state/omagenda` and `~/.config/omagenda`. Generated pimsync configs
+  also use `~/.config/pimsync`, with status under `~/.local/share/pimsync/status`;
+  credentials may use the system keyring. The plugin does not run `sudo` or
+  send telemetry. Configured providers and subscription URLs receive sync requests.
 
 ## 11. Cloud bridges
 
@@ -435,7 +526,7 @@ class Bridge(Protocol):
     type: str                                   # "google" | "microsoft"
     def authorize(self, account: Account) -> None       # interactive; stores tokens via keyring
     def list_calendars(self, account) -> list[RemoteCalendar]
-    def pull(self, account, cal, state) -> PullResult   # incremental using state.sync_token / delta_link
+    def pull(self, account, cal, cursor: str | None) -> PullResult   # sync token / delta link
     def push_create(self, account, cal, vevent) -> RemoteRef
     def push_update(self, account, cal, vevent, ref) -> RemoteRef
     def push_delete(self, account, cal, ref) -> None
@@ -455,6 +546,11 @@ Sync state per calendar lives in `~/.local/state/omagenda/sync/<account>/<calend
    Existing conflict copies are never silently replaced by different edits.
 4. Record state atomically; restore read-only permissions even on errors.
 
+A Google echo with the last recorded ETag preserves a pending local edit for
+upload; only a new remote version conflicts. Timed/all-day PATCH transitions
+explicitly clear the previous date form. Removing a Google account attempts
+revocation and removes stored refresh tokens; doctor checks for leftovers.
+
 Google local edits to files containing multiple VEVENT components are
 refused until instance-level editing is implemented. Partial updates leave
 unmapped metadata untouched. Supported mappings and their limits are tested
@@ -462,8 +558,8 @@ with invented provider responses in `tests/test_reliability.py`.
 
 Mapping rules, Google: `summary`↔`SUMMARY`, `start/end` with `dateTime`+`timeZone` or `date`↔`DTSTART`/`DTEND`, `recurrence[]`↔`RRULE`/`EXDATE` lines verbatim, `location`, `description`, `hangoutLink` and `conferenceData.entryPoints[].uri`→`CONFERENCE`/`X-GOOGLE-CONFERENCE`, `reminders.overrides`↔`VALARM`, `attendees` read-only, `status: cancelled`→delete, instances of recurring events with `recurringEventId`→`RECURRENCE-ID`. Time zones: Google gives IANA names; keep them as `TZID`.
 
-Mapping rules, Microsoft: `subject`, `start/end` with `dateTime`+`timeZone` (Windows zone names, map through a small table to IANA), `recurrence.pattern/range`→`RRULE` (weekly/daily/absoluteMonthly/relativeMonthly/absoluteYearly/relativeYearly; anything else is imported read-only and flagged), `onlineMeeting.joinUrl`→`CONFERENCE`, `isAllDay`, `isCancelled`, `seriesMasterId`, delta via `/me/calendars/{id}/calendarView/delta`.
+Planned mapping rules, Microsoft (not implemented): `subject`, `start/end` with `dateTime`+`timeZone` (Windows zone names, map through a small table to IANA), `recurrence.pattern/range`→`RRULE` (weekly/daily/absoluteMonthly/relativeMonthly/absoluteYearly/relativeYearly; anything else is imported read-only and flagged), `onlineMeeting.joinUrl`→`CONFERENCE`, `isAllDay`, `isCancelled`, `seriesMasterId`, delta via `/me/calendars/{id}/calendarView/delta`.
 
-OAuth, both: loopback redirect to `http://127.0.0.1:<random port>/` served by `http.server` for one request, PKCE, browser opened with `omarchy launch browser <url>` or `xdg-open`. Refresh tokens stored with `secret-tool store --label "Omagenda <account>" omagenda account <id>`. Google scope `https://www.googleapis.com/auth/calendar`; Microsoft scopes `Calendars.ReadWrite offline_access`.
+OAuth (Google implemented; Microsoft planned): loopback redirect to `http://127.0.0.1:<random port>/` served by `http.server` for one request, PKCE, browser opened with `omarchy launch browser <url>` or `xdg-open`. Refresh tokens stored with `secret-tool store --label "Omagenda <account>" service omagenda account <id>-refresh-token`. Google scope `https://www.googleapis.com/auth/calendar`; Microsoft scopes `Calendars.ReadWrite offline_access`.
 
 Network calls use `urllib.request` with a 15 s timeout and exponential backoff on 429/5xx. The bridge never runs on the QML side; `omagenda watch` schedules it by `sync_interval` (seconds) and on demand from the panel's `s`.

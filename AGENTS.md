@@ -232,6 +232,13 @@ deleted, on a commit that is on the PM's branch.
 
 ### 4b-3 — release prep for v0.2.0
 
+Release handoff agreed 2026-09-16: Codex prepares version, changelog, docs,
+status and offline verification on `release-0.2.0`; Claude then regenerates
+`panel.png` and `quick-add.png`, updates the gh-pages privacy page, performs
+the final go/no-go review and creates the annotated `v0.2.0` tag. Codex must
+not touch screenshots or gh-pages, tag or push; the PM decides the push.
+This split overrides the screenshot and tag assignments below.
+
 Read list: `docs/publishing.md`, `STATUS.md`, `manifest.json`, `README.md`
 (install and screenshot sections only), `tools/demo-vdir.py` docstring,
 and the commit message of `93b5fcf` (`git show -s 93b5fcf`), which records

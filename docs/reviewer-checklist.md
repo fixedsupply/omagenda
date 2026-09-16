@@ -34,6 +34,22 @@ Do not use the existing v0.1.0 tag as evidence for later reliability changes;
 it still identifies the earlier candidate. Publish a new candidate tag only
 after its checks are complete.
 
+## PM live checks — 2026-09-16
+
+The PM reports checking delete, sentence edit, the calendar pick list,
+clicking days and times without “at” on the code leading to candidate
+`2fd4a01`. This is a report of those interactions, not a rerun of the provider
+scripts or every step below. Provider round trips for the later Google echo
+and all-day/timed fixes, full overlay behavior, persistence after reboot,
+restoration and the remaining detailed keyboard cases are not established
+by this report. Do not copy personal calendar contents into the evidence.
+
+Repository verification on 2026-09-16: 313 isolated Python tests, 90 Node
+checks including QML parsing, plugin validation and whitespace checks pass.
+The default Node reporter summarizes four files; `--test-isolation=none`
+reports the individual checks. Offline clone verification is recorded in
+[STATUS.md](../STATUS.md); it does not establish fresh-machine installation.
+
 ## Current limits
 
 ### Recorded Google script run — 2026-09-14
@@ -52,8 +68,8 @@ run used desktop keyring and network access. No personal events were used.
 
 This establishes the script's Google scenarios only. Expired-auth UX,
 guest metadata, visible refusal of local series edits with exceptions,
-full shell interaction, fresh installation, reboot/source update and iCloud
-acceptance remain unverified. The watcher used an accelerated two-second
+full shell interaction, fresh installation and reboot/source update remain
+unverified. iCloud acceptance was subsequently recorded below. The watcher used an accelerated two-second
 sync interval.
 
 ### Recorded iCloud script run — 2026-09-15
@@ -112,18 +128,19 @@ does not establish:
 Unlike the Google script, the conflict step shows a real desktop
 notification.
 
-Calendar visibility is implemented; live panel acceptance remains pending below.
+Calendar visibility is implemented; the PM reported a live pick-list check on
+2026-09-16. The detailed acceptance steps below are not all established by it.
 Templates, inline syntax highlighting and Microsoft support are deferred.
 Local editing of recurring series with exceptions is refused.
 A recurrence delta currently requires a full calendar download. A passed
 mocked sync suite cannot substitute for the provider checks above.
 
-## Calendar visibility acceptance — pending
+## Calendar visibility acceptance — partial (2026-09-16)
 
 Automated verification on 2026-09-15 passed 252 isolated Python tests,
 68 Model.js tests and QML syntax validation, plus plugin validation and
-whitespace checks. Coverage exercises filtering, CLI rewrites and queued toggles. Live panel latency, scrolling, focus and keyboard handling
-remain unverified. After merging, restart the shell and open the panel.
+whitespace checks. Coverage exercises filtering, CLI rewrites and queued toggles. The PM pick-list check does not establish every latency, scrolling, focus
+and keyboard case below. After merging, restart the shell and open the panel.
 Press C, move with J/K or arrows, toggle with Space/Enter or a click, and
 return with C/Escape. Rapidly toggle different rows and the same row twice.
 Confirm the footer count, persistence after restart, hidden default label,
@@ -151,7 +168,7 @@ path to a private recovery receipt. Resolve that before rerunning. Do not
 publish the receipt or captured watcher logs. This script does not validate
 the full shell overlay, a fresh installation, reboot, or iCloud.
 
-## Event deletion acceptance — pending
+## Event deletion acceptance — partial (2026-09-16)
 
 The `event-delete` change has isolated CLI, recorded Google HTTP and pure
 Model.js coverage. This does not establish live panel keyboard behavior,
@@ -169,7 +186,7 @@ original filename; check that it reappears locally and after normal sync.
 Finally delete the restored disposable event with `x`, `x` and let it sync.
 Do not use an existing real event or capture live screenshots.
 
-## Sentence editing acceptance — pending
+## Sentence editing acceptance — partial (2026-09-16)
 
 Isolated CLI, recorded Google PATCH, Model.js and QML parsing checks do not
 establish live panel or provider acceptance. After reviewing and installing

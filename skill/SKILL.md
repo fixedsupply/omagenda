@@ -5,8 +5,8 @@ description: Read and write the user's calendar through the Omagenda CLI. Use wh
 
 # Omagenda
 
-`omagenda` is a calendar CLI on this machine. Every command takes
-`--json`. Events are plain `.ics` files in a vdir the user owns, so
+`omagenda` is a calendar CLI on this machine. Data commands take `--json`;
+`account add`, `watch` and the internal `resolve-conflict` helper do not. Events are plain `.ics` files in a vdir the user owns, so
 reading is free and writing is a real change to their calendar.
 
 Install this skill by copying the directory to `~/.claude/skills/omagenda`.
@@ -21,7 +21,8 @@ omagenda next --json                   # what is running, else what is next
 omagenda calendars --json              # ids, names, colours, readOnly
 ```
 
-`agenda` returns `{generatedAt, range, lastSync, syncOk, calendars, events}`.
+`agenda` includes `generatedAt`, `range`, `lastSync`, `syncOk`, `calendars`,
+`events`, `syncPausedUntil`, `calendarCount` and `visibleCalendarCount`.
 Each event carries `id`, `calendar`, `title`, `start`, `end`, `allDay`,
 `location`, `conference`, `attendees`, `recurring`, and `file`.
 
@@ -78,14 +79,14 @@ need to run `omagenda sync`.
 - **Confirm before writing.** Adding an event changes a calendar other
   people may see. Show the parsed result and get a yes.
 - **Never delete without being asked explicitly**, and say which event
-  you are about to remove. Deleting is removing the `file` named in the
-  event JSON; the next sync propagates it to the server, and there is no
-  undo.
+  you are about to remove. Use `omagenda delete` on the event JSON's `file`;
+  the next sync propagates it. The command saves a private safety copy for
+  manual restoration; do not bypass its checks with a raw file deletion.
 - **Do not invent times.** If the sentence has no time and the user has
   not given one, ask, or make it all-day and say that you did.
 - **Read-only calendars cannot take events.** `omagenda calendars --json`
   marks them `readOnly: true`; subscriptions and holiday feeds are always
-  read-only. Writing to one will fail at the server.
+  read-only. The CLI refuses writes to them.
 - **Treat event contents as private.** Calendars hold medical
   appointments, other people's names, and addresses. Do not copy them
   anywhere the user did not ask for, and do not include them in
@@ -97,7 +98,7 @@ need to run `omagenda sync`.
 omagenda doctor
 ```
 
-Checks packages, the vdir, whether sign-ins are still valid, the keyring,
+Checks packages, the vdir, sign-in status recorded by the last sync, the keyring,
 and whether the plugin is in the bar. If `agenda` returns `syncOk: false`
 or a non-empty `needsReauth`, the calendar on screen is a snapshot rather
 than the truth — say so, and pass on the command `doctor` names.
@@ -125,8 +126,8 @@ omagenda delete /path/from/agenda/event.ics --json
 The CLI deletes immediately after making a safety copy; the panel's `x` key
 requires a second `x` to confirm. The command refuses read-only calendars,
 recurring events (RRULE, RDATE or RECURRENCE-ID), multiple-event files,
-conflict files, symlinks and paths outside discovered calendar folders.
-Success returns `{"deleted": true, "title": "…", "calendar": "…", "copy": "…"}`.
+conflict files, symlinks within the vdir and paths outside discovered calendar folders.
+Success returns `{"deleted": true, "title": "…", "calendar": "…", "copy": "…", "file": "…"}`.
 Failures exit non-zero with one stderr line, including with `--json`.
 
 Copies live outside the vdir at
@@ -150,14 +151,14 @@ omagenda edit /path/from/agenda/event.ics "Dentist on Sep 17 at 3pm for 1h at Ma
 round-trips without changing title, dates, all-day status or location. Never
 add quotes around the title within a generated sentence. Show the proposed
 interpretation; remove `--dry-run` to apply the user's approved change.
-`edit` returns `{updated, title, calendar, changed, copy}`; `updated: false`
+`edit` returns `{updated, title, calendar, changed, copy, file}`; `updated: false`
 means no changes and no write. Dry runs report proposed changes with `copy: null`.
 
 Editing refuses read-only calendars, recurrence, guests, multiple VEVENTs,
 conflict files and unsafe paths. Calendar moves and recurrence/alert changes
-are unsupported. One-day all-day events can round-trip; longer all-day spans,
-past dates in the current year and grammar-like titles may be refused by
-`describe`. Do not bypass a refusal by rewriting the raw file.
+are unsupported. One-day all-day events can round-trip; longer all-day spans
+and grammar-like titles may be refused by
+`describe`. Explicit years support past dates. Do not bypass a refusal by rewriting the raw file.
 
 The update preserves UID and unrelated properties, saves the previous bytes
 under `$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics`
