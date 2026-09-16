@@ -545,10 +545,21 @@ def _default_account_id(account_type: str, email: str | None, username: str | No
 
 
 def cmd_account_add(args) -> int:
-    from omagenda.accounts import add_account, generate_pimsync_config, store_secret
+    from omagenda.accounts import add_account, generate_pimsync_config, list_accounts, store_secret
 
+    configured = list_accounts()
+    same_type = [a for a in configured if a["type"] == args.account_type]
+    if not args.id and same_type:
+        commands = "; ".join(f"omagenda account add {args.account_type} --id {a['id']}"
+                             for a in same_type)
+        return _fail(f"{args.account_type} already configured. Reconnect with: {commands}. "
+                     "A genuinely separate login needs a new explicit --id.")
     account_id = args.id or _default_account_id(args.account_type, args.email, args.username)
-    account: dict = {"id": account_id, "type": args.account_type}
+    existing = next((a for a in configured if a["id"] == account_id), None)
+    if existing and existing["type"] != args.account_type:
+        return _fail(f"account '{account_id}' has type {existing['type']}, not {args.account_type}")
+    account: dict = dict(existing) if existing else {"id": account_id, "type": args.account_type}
+    reconnect = existing is not None
 
     if args.account_type == "google":
         from omagenda.bridges.google import authorize, list_calendars
@@ -562,7 +573,7 @@ def cmd_account_add(args) -> int:
         # never worked and could not be retried without removing it first.
         print(f"Adding '{account_id}'. Opening your browser to sign in to Google...")
         authorize(account)
-        add_account(account)
+        add_account(account, reconnect=reconnect)
         calendars = list_calendars(account)
         print(f"Connected. {len(calendars)} calendar(s) available:")
         for cal in calendars:
@@ -573,12 +584,13 @@ def cmd_account_add(args) -> int:
     elif args.account_type == "icloud":
         import getpass
 
-        if not args.username:
+        username = args.username or account.get("username")
+        if not username:
             return _fail("icloud accounts need --username")
-        account["username"] = args.username
+        account["username"] = username
         account["sync"] = "pimsync"
         password = getpass.getpass("App-specific password (from appleid.apple.com): ")
-        add_account(account)
+        add_account(account, reconnect=reconnect)
         store_secret(account_id, password)
         config_path = generate_pimsync_config(account)
         print(f"Wrote {config_path}. Run 'omagenda sync' to sync for the first time.")
@@ -586,14 +598,15 @@ def cmd_account_add(args) -> int:
     elif args.account_type == "caldav":
         import getpass
 
-        if not args.url:
+        url = args.url or account.get("url")
+        if not url:
             return _fail("caldav accounts need --url")
-        account["url"] = args.url
+        account["url"] = url
         if args.username:
             account["username"] = args.username
         account["sync"] = "pimsync"
         password = getpass.getpass("Password: ")
-        add_account(account)
+        add_account(account, reconnect=reconnect)
         store_secret(account_id, password)
         config_path = generate_pimsync_config(account)
         print(f"Wrote {config_path}. Run 'omagenda sync' to sync for the first time.")
@@ -612,12 +625,14 @@ def cmd_account_add(args) -> int:
         account["url"] = url.replace("webcal://", "https://", 1)
         if args.color:
             account["color"] = args.color
-        add_account(account)
+        add_account(account, reconnect=reconnect)
         print(f"Added '{account_id}'. Run 'omagenda sync' to fetch it for the first time.")
 
     else:
         return _fail(f"unknown account type '{args.account_type}'")
 
+    if reconnect:
+        print(f"Reconnected '{account_id}'.")
     return 0
 
 

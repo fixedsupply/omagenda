@@ -85,14 +85,18 @@ def write_config(config: dict, path: Path | None = None) -> None:
     tmp.replace(path)
 
 
-def add_account(account: dict, path: Path | None = None) -> None:
+def add_account(account: dict, path: Path | None = None, *, reconnect: bool = False) -> None:
     if not account.get("id") or not account.get("type"):
         raise ValueError("an account needs at least 'id' and 'type'")
     config = read_config()
     accounts = config.setdefault("accounts", [])
-    if any(a["id"] == account["id"] for a in accounts):
-        raise ValueError(f"an account named '{account['id']}' already exists")
-    accounts.append(account)
+    existing = next((a for a in accounts if a["id"] == account["id"]), None)
+    if existing is not None:
+        if not reconnect or existing["type"] != account["type"]:
+            raise ValueError(f"an account named '{account['id']}' already exists")
+        existing.update(account)
+    else:
+        accounts.append(account)
     write_config(config, path)
 
 
