@@ -317,6 +317,18 @@ def cmd_resolve_conflict(args) -> int:
     return 0
 
 
+def cmd_version(args) -> int:
+    import omagenda
+
+    folder = Path(omagenda.__file__).resolve().parent.parent
+    version = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))["version"]
+    if args.version_json:
+        print(json.dumps({"version": version, "path": str(folder)}))
+    else:
+        print(f"omagenda {version} ({folder})")
+    return 0
+
+
 def cmd_doctor(args) -> int:
     from omagenda.doctor import run
 
@@ -786,7 +798,9 @@ def cmd_next(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="omagenda")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--version", action="store_true", help="show version and resolved install folder")
+    parser.add_argument("--json", dest="version_json", action="store_true", help="JSON output for --version")
+    sub = parser.add_subparsers(dest="command")
 
     p_index = sub.add_parser("index", help="rebuild agenda.json from the vdir")
     p_index.add_argument("--days", type=int, default=14)
@@ -903,7 +917,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.version:
+        if args.command:
+            parser.error("--version cannot be combined with a command")
+        args.func = cmd_version
+    elif not args.command or args.version_json:
+        parser.error("a command is required; use --json after the command or with --version")
     if args.func is None:
         return _fail(f"'{args.name}' is not yet implemented ({args.phase}, see AGENTS.md)")
     try:
