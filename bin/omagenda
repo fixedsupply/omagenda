@@ -695,9 +695,12 @@ def cmd_account_remove(args) -> int:
     else:
         message = f"Removed '{args.id}'."
         if google and not args.revoke:
-            message += (" Omagenda's access to Google was not revoked; to revoke it everywhere, "
-                        f"run: omagenda account remove {args.id} --revoke, or visit "
-                        "https://myaccount.google.com/permissions")
+            # The token is gone now, so `--revoke` can no longer work for this
+            # account; the Google page is the one remaining way to revoke.
+            message += (" Its sign-in token was deleted from this computer, but Omagenda's access "
+                        "to Google was not revoked, so other computers stay signed in. To revoke "
+                        "it everywhere, visit https://myaccount.google.com/permissions "
+                        "(or use --revoke next time you remove an account).")
         print(message)
     return 0
 
