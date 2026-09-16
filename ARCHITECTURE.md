@@ -330,7 +330,12 @@ Spans never overlap; the earliest longest match wins.
 - Timed events: `DTSTART;TZID=<local IANA>` and `DTEND` likewise. All-day: `DTSTART;VALUE=DATE` and exclusive `DTEND`.
 - Alarms as `VALARM` with `ACTION:DISPLAY`.
 - Write to a temp file in the same directory, `fsync`, rename. Then reindex synchronously and print the new event as JSON so the overlay can confirm.
-- Never touch an existing file except through the explicit edit path (v1: open in `$EDITOR`).
+- Existing files change only through explicit editing (open in `$EDITOR`) or `omagenda delete <event file> [--json]`.
+- Deletion resolves and validates a regular `.ics` file directly inside a discovered calendar; parent traversal, symlinks and `.conflict.ics` files are refused. Read-only calendars, any RRULE/RDATE/RECURRENCE-ID and files without exactly one VEVENT are refused.
+- Under the existing sync lock, save the original bytes atomically to `$OMAGENDA_STATE/deleted/<sanitised-calendar-id>/<original-stem>.<UTC-timestamp>.ics` (directories 0700, file 0600, outside the vdir), then unlink and run the watcher's indexer. Calendar ids use underscores for characters other than letters, digits, `_` and `-`; timestamps include UTC microseconds.
+- Deletion never initiates sync. The watcher settle window sends missing files through the existing Google/pimsync deletion paths. JSON returns `deleted`, `title`, `calendar` and `copy`; failures are one-line stderr errors with non-zero exit.
+- Restore by copying the saved file back into its calendar folder under its original name; the next sync uploads it again.
+- The panel routes `PanelKeyCatcher.deleteRequested` (`x`/`X`) through pure Model.js eligibility and confirmation transitions. A second `x` confirms the same file; Escape, movement, day changes, `c`, `t`, `n`, selection changes and closing cancel. Refusals appear for four seconds. Service runs the CLI and reloads the agenda; the CLI remains authoritative. Event hints advertise only available edit, delete and open actions.
 
 ## 8. QML surfaces: what to imitate, exactly
 

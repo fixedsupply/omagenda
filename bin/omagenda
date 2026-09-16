@@ -215,6 +215,18 @@ def cmd_calendars(args) -> int:
     return 0
 
 
+def cmd_delete(args) -> int:
+    from omagenda.delete import delete_event
+
+    result = delete_event(args.file)
+    name = result.pop("name")
+    if args.json:
+        print(json.dumps(result))
+    else:
+        print(f"Deleted '{result['title']}' from {name}. A copy is at {result['copy']}.")
+    return 0
+
+
 def cmd_add(args) -> int:
     from omagenda.parse import parse_event
     from omagenda.vdir import discover_calendars, write_event_ics
@@ -758,6 +770,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--json", action="store_true")
     p_add.set_defaults(func=cmd_add)
 
+    p_delete = sub.add_parser("delete", help="delete a non-recurring event after saving a safety copy")
+    p_delete.add_argument("file", help="event file path from agenda.json")
+    p_delete.add_argument("--json", action="store_true")
+    p_delete.set_defaults(func=cmd_delete)
+
     p_calendars = sub.add_parser("calendars", help="vdir discovery, colors, and the default for new events")
     p_calendars.add_argument("--set-default", dest="set_default", default=None, metavar="ID",
                              help="send new events to this calendar unless a sentence says otherwise")
@@ -834,7 +851,7 @@ def main(argv: list[str]) -> int:
     try:
         return args.func(args)
     except Exception as exc:  # noqa: BLE001 -- CLI boundary: report, don't traceback
-        return _fail(str(exc))
+        return _fail(" ".join(str(exc).split()))
 
 
 if __name__ == "__main__":

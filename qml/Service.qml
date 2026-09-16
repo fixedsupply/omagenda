@@ -55,6 +55,15 @@ Item {
     agendaFile.reload()
   }
 
+  signal deleteFailed(string message)
+
+  function deleteEvent(file) {
+    if (deleteProc.running) return
+    deleteProc.failure = ""
+    deleteProc.command = [root.binPath, "delete", file, "--json"]
+    deleteProc.running = true
+  }
+
   function sync() {
     if (syncProc.running) return
     syncProc.running = true
@@ -94,7 +103,7 @@ Item {
       try {
         root.agenda = JSON.parse(text())
         visibilityProc.failure = Model.visibilityFailureAfterLoad(visibilityProc.failure, visibilityProc.running, root.visibilityPending)
-        if (visibilityProc.failure === "") root.lastError = ""
+        if (visibilityProc.failure === "" && deleteProc.failure === "") root.lastError = ""
       } catch (e) {
         root.lastError = "agenda.json is not valid JSON: " + e
       }
@@ -183,6 +192,23 @@ Item {
     }
     onLoadFailed: root.defaultCalendar = ""
     onFileChanged: reload()
+  }
+
+  Process {
+    id: deleteProc
+    property string failure: ""
+    onExited: function(exitCode, exitStatus) {
+      if (exitCode !== 0) {
+        failure = failure || "Event deletion failed"
+        root.lastError = failure
+        root.deleteFailed(failure)
+      }
+      root.reload()
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: deleteProc.failure = text.trim()
+    }
   }
 
   Process {

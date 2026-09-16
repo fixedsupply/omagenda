@@ -11,7 +11,7 @@ occurrence it returns, including a plain one-off event with no RRULE at
 all -- it's the library's way of naming which instant an occurrence
 represents, not a signal that the source event recurs. So whether a file's
 events are "recurring" is decided once, from the *raw*, unexpanded VEVENT
-components (RRULE or RECURRENCE-ID present on any of them means the file
+components (RRULE, RDATE or RECURRENCE-ID present on any of them means the file
 holds a series, master or override), and that one boolean is stamped onto
 every occurrence produced from that file.
 """
@@ -56,7 +56,7 @@ def _timedelta_to_iso8601(td: timedelta) -> str:
 
 
 def _is_recurring_file(raw_components) -> bool:
-    return any("RRULE" in c or "RECURRENCE-ID" in c for c in raw_components)
+    return any(key in c for c in raw_components for key in ("RRULE", "RDATE", "RECURRENCE-ID"))
 
 
 def _source_tz(value) -> str | None:
@@ -165,7 +165,8 @@ def _cache_key(ics_path: Path, start: date, days: int) -> str:
     expanding the fortnight out of it costs almost nothing, so re-parsing
     it on every vdir change was the whole cost of an index."""
     stat = ics_path.stat()
-    return f"{ics_path}|{stat.st_mtime_ns}|{stat.st_size}|{start.isoformat()}|{days}"
+    # Version the interpretation so older cached RDATE events gain the recurring flag.
+    return f"v2|{ics_path}|{stat.st_mtime_ns}|{stat.st_size}|{start.isoformat()}|{days}"
 
 
 def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = None,

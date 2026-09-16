@@ -417,6 +417,59 @@ function cycleUnavailableReason(agenda, currentId) {
   return "No calendar can take events; every one found is read-only"
 }
 
+function eventCalendar(agenda, event) {
+  return event && ((agenda && agenda.calendars) || []).filter(function(c) { return c.id === event.calendar })[0]
+}
+
+function eventOpenTarget(event) {
+  if (!event) return ""
+  return (event.conference && event.conference.url) || event.url
+    || (event.location && /^https?:\/\//.test(event.location) ? event.location : "")
+}
+
+function eventEditable(agenda, event) {
+  var calendar = eventCalendar(agenda, event)
+  return !!(event && event.file && calendar && !calendar.readOnly)
+}
+
+function deleteReason(agenda, event) {
+  var calendar = eventCalendar(agenda, event)
+  if (!event || !event.file || !calendar) return "No event file selected"
+  if (calendar.readOnly) return "'" + calendar.name + "' is read-only, so its events can't be deleted here"
+  if (event.recurring) return "Recurring events can't be deleted from Omagenda yet; delete it in " + calendar.name + "'s own app"
+  return ""
+}
+
+function eventActionHints(agenda, event) {
+  var hints = []
+  if (eventEditable(agenda, event)) hints.push("E EDIT FILE")
+  if (deleteReason(agenda, event) === "") hints.push("X DELETE")
+  if (eventOpenTarget(event)) hints.push("O OPEN")
+  return hints.join(" · ")
+}
+
+function deleteTransition(state, action, agenda, event, choosingCalendars) {
+  if (action !== "delete") {
+    if (["escape", "move", "day", "c", "t", "n", "close", "selection", "timeout"].indexOf(action) !== -1)
+      return { pending: "", message: "", confirm: "" }
+    return state
+  }
+  if (choosingCalendars) return state
+  var reason = deleteReason(agenda, event)
+  if (reason) return { pending: "", message: reason, confirm: "" }
+  if (state.pending === event.file) return { pending: "", message: "", confirm: event.file }
+  return { pending: event.file, message: "", confirm: "" }
+}
+
+function deleteHint(state, event) {
+  if (state.pending && event && state.pending === event.file) {
+    var title = (event.title || "Untitled").toUpperCase()
+    if (title.length > 36) title = title.slice(0, 35) + "…"
+    return "DELETE '" + title + "'? X TO CONFIRM · ESC TO CANCEL"
+  }
+  return state.message || ""
+}
+
 // The footer only advertises keys that do something. Offering "TAB
 // CALENDAR" when there is one writable calendar teaches the user the
 // feature is broken; withdrawing it teaches them nothing false.
@@ -482,6 +535,12 @@ if (typeof module !== "undefined") {
     calendarColorName: calendarColorName,
     calendarName: calendarName,
     toDate: toDate,
+    eventOpenTarget: eventOpenTarget,
+    eventEditable: eventEditable,
+    deleteReason: deleteReason,
+    eventActionHints: eventActionHints,
+    deleteTransition: deleteTransition,
+    deleteHint: deleteHint,
     dateKey: dateKey,
     addDays: addDays,
     isAllDayString: isAllDayString,

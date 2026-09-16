@@ -150,3 +150,21 @@ If cleanup fails or calendar creation has an uncertain outcome, it prints the
 path to a private recovery receipt. Resolve that before rerunning. Do not
 publish the receipt or captured watcher logs. This script does not validate
 the full shell overlay, a fresh installation, reboot, or iCloud.
+
+## Event deletion acceptance — pending
+
+The `event-delete` change has isolated CLI, recorded Google HTTP and pure
+Model.js coverage. This does not establish live panel keyboard behavior,
+provider deletion or restoration. After merging and restarting the shell,
+use only a disposable event created through Quick Add on a local or iCloud
+calendar. Select it and check the edit/delete hints. Press `x`, then Escape:
+the confirmation must clear while the panel and event remain. Repeat with
+movement, a day change, `c`, `t`, `n` and closing the panel; dismiss Quick Add
+without saving when testing `n`. The calendar pick list must ignore `x`.
+Press `x` twice on that same disposable event: it must disappear immediately.
+Confirm its private safety copy in the state folder. For iCloud, allow normal
+watcher sync and verify only this disposable event disappears in its own app.
+Restore by copying the saved file into its original calendar folder with its
+original filename; check that it reappears locally and after normal sync.
+Finally delete the restored disposable event with `x`, `x` and let it sync.
+Do not use an existing real event or capture live screenshots.

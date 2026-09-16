@@ -113,3 +113,25 @@ and is marked `(hidden)` in the destination line.
 `omagenda calendars --hide ID`, `--show ID` (repeatable), and `--show-all`
 save visibility in the top-level `hidden_calendars` config preference.
 `omagenda calendars --json` includes hidden flags and the saved ids.
+
+## Delete an event
+
+Use the exact `file` path from `omagenda agenda --json`:
+
+```bash
+omagenda delete /path/from/agenda/event.ics --json
+```
+
+The CLI deletes immediately after making a safety copy; the panel's `x` key
+requires a second `x` to confirm. The command refuses read-only calendars,
+recurring events (RRULE, RDATE or RECURRENCE-ID), multiple-event files,
+conflict files, symlinks and paths outside discovered calendar folders.
+Success returns `{"deleted": true, "title": "…", "calendar": "…", "copy": "…"}`.
+Failures exit non-zero with one stderr line, including with `--json`.
+
+Copies live outside the vdir at
+`$OMAGENDA_STATE/deleted/<sanitised-calendar-id>/<original-stem>.<UTC-timestamp>.ics`,
+with private permissions. The default state directory is
+`~/.local/state/omagenda`. Deletion rebuilds the agenda but leaves provider sync
+to the normal watcher. To restore, copy the saved file back into its calendar
+folder under its original name; the next sync uploads it again.

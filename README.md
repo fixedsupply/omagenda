@@ -84,6 +84,23 @@ back the space instead. Both are in the bar widget's settings, along with
 the lead time, the countdown, how many days the ticker covers, and 12-
 versus 24-hour time.
 
+## Panel keys
+
+Use `j`/`k` or Up/Down to select an event, and `h`/`l` or Left/Right to change day.
+
+| Key | Action |
+| --- | --- |
+| `e` | Edit the selected event's raw `.ics` file in the editor (writable calendars). |
+| `x` | Arm deletion; press `x` again to confirm. `Esc` cancels. Read-only and recurring events cannot be deleted here. |
+| `o` | Open the selected event's meeting link, URL or web location, when present. |
+| `c` | Show or hide the calendar pick list. |
+| `n` | Quick Add on the selected day. |
+| `s` | Sync. |
+| `t` | Return to today. |
+
+Moving the selection, changing day, opening the calendar list or Quick Add,
+or closing the panel also cancels deletion. The footer shows available event actions.
+
 ## Quick Add
 
 Type the event the way you would say it:
@@ -113,11 +130,23 @@ omagenda agenda --days 3          # what the panel shows
 omagenda next                     # what the pill shows
 omagenda parse "lunch tomorrow 1pm"   # interpret, write nothing
 omagenda add "lunch tomorrow 1pm"
+omagenda delete /path/from/agenda/event.ics --json
 omagenda calendars                # ids, colours, which are read-only
 omagenda calendars --set-default work
 omagenda sync
 omagenda doctor
 ```
+
+`delete` takes the exact `file` path from `agenda --json`. It refuses read-only
+calendars, recurrence, files with multiple events, conflict files and unsafe paths.
+The CLI deletes immediately; the panel asks for a second `x` first. Before removal,
+a private safety copy is saved at
+`$OMAGENDA_STATE/deleted/<sanitised-calendar-id>/<original-stem>.<UTC-timestamp>.ics`
+(default state: `~/.local/state/omagenda`). The agenda refreshes immediately;
+the normal watcher sync sends the deletion to the provider.
+
+To restore, copy the saved file back into its calendar folder under its original
+name. The next sync uploads it again.
 
 There is a Claude Code skill in [skill/SKILL.md](skill/SKILL.md); copy it
 to `~/.claude/skills/omagenda` and an agent session can answer "what's on

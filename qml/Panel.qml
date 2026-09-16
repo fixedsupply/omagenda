@@ -11,7 +11,7 @@
 //
 // Keys, per PLAN.md §6.2: h/l and Left/Right step days, H/L step a week,
 // j/k walk the day's events, Enter expands one, o opens its meeting or
-// location, e opens the .ics in $EDITOR, t returns to today, n starts Quick
+// location, e opens the .ics in $EDITOR, x confirms deletion, t returns to today, n starts Quick
 // Add on the selected day, s syncs, Escape closes. Tab hands off to the
 // neighbouring bar panel, which is the shell's own convention (PanelKeyCatcher
 // already routes Left/Right to movement, so panel switching lives on Tab
@@ -49,6 +49,40 @@ Panel {
   property string selectedKey: Model.dateKey(new Date())
   property int cursorIndex: 0
   property bool expanded: false
+  property var deleteState: ({ pending: "", message: "", confirm: "" })
+  readonly property string deleteHint: Model.deleteHint(deleteState, selectedEvent)
+  readonly property string actionHints: Model.eventActionHints(agenda, selectedEvent)
+
+  function cancelDelete(action) {
+    deleteState = Model.deleteTransition(deleteState, action, agenda, selectedEvent, choosingCalendars)
+  }
+
+  function requestDelete() {
+    deleteState = Model.deleteTransition(deleteState, "delete", agenda, selectedEvent, choosingCalendars)
+    if (deleteState.message) deleteMessageTimer.restart()
+    if (deleteState.confirm && service) service.deleteEvent(deleteState.confirm)
+  }
+
+  onCursorIndexChanged: cancelDelete("move")
+  onSelectedKeyChanged: cancelDelete("day")
+  onSelectedFileChanged: cancelDelete("selection")
+  onChoosingCalendarsChanged: cancelDelete("c")
+  onOpenedChanged: if (!opened) cancelDelete("close")
+
+  Timer {
+    id: deleteMessageTimer
+    interval: 4000
+    onTriggered: if (!root.deleteState.pending) root.cancelDelete("timeout")
+  }
+
+  Connections {
+    target: root.service
+    function onDeleteFailed(message) {
+      root.deleteState = { pending: "", message: message, confirm: "" }
+      deleteMessageTimer.restart()
+    }
+  }
+
   property bool choosingCalendars: false
   readonly property var calendarRows: service ? service.calendarRows : []
 
@@ -67,6 +101,8 @@ Panel {
   readonly property var dayEvents: Model.eventsForDate(agenda, selectedKey)
   readonly property var heroEvent: Model.currentOrNextEvent(agenda, now)
   readonly property var selectedEvent: cursorIndex >= 0 && cursorIndex < dayEvents.length ? dayEvents[cursorIndex] : null
+
+  readonly property string selectedFile: selectedEvent ? selectedEvent.file || "" : ""
 
   readonly property string healthProblem: service ? service.healthProblem : ""
   readonly property string syncProblem: Model.syncProblem(agenda)
@@ -104,6 +140,7 @@ Panel {
   }
 
   function close() {
+    cancelDelete("close")
     setCenterHoverRevealSuppressed(false)
     root.controller.hide()
   }
@@ -125,12 +162,11 @@ Panel {
   function setCenterHoverRevealSuppressed(value) {
     if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
       root.bar.setCenterHoverRevealSuppressed(value)
-    else if (root.bar && "centerHoverRevealSuppressed" in root.bar)
-      root.bar.centerHoverRevealSuppressed = value
   }
 
   // ---- navigation -------------------------------------------------------
   function resetToToday() {
+    cancelDelete("t")
     choosingCalendars = false
     now = new Date()
     selectedKey = Model.dateKey(now)
@@ -139,12 +175,14 @@ Panel {
   }
 
   function stepDay(delta) {
+    cancelDelete("day")
     selectedKey = Model.dateKey(Model.addDays(selectedKey, delta))
     cursorIndex = 0
     expanded = false
   }
 
   function moveCursor(dx, dy) {
+    cancelDelete("move")
     if (choosingCalendars) {
       calendarList.currentIndex = Math.max(0, Math.min(calendarRows.length - 1, calendarList.currentIndex + dy))
       calendarList.positionViewAtIndex(calendarList.currentIndex, ListView.Contain)
@@ -165,8 +203,7 @@ Panel {
   function openSelected() {
     var event = selectedEvent
     if (!event) return
-    var target = (event.conference && event.conference.url) ? event.conference.url : event.url
-    if (!target && event.location && /^https?:\/\//.test(event.location)) target = event.location
+    var target = Model.eventOpenTarget(event)
     if (!target) return
     Quickshell.execDetached(["xdg-open", target])
     root.close()
@@ -174,12 +211,13 @@ Panel {
 
   function editSelected() {
     var event = selectedEvent
-    if (!event || !event.file) return
+    if (!Model.eventEditable(agenda, event)) return
     Quickshell.execDetached(["omarchy-launch-editor", event.file])
     root.close()
   }
 
   function quickAdd() {
+    cancelDelete("n")
     // Phase 3 adds the overlay this calls into; until then the key is
     // harmlessly inert rather than mapped to nothing at all.
     if (service && typeof service.quickAdd === "function") {
@@ -243,7 +281,8 @@ Panel {
       onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
       onReturnRequested: { if (!root.choosingCalendars) root.expanded = !root.expanded }
       onActivateRequested: { if (root.choosingCalendars) root.toggleCalendarRow(calendarList.currentIndex) }
-      onCloseRequested: { if (root.choosingCalendars) root.choosingCalendars = false; else root.close() }
+      onDeleteRequested: root.requestDelete()
+      onCloseRequested: { if (root.deleteState.pending) root.cancelDelete("escape"); else if (root.choosingCalendars) root.choosingCalendars = false; else root.close() }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) { root.handleTextKey(text) }
 
@@ -682,7 +721,7 @@ Panel {
           // ---- footer: state on the left, the keys on the right ---------
           Item {
             width: parent.width
-            height: footerLeft.implicitHeight + footerHints.implicitHeight + Style.space(4)
+            height: footerLeft.implicitHeight + footerHints.implicitHeight + (eventHints.visible ? eventHints.implicitHeight + Style.space(4) : 0) + Style.space(4)
 
             Text {
               id: footerLeft
@@ -695,6 +734,21 @@ Panel {
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
               font.letterSpacing: 1.0
+            }
+
+            Text {
+              id: eventHints
+              textFormat: Text.PlainText
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.bottom: footerHints.top
+              anchors.bottomMargin: Style.space(4)
+              visible: text !== ""
+              text: root.deleteHint || root.actionHints
+              wrapMode: Text.Wrap
+              color: root.deleteState.pending ? Color.urgent : Qt.darker(root.foreground, 1.6)
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
             }
 
             Text {
