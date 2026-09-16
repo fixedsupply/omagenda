@@ -11,7 +11,7 @@ h1,h2{line-height:1.25} a{color:#0b57d0} ul{padding-left:1.25rem} pre{overflow-x
 </head>
 <body>
 <h1>Omagenda Privacy Policy</h1>
-<p><strong>Effective:</strong> 2026-09-15 · <strong>Last updated:</strong> 2026-09-16</p>
+<p><strong>Effective:</strong> 2026-09-15 · <strong>Last updated:</strong> 2026-09-16 (v0.2.1)</p>
 <p>Fixed Supply is operated by Calvin Symes.</p>
 <p>Contact: <a href="mailto:support@fixedsupply.dev">support@fixedsupply.dev</a></p>
 <p><a href="../">Omagenda</a> · <a href="../terms/">Terms</a></p>
@@ -42,7 +42,7 @@ h1,h2{line-height:1.25} a{color:#0b57d0} ul{padding-left:1.25rem} pre{overflow-x
 <li>Remove the account in Omagenda with <code>omagenda account remove &lt;id&gt;</code>.</li>
 <li>Delete the local calendar folder, by default <code>~/.local/share/calendars/&lt;id&gt;/</code>, and the saved copies under <code>~/.local/state/omagenda/</code>.</li>
 </ul>
-<p>From Omagenda 0.2.0, removing a Google account revokes Omagenda's access at Google and deletes the stored sign-in token. If Google can't be reached, the token is still deleted and Omagenda tells you to revoke access at the link above.</p>
+<p>From Omagenda 0.2.1, removing an account deletes its sign-in token from that computer only, so other computers you use Omagenda on stay signed in. To revoke Omagenda's access to your Google account everywhere, use the link above, or remove the account with <code>omagenda account remove &lt;id&gt; --revoke</code>. In Omagenda 0.2.0, removing a Google account also revoked access at Google.</p>
 <p>Omagenda 0.1.0 did not delete the token. To clean up one it left behind, run the commands below; <code>omagenda doctor</code> reports any leftover token.</p>
 <pre><code>secret-tool clear service omagenda account &lt;id&gt;-refresh-token
 rm -f ~/.local/state/omagenda/secrets/&lt;id&gt;-refresh-token</code></pre>
