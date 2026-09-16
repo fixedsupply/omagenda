@@ -100,6 +100,14 @@ full shell interaction, fresh installation and reboot/source update remain
 unverified. iCloud acceptance was subsequently recorded below. The watcher used an accelerated two-second
 sync interval.
 
+### Recorded upgrade to v0.2.1 — 2026-09-16
+
+`omarchy plugin update fixedsupply.omagenda` upgraded a real git install
+(Dell 7573, Omarchy 4.0.3-1) from v0.2.0 to v0.2.1. `omagenda --version`
+and doctor's install check confirmed the CLI runs from the plugin folder.
+The `~/.local/bin/omagenda` link is not managed by Omarchy and had to be
+restored after an earlier manual uninstall.
+
 ### Recorded iCloud script run — 2026-09-15
 
 Candidate `d57be3d` passed `python tools/icloud-acceptance.py --run-live`

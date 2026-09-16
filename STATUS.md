@@ -1,5 +1,20 @@
 # v0.2.1 candidate — 2026-09-16
 
+## v0.2.1 upgrade acceptance — 2026-09-16
+
+On the maintainer's Dell 7573 (Omarchy 4.0.3-1), a genuine git install of
+v0.2.0 was upgraded with `omarchy plugin update fixedsupply.omagenda` and
+`omarchy restart shell`. `omagenda --version` reported 0.2.1 from the
+plugin folder, and `omagenda doctor` passed its install check, which is
+not a symlink there. Its leftover-token check found a real stale keyring
+token (`google-2-refresh-token`, left by an accidental duplicate account)
+that v0.2.0's check could never see.
+
+The `omagenda` command link in `~/.local/bin` had to be recreated. It had
+been deleted during that machine's earlier reinstall, and neither
+`omarchy plugin add` nor `omarchy plugin update` creates it. The README's
+install and upgrade steps already include the `ln -sf` step.
+
 Based on public v0.2.0 (`ecb279c`), on branch `v0.2.1`.
 The PM's Dell fresh-install test on Omarchy 4.0.3-1 initially appeared to
 succeed, but a stale developer symlink blocked `plugin add` and an old CLI
