@@ -232,7 +232,7 @@ class EditTest(unittest.TestCase):
         self.assertEqual(unchanged.stdout.strip(), "No changes")
         result = cli("edit", str(self.file), sentence.replace("Dentist", "Checkup"), "--dry-run", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout), {"updated": True, "title": "Checkup", "calendar": "personal", "changed": ["SUMMARY"], "copy": None})
+        self.assertEqual(json.loads(result.stdout), {"updated": True, "title": "Checkup", "calendar": "personal", "changed": ["SUMMARY"], "copy": None, "file": str(self.file)})
 
     def test_google_sync_updates_same_remote_event(self):
         from omagenda.bridges import RemoteCalendar, google

@@ -18,6 +18,12 @@ def validate_event_file(event_file: str, action: str = "delete") -> tuple:
                    if p not in (root_given, root) and (p.is_relative_to(root_given) or p.is_relative_to(root))]
     if ".." in given.parts or any(p.is_symlink() for p in inside_vdir):
         raise ValueError("Event file must not use '..' or symlinks inside the calendar folder")
+    if not given.exists():
+        from omagenda.adopted import resolve
+
+        adopted = resolve(given)
+        if adopted != given:
+            return validate_event_file(str(adopted), action)
     path = given.resolve(strict=True)
     if (not path.is_relative_to(root) or not path.is_file()
             or path.suffix != ".ics" or path.name.endswith(".conflict.ics")):

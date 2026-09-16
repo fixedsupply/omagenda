@@ -177,7 +177,7 @@ def edit_event(event_file: str, sentence: str, reference: datetime, dry_run: boo
         elif not same_value(before["end"], after["end"]):
             properties["DTEND"] = after["end"]
         result = {"updated": bool(properties), "title": after["title"], "calendar": calendar["id"],
-                  "changed": list(properties), "copy": None, "name": calendar["name"]}
+                  "file": str(path), "changed": list(properties), "copy": None, "name": calendar["name"]}
         if not properties or dry_run:
             return result
         now = datetime.now(timezone.utc)

@@ -203,7 +203,7 @@ def _rewrite_uid(content: bytes, new_uid: str) -> bytes:
     return replaced if count else content
 
 
-def _adopt_remote_uid(file_path: Path, content: bytes, remote_id: str):
+def _adopt_remote_uid(file_path: Path, content: bytes, remote_id: str, state_dir: Path | None = None):
     """Take on the id the remote just assigned.
 
     Google gives an event it has not seen before its own id, and every
@@ -223,6 +223,9 @@ def _adopt_remote_uid(file_path: Path, content: bytes, remote_id: str):
     new_content = _rewrite_uid(content, remote_id)
     _overwrite_ics(new_path, new_content)
     if new_path != file_path:
+        from omagenda.adopted import record
+
+        record(file_path, new_path, state_dir)
         file_path.unlink(missing_ok=True)
     return remote_id, new_path, new_content
 
@@ -380,7 +383,7 @@ def _sync_calendar_contents(bridge, account: dict, calendar, calendar_path: Path
             except Exception as exc:  # noqa: BLE001 -- one bad event must not stop the others
                 counts.setdefault("errors", []).append(f"create {uid}: {exc}")
                 continue
-            uid, file_path, content = _adopt_remote_uid(file_path, content, ref.remote_id)
+            uid, file_path, content = _adopt_remote_uid(file_path, content, ref.remote_id, state_dir)
             local_hash = hashlib.sha256(content).hexdigest()
             adopted[uid] = file_path
             state.items[uid] = {"remoteId": ref.remote_id, "etag": ref.etag, "localHash": local_hash}

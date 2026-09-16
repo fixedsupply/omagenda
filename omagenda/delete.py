@@ -58,4 +58,4 @@ def _delete_event(event_file: str) -> dict:
         index.index()
     except Exception as exc:
         raise RuntimeError(f"Event deleted; copy is at {saved}, but agenda rebuild failed: {exc}") from exc
-    return {"deleted": True, "title": title, "calendar": calendar["id"], "copy": str(saved), "name": name}
+    return {"file": str(path), "deleted": True, "title": title, "calendar": calendar["id"], "copy": str(saved), "name": name}
