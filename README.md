@@ -36,6 +36,11 @@ mkdir -p ~/.local/bin
 ln -sf ~/.config/omarchy/plugins/fixedsupply.omagenda/bin/omagenda ~/.local/bin/omagenda
 ```
 
+Check that `omarchy plugin list | grep omagenda` shows Omagenda enabled and
+`omagenda --version` shows `0.2.1` from
+`~/.config/omarchy/plugins/fixedsupply.omagenda` (resolved if it is a symlink).
+After connecting a calendar, `omagenda doctor` should be clean.
+
 Then connect a calendar — Google, iCloud, any CalDAV server, or a
 read-only `.ics` subscription:
 
@@ -51,6 +56,46 @@ omagenda doctor
 
 Full recipes for each account type are in
 [docs/sync-setup.md](docs/sync-setup.md).
+
+## Upgrading
+
+For an install made with `omarchy plugin add`:
+
+```bash
+omarchy plugin update fixedsupply.omagenda
+omarchy restart shell
+```
+
+If a development checkout or a failed install already occupies the plugin
+folder, `omarchy plugin add` refuses with “plugin id … is already used”.
+Remove that folder or symlink, with no trailing slash, then reinstall and
+relink the CLI:
+
+```bash
+rm -rf -- ~/.config/omarchy/plugins/fixedsupply.omagenda
+omarchy plugin add https://github.com/fixedsupply/omagenda.git --enable --yes
+ln -sf ~/.config/omarchy/plugins/fixedsupply.omagenda/bin/omagenda ~/.local/bin/omagenda
+omarchy restart shell
+```
+
+Removing a symlink this way leaves its checkout intact. If the path is a
+real folder containing development changes, save those changes first.
+Check `omarchy plugin list | grep omagenda`, `omagenda --version` and
+`omagenda doctor` again. Doctor identifies a stale CLI on PATH and reports
+a failure when any check needs attention, including with `--json`.
+
+## Account maintenance
+
+Reconnect an existing account with `omagenda account add <type> --id <id>`.
+Its calendar selection and other saved settings are preserved. Adding a
+second login of the same type requires a new explicit `--id`; leaving it
+out prints the existing accounts' reconnect commands before sign-in.
+
+Account removal with `omagenda account remove <id>` deletes local credentials
+and configuration only; local calendar files remain. For Google, use
+`omagenda account remove <id> --revoke` instead to revoke access everywhere.
+Revoking signs Omagenda out on every computer using that Google account.
+After local removal, revoke access through https://myaccount.google.com/permissions.
 
 ## Keybindings
 
@@ -249,9 +294,3 @@ and is marked `(hidden)` in the destination line.
 `omagenda calendars --hide ID`, `--show ID` (repeatable), and `--show-all`
 save visibility in the top-level `hidden_calendars` config preference.
 `omagenda calendars --json` includes hidden flags and the saved ids.
-
-Account removal with `omagenda account remove <id>` deletes local credentials
-and configuration only; local calendar files remain. For Google, use
-`omagenda account remove <id> --revoke` instead to revoke access everywhere.
-Revoking signs Omagenda out on every computer using that Google account.
-After local removal, revoke access through https://myaccount.google.com/permissions.

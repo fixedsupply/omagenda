@@ -166,6 +166,23 @@ under `$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics
 The watcher handles provider sync. In edit mode Enter saves, Escape cancels,
 and Tab and Shift+Enter are disabled. Normal Quick Add resets to add mode.
 
+## Installation and accounts
+
+Use `omagenda --version --json` to identify the version and resolved package
+folder. `omagenda doctor --json` returns the report even when it exits 1;
+inspect the checks on either exit status. Its install check detects a CLI
+running outside the installed plugin.
+
+For an installation made with `omarchy plugin add`, upgrade with
+`omarchy plugin update fixedsupply.omagenda`, then `omarchy restart shell`.
+If a stale folder or developer symlink blocks installation, follow the
+README's Upgrading section to remove that path without a trailing slash,
+reinstall and recreate the CLI link. Check enabled status, version and doctor.
+
+Reconnect with `omagenda account add <type> --id <existing id>`.
+A separate login of the same type needs a new explicit `--id`.
+Existing calendar selections and connection settings survive reconnecting.
+
 Account removal with `omagenda account remove <id>` deletes local credentials
 and configuration only; local calendar files remain. For Google, use
 `omagenda account remove <id> --revoke` instead to revoke access everywhere.
