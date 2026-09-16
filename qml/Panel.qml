@@ -181,8 +181,14 @@ Panel {
   }
 
   function stepDay(delta) {
+    selectDay(Model.dateKey(Model.addDays(selectedKey, delta)))
+  }
+
+  // The day model changes with selectedKey and destroys the tapped delegate.
+  // Finish navigation in the panel context, which survives that replacement.
+  function selectDay(key) {
     cancelDelete("day")
-    selectedKey = Model.dateKey(Model.addDays(selectedKey, delta))
+    selectedKey = key
     cursorIndex = 0
     expanded = false
   }
@@ -545,11 +551,8 @@ Panel {
                     spacing: Style.space(2)
 
                     // Colours are resolved here, in the day delegate, and
-                    // handed down already resolved. A Repeater delegate
-                    // nested inside another Repeater delegate cannot
-                    // reliably reach the file's `root` id -- doing so threw
-                    // "ReferenceError: root is not defined" on every repaint
-                    // -- and resolving once per day beats once per dot.
+                    // handed down already resolved, so nested dot delegates
+                    // do not repeat the same palette lookup for each dot.
                     Repeater {
                       model: dayCell.dotColors
                       delegate: Rectangle {
@@ -564,11 +567,7 @@ Panel {
                 }
 
                 TapHandler {
-                  onTapped: {
-                    root.selectedKey = modelData.key
-                    root.cursorIndex = 0
-                    root.expanded = false
-                  }
+                  onTapped: root.selectDay(dayCell.modelData.key)
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
               }
