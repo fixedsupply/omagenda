@@ -330,12 +330,47 @@ Spans never overlap; the earliest longest match wins.
 - Timed events: `DTSTART;TZID=<local IANA>` and `DTEND` likewise. All-day: `DTSTART;VALUE=DATE` and exclusive `DTEND`.
 - Alarms as `VALARM` with `ACTION:DISPLAY`.
 - Write to a temp file in the same directory, `fsync`, rename. Then reindex synchronously and print the new event as JSON so the overlay can confirm.
-- Existing files change only through explicit editing (open in `$EDITOR`) or `omagenda delete <event file> [--json]`.
+- Existing files change through `omagenda edit <event file> "<sentence>" [--dry-run] [--json]` or `omagenda delete <event file> [--json]`.
 - Deletion resolves and validates a regular `.ics` file directly inside a discovered calendar; parent traversal, symlinks and `.conflict.ics` files are refused. Read-only calendars, any RRULE/RDATE/RECURRENCE-ID and files without exactly one VEVENT are refused.
 - Under the existing sync lock, save the original bytes atomically to `$OMAGENDA_STATE/deleted/<sanitised-calendar-id>/<original-stem>.<UTC-timestamp>.ics` (directories 0700, file 0600, outside the vdir), then unlink and run the watcher's indexer. Calendar ids use underscores for characters other than letters, digits, `_` and `-`; timestamps include UTC microseconds.
 - Deletion never initiates sync. The watcher settle window sends missing files through the existing Google/pimsync deletion paths. JSON returns `deleted`, `title`, `calendar` and `copy`; failures are one-line stderr errors with non-zero exit.
 - Restore by copying the saved file back into its calendar folder under its original name; the next sync uploads it again.
 - The panel routes `PanelKeyCatcher.deleteRequested` (`x`/`X`) through pure Model.js eligibility and confirmation transitions. A second `x` confirms the same file; Escape, movement, day changes, `c`, `t`, `n`, selection changes and closing cancel. Refusals appear for four seconds. Service runs the CLI and reloads the agenda; the CLI remains authoritative. Event hints advertise only available edit, delete and open actions.
+
+### Sentence editing
+
+Panel `e` asks Service to run `omagenda describe <event file> [--json]`, then
+opens Quick Add with `{sentence, calendar}` and the remembered file. Model.js
+requires a file, writable calendar, no recurrence and no attendees. Refusals
+use the same four-second footer message as deletion. Edit mode uses local time,
+places the cursor at the end, suppresses date prefill, Tab and Shift+Enter,
+and labels the destination `(editing)`. Enter invokes `edit`; success closes
+and notifies `Updated in your calendar`, while no changes closes silently.
+Errors keep the text open. Normal Quick Add resets to add mode.
+
+`event_file.py` shares delete's path, conflict-file, read-only, recurrence and
+single-VEVENT validation. Edit and describe additionally refuse any ATTENDEE.
+Describe parses its generated sentence and compares title, start, end,
+all-day status and location before returning it. Named dates accept an explicit
+year. One-day all-day events use `all day`; multi-day spans, current-year past
+dates and any other lossy descriptions are refused rather than guessed.
+
+Edit uses add's parser and local reference but keeps the source calendar when
+no calendar is named. A different calendar, recurrence or alert changes are
+refused. Only changed SUMMARY, DTSTART, DTEND (or existing DURATION), and
+LOCATION are rewritten; clearing the location removes it. Unchanged properties
+retain their original bytes, folding and TZID, including nested components.
+Changed times use local TZID. A real change increments SEQUENCE and sets
+DTSTAMP and LAST-MODIFIED. `changed` lists the user-facing changed properties,
+excluding these bookkeeping fields. Dry run returns the same proposed change
+list with `updated` indicating whether there would be a change and `copy: null`.
+
+Under the sync lock, save the previous bytes to
+`$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics`
+(directories 0700, file 0600, fsynced), then atomically replace via a same-folder
+temporary file and rebuild the agenda. A new inode makes same-second edits
+visible to pimsync. No sync is initiated. No changes means no file write and
+no index rebuild. JSON returns `{updated, title, calendar, changed, copy}`.
 
 ## 8. QML surfaces: what to imitate, exactly
 

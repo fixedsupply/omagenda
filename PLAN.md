@@ -96,7 +96,7 @@ Composition, top to bottom, following `panels/weather/Panel.qml` and `panels/clo
 
 1. **Hero**: the next (or current) event. Title, `14:00–14:30 · in 12m`, calendar color hairline, and a trailing Join button when a conference link exists. When nothing is left today: `Nothing else today`, with tomorrow's first event as the meta line.
 2. **Ticker strip**: seven date pills starting today, weekday initial over day number, up to three event dots in calendar colors under each. Today is marked the way the clock panel marks it. `h`/`l` move the selection, `H`/`L` move a week, `t` returns to today.
-3. **Agenda list** for the selected day: time column, title, location or attendee count as a dim second line. All-day events first. `j`/`k` move, `Enter` expands a row inline (description, location link, attendees, calendar), `o` opens the location or conference URL, `e` opens the `.ics` in `$EDITOR` in a floating terminal (Omarchy's honest "edit" for v1).
+3. **Agenda list** for the selected day: time column, title, location or attendee count as a dim second line. All-day events first. `j`/`k` move, `Enter` expands a row inline (description, location link, attendees, calendar), `o` opens the location or conference URL, `e` edits the selected event through a pre-filled Quick Add sentence.
 4. **Footer** (small-caps): visible/total calendar counts when anything is hidden, sync state, and hints: `n new · s sync · t today · c calendars`.
 
 Keys: `n` Quick Add prefilled with the selected date, `s` sync, `c` opens the calendar pick list, `Escape` close, left/right arrows hand off to neighboring panels like other first-party panels.
@@ -184,7 +184,14 @@ reviewers who use their own registered client.
 
 **v1 should**: Microsoft bridge; calendar visibility; templates; ICS subscriptions; OmaCal read-only merge; `SKILL.md`.
 
-**Later**: editing in place (title, time) from the panel; Focus filters tied to workspaces; `VTODO` view; a `bar` kind that replaces the clock for users who want one pill.
+**Later**: Focus filters tied to workspaces; `VTODO` view; a `bar` kind that replaces the clock for users who want one pill.
+
+## Backlog
+
+- Move an event to another calendar (requested by the PM 2026-09-16); edit refuses this for now.
+- Edit and delete single occurrences of recurring events.
+- Edit events with guests.
+- Templates and the Microsoft bridge remain deferred; see the current-status deferrals at the top of this plan and the Phase 5 budget note in §9.
 
 ## 9. Delivery plan and budget
 

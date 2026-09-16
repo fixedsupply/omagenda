@@ -11,7 +11,7 @@
 //
 // Keys, per PLAN.md §6.2: h/l and Left/Right step days, H/L step a week,
 // j/k walk the day's events, Enter expands one, o opens its meeting or
-// location, e opens the .ics in $EDITOR, x confirms deletion, t returns to today, n starts Quick
+// location, e edits through Quick Add, x confirms deletion, t returns to today, n starts Quick
 // Add on the selected day, s syncs, Escape closes. Tab hands off to the
 // neighbouring bar panel, which is the shell's own convention (PanelKeyCatcher
 // already routes Left/Right to movement, so panel switching lives on Tab
@@ -75,12 +75,16 @@ Panel {
     onTriggered: if (!root.deleteState.pending) root.cancelDelete("timeout")
   }
 
+  function showActionMessage(message) {
+    root.deleteState = { pending: "", message: message, confirm: "" }
+    deleteMessageTimer.restart()
+  }
+
   Connections {
     target: root.service
-    function onDeleteFailed(message) {
-      root.deleteState = { pending: "", message: message, confirm: "" }
-      deleteMessageTimer.restart()
-    }
+    function onEditReady() { root.close() }
+    function onEditFailed(message) { root.showActionMessage(message) }
+    function onDeleteFailed(message) { root.showActionMessage(message) }
   }
 
   property bool choosingCalendars: false
@@ -213,9 +217,12 @@ Panel {
 
   function editSelected() {
     var event = selectedEvent
-    if (!Model.eventEditable(agenda, event)) return
-    Quickshell.execDetached(["omarchy-launch-editor", event.file])
-    root.close()
+    var reason = Model.editReason(agenda, event)
+    if (reason !== "") {
+      root.showActionMessage(reason)
+      return
+    }
+    if (service) service.editEvent(event.file)
   }
 
   function quickAdd() {

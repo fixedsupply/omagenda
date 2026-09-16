@@ -427,9 +427,17 @@ function eventOpenTarget(event) {
     || (event.location && /^https?:\/\//.test(event.location) ? event.location : "")
 }
 
-function eventEditable(agenda, event) {
+function editReason(agenda, event) {
   var calendar = eventCalendar(agenda, event)
-  return !!(event && event.file && calendar && !calendar.readOnly)
+  if (!event || !event.file || !calendar) return "No event file selected"
+  if (calendar.readOnly) return "'" + calendar.name + "' is read-only, so its events can't be edited here"
+  if (event.recurring) return "Recurring events can't be edited from Omagenda yet; edit it in " + calendar.name + "'s own app"
+  if (event.attendees && event.attendees.length) return "Events with guests can't be edited from Omagenda yet; edit it in " + calendar.name + "'s own app"
+  return ""
+}
+
+function eventEditable(agenda, event) {
+  return editReason(agenda, event) === ""
 }
 
 function deleteReason(agenda, event) {
@@ -442,7 +450,7 @@ function deleteReason(agenda, event) {
 
 function eventActionHints(agenda, event) {
   var hints = []
-  if (eventEditable(agenda, event)) hints.push("E EDIT FILE")
+  if (eventEditable(agenda, event)) hints.push("E EDIT")
   if (deleteReason(agenda, event) === "") hints.push("X DELETE")
   if (eventOpenTarget(event)) hints.push("O OPEN")
   return hints.join(" · ")
@@ -473,7 +481,8 @@ function deleteHint(state, event) {
 // The footer only advertises keys that do something. Offering "TAB
 // CALENDAR" when there is one writable calendar teaches the user the
 // feature is broken; withdrawing it teaches them nothing false.
-function quickAddHints(agenda, currentId) {
+function quickAddHints(agenda, currentId, editing) {
+  if (editing) return "ENTER SAVE · ESC CANCEL"
   var base = ["ENTER SAVE", "SHIFT+ENTER SAVE AND ADD ANOTHER"]
   if (cycleUnavailableReason(agenda, currentId) === "") base.push("TAB CALENDAR")
   base.push("ESC CANCEL")
@@ -537,6 +546,7 @@ if (typeof module !== "undefined") {
     toDate: toDate,
     eventOpenTarget: eventOpenTarget,
     eventEditable: eventEditable,
+    editReason: editReason,
     deleteReason: deleteReason,
     eventActionHints: eventActionHints,
     deleteTransition: deleteTransition,

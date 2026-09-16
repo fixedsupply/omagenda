@@ -21,6 +21,7 @@ General rules, before the per-category ones below:
 | `next <weekday>` | the occurrence **after** the coming one | Fantastical's rule: "next Friday" said on a Wednesday means the Friday after this one, not this Friday |
 | `on the 14th`, `the 14th` | the 14th of the reference month, or next month if that date has passed | ordinal-only dates |
 | `Sep 14`, `14 Sep`, `September 14` | that calendar date, this year, or next year if it has passed | month name or abbreviation, either order |
+| `Sep 14 2027` | that exact date, with an explicit year | e.g. `Dentist on Sep 14 2027 at 3pm` |
 | `14/9`, `9/14` | that calendar date, read in `LC_TIME` date order | genuinely ambiguous only when **both** the day-first and month-first readings are valid calendar dates (`12/10` could be Dec 10 or Oct 12); when one reading has a component over 12, the other reading is used with no warning (`14/9` can only be Sep 14) |
 | `2026-09-14` | that exact date | ISO form is never ambiguous |
 | `in 3 days` | reference date + 3 days | |

@@ -135,3 +135,32 @@ with private permissions. The default state directory is
 `~/.local/state/omagenda`. Deletion rebuilds the agenda but leaves provider sync
 to the normal watcher. To restore, copy the saved file back into its calendar
 folder under its original name; the next sync uploads it again.
+
+## Edit an event
+
+The panel's `e` key opens Quick Add with a sentence for the selected event.
+Use the exact `file` from the agenda for the equivalent CLI commands:
+
+```bash
+omagenda describe /path/from/agenda/event.ics --json
+omagenda edit /path/from/agenda/event.ics "Dentist on Sep 17 at 3pm for 1h at Main St Clinic" --dry-run --json
+```
+
+`describe` returns `{sentence, calendar}` only after checking that the sentence
+round-trips without changing title, dates, all-day status or location. Never
+add quotes around the title within a generated sentence. Show the proposed
+interpretation; remove `--dry-run` to apply the user's approved change.
+`edit` returns `{updated, title, calendar, changed, copy}`; `updated: false`
+means no changes and no write. Dry runs report proposed changes with `copy: null`.
+
+Editing refuses read-only calendars, recurrence, guests, multiple VEVENTs,
+conflict files and unsafe paths. Calendar moves and recurrence/alert changes
+are unsupported. One-day all-day events can round-trip; longer all-day spans,
+past dates in the current year and grammar-like titles may be refused by
+`describe`. Do not bypass a refusal by rewriting the raw file.
+
+The update preserves UID and unrelated properties, saves the previous bytes
+under `$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics`
+(default `~/.local/state/omagenda`), replaces atomically and rebuilds the agenda.
+The watcher handles provider sync. In edit mode Enter saves, Escape cancels,
+and Tab and Shift+Enter are disabled. Normal Quick Add resets to add mode.

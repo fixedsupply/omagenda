@@ -168,3 +168,19 @@ Restore by copying the saved file into its original calendar folder with its
 original filename; check that it reappears locally and after normal sync.
 Finally delete the restored disposable event with `x`, `x` and let it sync.
 Do not use an existing real event or capture live screenshots.
+
+## Sentence editing acceptance — pending
+
+Isolated CLI, recorded Google PATCH, Model.js and QML parsing checks do not
+establish live panel or provider acceptance. After reviewing and installing
+this candidate, use only a disposable event created through Quick Add.
+Select it and press `e`: check the pre-filled sentence, cursor at end,
+`(editing)` destination, and absence of Tab and Shift+Enter hints. Change its
+time by an hour and press Enter. Confirm one updated event, the notification,
+a private previous-version copy under `state/edited/`, and the same event in
+the provider's app after normal watcher sync (no duplicate). Repeat for title
+and location, including removing location. Reopen and save unchanged: no
+notification or additional copy. Escape after changing text must cancel.
+Tab and Shift+Enter must do nothing in edit mode. Reopen with `n` and the
+global shortcut: both must start clean in add mode. Delete only this disposable
+event with `x`, `x` when finished. Do not use real appointments or screenshots.

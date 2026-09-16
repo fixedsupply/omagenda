@@ -340,10 +340,11 @@ def _extract_date(cursor: Cursor, reference: datetime) -> tuple[date | None, lis
         cursor.claim(m.start(), m.end(), "date")
         return _ordinal_this_or_next_month(rd, int(m.group(1))), warnings
 
-    m = re.search(rf"\b({'|'.join(MONTH_NAMES + MONTH_ABBR)})\s+(\d{{1,2}})\b", text, re.I)
+    m = re.search(rf"\b({'|'.join(MONTH_NAMES + MONTH_ABBR)})\s+(\d{{1,2}})(?:\s+(\d{{4}}))?\b", text, re.I)
     if m and cursor.free(m.start(), m.end()):
         cursor.claim(m.start(), m.end(), "date")
-        return _month_day_this_or_next_year(rd, _month_index(m.group(1)), int(m.group(2))), warnings
+        return (date(int(m.group(3)), _month_index(m.group(1)), int(m.group(2))) if m.group(3)
+                else _month_day_this_or_next_year(rd, _month_index(m.group(1)), int(m.group(2)))), warnings
 
     m = re.search(rf"\b(\d{{1,2}})\s+({'|'.join(MONTH_NAMES + MONTH_ABBR)})\b", text, re.I)
     if m and cursor.free(m.start(), m.end()):

@@ -227,6 +227,30 @@ def cmd_delete(args) -> int:
     return 0
 
 
+def cmd_describe(args) -> int:
+    from omagenda.edit import describe_event
+
+    result = describe_event(args.file, _local_reference())
+    print(json.dumps(result) if args.json else result["sentence"])
+    return 0
+
+
+def cmd_edit(args) -> int:
+    from omagenda.edit import edit_event
+
+    result = edit_event(args.file, args.sentence, _local_reference(), args.dry_run)
+    name = result.pop("name")
+    if args.json:
+        print(json.dumps(result))
+    elif not result["updated"]:
+        print("No changes")
+    elif args.dry_run:
+        print(f"Would update '{result['title']}' in {name}: {', '.join(result['changed'])} (dry run, not written)")
+    else:
+        print(f"Updated '{result['title']}' in {name}.")
+    return 0
+
+
 def cmd_add(args) -> int:
     from omagenda.parse import parse_event
     from omagenda.vdir import discover_calendars, write_event_ics
@@ -769,6 +793,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--dry-run", action="store_true")
     p_add.add_argument("--json", action="store_true")
     p_add.set_defaults(func=cmd_add)
+
+    p_describe = sub.add_parser("describe", help="describe an editable event as a sentence")
+    p_describe.add_argument("file")
+    p_describe.add_argument("--json", action="store_true")
+    p_describe.set_defaults(func=cmd_describe)
+
+    p_edit = sub.add_parser("edit", help="update an event from a sentence, preserving a safety copy")
+    p_edit.add_argument("file")
+    p_edit.add_argument("sentence")
+    p_edit.add_argument("--dry-run", action="store_true")
+    p_edit.add_argument("--json", action="store_true")
+    p_edit.set_defaults(func=cmd_edit)
 
     p_delete = sub.add_parser("delete", help="delete a non-recurring event after saving a safety copy")
     p_delete.add_argument("file", help="event file path from agenda.json")

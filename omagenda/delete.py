@@ -7,8 +7,6 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-import icalendar
-
 from omagenda import index, vdir
 
 
@@ -22,36 +20,12 @@ def delete_event(event_file: str) -> dict:
 
 
 def _delete_event(event_file: str) -> dict:
-    root_given = vdir.resolve_vdir_root().expanduser().absolute()
-    root = root_given.resolve()
-    given = Path(event_file).expanduser().absolute()
-    # A symlink inside the vdir could alias another calendar's file, so those
-    # are refused. Symlinks above it (a symlinked home, or a vdir folder that
-    # is itself a link) are ordinary setups and must not block deletion.
-    inside_vdir = [p for p in (given, *given.parents)
-                   if p not in (root_given, root) and (p.is_relative_to(root_given) or p.is_relative_to(root))]
-    if ".." in given.parts or any(p.is_symlink() for p in inside_vdir):
-        raise ValueError("Event file must not use '..' or symlinks inside the calendar folder")
-    path = given.resolve(strict=True)
-    if (not path.is_relative_to(root) or not path.is_file()
-            or path.suffix != ".ics" or path.name.endswith(".conflict.ics")):
-        raise ValueError("Event file must be a regular .ics file inside a discovered calendar")
-    calendar = next((c for c in vdir.discover_calendars()
-                     if Path(c["path"]).resolve() == path.parent), None)
-    if calendar is None:
-        raise ValueError("Event file must be inside a discovered calendar folder")
+    from omagenda.event_file import validate_event_file
+
+    path, calendar, content, event = validate_event_file(event_file)
+    root = vdir.resolve_vdir_root().expanduser().resolve()
     name = " ".join(calendar["name"].split())
-    if calendar["readOnly"]:
-        raise ValueError(f"'{name}' is read-only, so its events can't be deleted here")
-    content = path.read_bytes()
-    parsed = icalendar.Calendar.from_ical(content)
-    if any(key in component for component in parsed.walk()
-           for key in ("RRULE", "RDATE", "RECURRENCE-ID")):
-        raise ValueError(f"Recurring events can't be deleted from Omagenda yet; delete it in {name}'s own app")
-    events = parsed.walk("VEVENT")
-    if len(events) != 1:
-        raise ValueError("Event file must contain exactly one VEVENT to be deleted")
-    title = " ".join(str(events[0].get("SUMMARY", "Untitled")).split())
+    title = " ".join(str(event.get("SUMMARY", "Untitled")).split())
     calendar_id = re.sub(r"[^A-Za-z0-9_-]", "_", calendar["id"]) or "calendar"
     deleted = index.resolve_state_dir() / "deleted"
     folder = deleted / calendar_id

@@ -55,6 +55,18 @@ Item {
     agendaFile.reload()
   }
 
+  signal editFailed(string message)
+  signal editReady()
+
+  function editEvent(file) {
+    if (describeProc.running) return
+    describeProc.file = file
+    describeProc.failure = ""
+    describeProc.result = null
+    describeProc.command = [root.binPath, "describe", file, "--json"]
+    describeProc.running = true
+  }
+
   signal deleteFailed(string message)
 
   function deleteEvent(file) {
@@ -195,6 +207,34 @@ Item {
   }
 
   Process {
+    id: describeProc
+    property string file: ""
+    property string failure: ""
+    property var result: null
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try { describeProc.result = JSON.parse(text) } catch (e) { }
+      }
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: describeProc.failure = text.trim()
+    }
+    onExited: function(exitCode, exitStatus) {
+      if (exitCode !== 0 || !result) {
+        root.editFailed(failure || "Could not describe the event")
+        return
+      }
+      quickAddLoader.active = true
+      if (quickAddLoader.item) {
+        root.editReady()
+        quickAddLoader.item.openEdit(file, result.sentence, result.calendar)
+      }
+    }
+  }
+
+  Process {
     id: deleteProc
     property string failure: ""
     onExited: function(exitCode, exitStatus) {
@@ -265,6 +305,12 @@ Item {
     onLoaded: {
       item.service = root
       item.binPath = root.binPath
+      item.updated.connect(function(title) {
+        Quickshell.execDetached([
+          "omarchy-notification-send", "-g", "󰃭", "Updated in your calendar", title || "Event"
+        ])
+        root.reload()
+      })
       item.added.connect(function(title) {
         Quickshell.execDetached([
           "omarchy-notification-send", "-g", "󰃭", "Added to your calendar", title || "Event"

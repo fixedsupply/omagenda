@@ -37,9 +37,9 @@ test("delete hints include confirmation and cancellation with an elided long tit
   assert.equal(M.deleteHint(empty, event), "")
 })
 test("footer advertises only available actions, in order", () => {
-  assert.equal(M.eventActionHints(agenda, event), "E EDIT FILE · X DELETE")
-  assert.equal(M.eventActionHints(agenda, { ...event, url: "https://example.com" }), "E EDIT FILE · X DELETE · O OPEN")
-  assert.equal(M.eventActionHints(agenda, { ...event, recurring: true }), "E EDIT FILE")
+  assert.equal(M.eventActionHints(agenda, event), "E EDIT · X DELETE")
+  assert.equal(M.eventActionHints(agenda, { ...event, url: "https://example.com" }), "E EDIT · X DELETE · O OPEN")
+  assert.equal(M.eventActionHints(agenda, { ...event, recurring: true }), "")
   assert.equal(M.eventActionHints(agenda, { ...event, calendar: "ro" }), "")
   assert.equal(M.eventActionHints(agenda, { ...event, calendar: "ro", location: "https://example.com" }), "O OPEN")
   assert.equal(M.eventActionHints(agenda, null), "")

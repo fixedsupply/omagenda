@@ -90,7 +90,7 @@ Use `j`/`k` or Up/Down to select an event, and `h`/`l` or Left/Right to change d
 
 | Key | Action |
 | --- | --- |
-| `e` | Edit the selected event's raw `.ics` file in the editor (writable calendars). |
+| `e` | Edit the selected event through a pre-filled Quick Add sentence. |
 | `x` | Arm deletion; press `x` again to confirm. `Esc` cancels. Read-only and recurring events cannot be deleted here. |
 | `o` | Open the selected event's meeting link, URL or web location, when present. |
 | `c` | Show or hide the calendar pick list. |
@@ -120,7 +120,31 @@ check the interpretation before saving.
   event.
 - A `/tag` in the sentence names a calendar directly.
 
+Press `e` on an event to edit its sentence. `Enter` updates that same event;
+`Esc` cancels. The destination says `(editing)`, and Tab and Shift+Enter are
+disabled. Normal Quick Add starts empty in add mode afterwards.
+
+Editing refuses read-only calendars, recurring events, events with guests,
+multiple-event files, conflict files and unsafe paths. If the title, dates or
+location cannot round-trip through the parser, the panel explains why it
+cannot open the event. One-day all-day events are supported; multi-day all-day
+events and past dates in the current year cannot currently be described.
+
+Previous versions are saved privately before replacement at
+`$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics`
+(default state directory: `~/.local/state/omagenda`). The watcher syncs updates;
+editing does not start a sync.
+
 ## The CLI
+
+```bash
+omagenda describe /path/from/agenda/event.ics --json
+omagenda edit /path/from/agenda/event.ics "Dentist on Sep 17 at 3pm for 1h at Main St Clinic" --dry-run --json
+```
+
+Remove `--dry-run` to save. An unchanged sentence writes nothing. Edit keeps
+the event's calendar and metadata; calendar moves and changes to recurrence
+or alerts are refused. Changed times use the local timezone.
 
 Everything the panel does, `omagenda` does, and every command takes
 `--json`.

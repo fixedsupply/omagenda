@@ -27,6 +27,9 @@ Item {
   property var service: null
   property string binPath: ""
   property string prefillDate: ""
+  property string editFile: ""
+  readonly property bool editing: editFile !== ""
+  property bool savedUpdate: false
 
   property bool opened: false
   property string text: ""
@@ -56,16 +59,19 @@ Item {
   // What the event will land in, said plainly: a /tag in the sentence wins,
   // then a Tab choice, then the configured default the CLI would apply.
   readonly property string effectiveCalendar: {
+    if (editing) return targetCalendar
     if (parsed && parsed.calendar) return parsed.calendar
     if (targetCalendar !== "") return targetCalendar
     return service && service.defaultCalendar ? service.defaultCalendar : ""
   }
 
   signal added(string title)
+  signal updated(string title)
 
   property string cycleNote: ""
 
   function cycleCalendar() {
+    if (root.editing) return
     var reason = Model.cycleUnavailableReason(root.agenda, root.effectiveCalendar)
     if (reason !== "") {
       // Say why rather than appearing broken.
@@ -79,6 +85,10 @@ Item {
   }
 
   function open(dateKey) {
+    if (addProc.running) return
+    root.editFile = ""
+    root.saveError = ""
+    root.keepOpenAfterSave = false
     root.prefillDate = dateKey || ""
     root.targetCalendar = ""
     root.cycleNote = ""
@@ -87,6 +97,18 @@ Item {
     root.parseError = ""
     root.opened = true
     Qt.callLater(function() { field.forceActiveFocus() })
+  }
+
+  function openEdit(file, sentence, calendar) {
+    if (addProc.running) return
+    open("")
+    root.editFile = file
+    root.targetCalendar = calendar
+    root.setText(sentence)
+    Qt.callLater(function() {
+      field.forceActiveFocus()
+      field.cursorPosition = field.text.length
+    })
   }
 
   function close() {
@@ -120,7 +142,7 @@ Item {
   // repeat, so it's appended only when the user hasn't named a day.
   function sentence() {
     var typed = root.text.trim()
-    if (!root.prefillDate) return typed
+    if (root.editing || !root.prefillDate) return typed
     if (root.parsed && root.parsed.spans) {
       for (var i = 0; i < root.parsed.spans.length; i++) {
         if (root.parsed.spans[i].kind === "date") return typed
@@ -130,18 +152,21 @@ Item {
   }
 
   function submit(keepOpen) {
-    if (addProc.running) return
+    if (addProc.running || (root.editing && keepOpen)) return
     if (root.text.trim() === "") {
       root.close()
       return
     }
-    var command = [root.binPath, "add", root.sentence(), "--json"]
+    var command = root.editing
+      ? [root.binPath, "edit", root.editFile, root.sentence(), "--json"]
+      : [root.binPath, "add", root.sentence(), "--json"]
     // Only when the user actually chose one: otherwise the CLI applies the
     // configured default, which is the behaviour they set up deliberately.
-    if (root.targetCalendar !== "" && !(root.parsed && root.parsed.calendar))
+    if (!root.editing && root.targetCalendar !== "" && !(root.parsed && root.parsed.calendar))
       command = command.concat(["--calendar", root.targetCalendar])
     root.keepOpenAfterSave = keepOpen
     root.savedTitle = ""
+    root.savedUpdate = false
     root.saveError = ""
     addProc.command = command
     addProc.running = true
@@ -193,7 +218,11 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        try { root.savedTitle = (JSON.parse(text).event || {}).title || "" } catch (e) {}
+        try {
+          var result = JSON.parse(text)
+          root.savedTitle = root.editing ? result.title : (result.event || {}).title || ""
+          root.savedUpdate = result.updated === true
+        } catch (e) {}
       }
     }
     stderr: StdioCollector {
@@ -205,7 +234,9 @@ Item {
         root.parseError = root.saveError || "Could not save the event. Your text is still here."
         return
       }
-      root.added(root.savedTitle)
+      if (root.editing) {
+        if (root.savedUpdate) root.updated(root.savedTitle)
+      } else root.added(root.savedTitle)
       if (root.keepOpenAfterSave) {
         root.text = ""
         root.parsed = null
@@ -270,7 +301,7 @@ Item {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
-            text: "Lunch with Sarah tomorrow at 1pm…"
+            text: root.editing ? "Edit this event…" : "Lunch with Sarah tomorrow at 1pm…"
             color: root.foreground
             opacity: 0.45
             font.family: root.fontFamily
@@ -352,7 +383,7 @@ Item {
           textFormat: Text.PlainText
           visible: root.effectiveCalendar !== ""
           text: Model.destinationText(root.agenda, root.effectiveCalendar)
-                + (root.parsed && root.parsed.calendar ? "  (from the sentence)" : "")
+                + (root.editing ? " (editing)" : root.parsed && root.parsed.calendar ? "  (from the sentence)" : "")
           color: root.accent
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -361,7 +392,7 @@ Item {
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: Model.quickAddHints(root.agenda, root.effectiveCalendar)
+          text: Model.quickAddHints(root.agenda, root.effectiveCalendar, root.editing)
           color: Qt.darker(root.foreground, 1.6)
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
