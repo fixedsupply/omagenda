@@ -300,6 +300,38 @@ class PushTest(unittest.TestCase):
             push_update(self.account, self.calendar, self._ics(), RemoteRef(remote_id="r1", etag='"etag-1"'))
         self.assertEqual(captured["if_match"], '"etag-1"')
 
+    def _patched_body(self, ics_bytes):
+        import json as _json
+        captured = {}
+
+        def fake_urlopen(request, timeout=15):
+            captured["body"] = _json.loads(request.data.decode())
+            return _FakeResponse({"id": "r1", "etag": '"etag-2"'})
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            push_update(self.account, self.calendar, ics_bytes, RemoteRef(remote_id="r1", etag='"etag-1"'))
+        return captured["body"]
+
+    def test_push_update_to_a_timed_event_clears_any_all_day_date(self):
+        timed = (b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:r1\r\nSUMMARY:Now timed\r\n"
+                 b"DTSTART;TZID=America/Edmonton:20260916T100000\r\nDTEND;TZID=America/Edmonton:20260916T110000\r\n"
+                 b"END:VEVENT\r\nEND:VCALENDAR\r\n")
+        body = self._patched_body(timed)
+        for key in ("start", "end"):
+            self.assertIn("dateTime", body[key])
+            self.assertIn("date", body[key])
+            self.assertIsNone(body[key]["date"])
+
+    def test_push_update_to_an_all_day_event_clears_any_time(self):
+        all_day = (b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:r1\r\nSUMMARY:Now all day\r\n"
+                   b"DTSTART;VALUE=DATE:20260916\r\nDTEND;VALUE=DATE:20260917\r\n"
+                   b"END:VEVENT\r\nEND:VCALENDAR\r\n")
+        body = self._patched_body(all_day)
+        for key in ("start", "end"):
+            self.assertEqual(body[key]["date"], "2026-09-1" + ("6" if key == "start" else "7"))
+            self.assertIsNone(body[key]["dateTime"])
+            self.assertIsNone(body[key]["timeZone"])
+
     def test_push_delete_ignores_already_gone(self):
         with mock.patch("urllib.request.urlopen", side_effect=_HTTPErrorWithBody(404, b"{}")):
             push_delete(self.account, self.calendar, RemoteRef(remote_id="r1", etag="v1"))  # must not raise

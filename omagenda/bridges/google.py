@@ -602,6 +602,18 @@ def push_update(account: dict, calendar: RemoteCalendar, ics_bytes: bytes, ref: 
     for field in ("location", "description"):
         body.setdefault(field, "")
     body.setdefault("recurrence", [])
+    # PATCH merges into the stored event. Turning an all-day event into a
+    # timed one would leave its old `date` beside the new `dateTime`, which
+    # Google rejects with 400 "Invalid start time" (seen live 2026-09-16 when
+    # an event was edited from all day to 10am); the reverse leaves a stale
+    # dateTime. An explicit null clears whichever form is not being sent.
+    for key in ("start", "end"):
+        when = body.get(key)
+        if isinstance(when, dict) and "dateTime" in when:
+            when.setdefault("date", None)
+        elif isinstance(when, dict) and "date" in when:
+            when.setdefault("dateTime", None)
+            when.setdefault("timeZone", None)
     url = f"{API_BASE}/calendars/{urllib.parse.quote(calendar.id)}/events/{urllib.parse.quote(ref.remote_id)}"
     headers = {"If-Match": ref.etag} if ref.etag else {}
     try:
