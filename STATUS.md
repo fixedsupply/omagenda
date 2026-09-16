@@ -2,8 +2,11 @@
 
 Repository release prep is based on `2fd4a01`; see [CHANGELOG.md](CHANGELOG.md).
 Recorded provider evidence: Google candidate `8f8a026` passed all 10 checks
-on 2026-09-14; iCloud candidate `d57be3d` passed all 16 on 2026-09-15.
-Both disposable calendars were deleted. These runs predate later fixes;
+on 2026-09-14, and again on `e7d1e7e` (the Google echo fix) on 2026-09-16;
+iCloud candidate `d57be3d` passed all 16 on 2026-09-15. All disposable
+calendars were deleted. The all-day/timed switch fix (`2fd4a01`) was
+verified live by the watcher's next sync of the PM's affected event.
+These runs predate later fixes;
 [the reviewer checklist](docs/reviewer-checklist.md) records their scope.
 The PM reports live checks today of delete, sentence edit, the calendar pick
 list, clicking days and times without “at” on the code leading to `2fd4a01`.
@@ -18,8 +21,9 @@ Still unverified: fresh-machine install, reboot, source update, full overlay,
 iOS property conflicts, multi-calendar iCloud discovery through the real pair,
 installed config migration, normal five-minute watcher sync, expired-auth UX
 and guest-metadata acceptance. Detailed panel acceptance steps remain where
-not covered by the PM's report. Claude owns the two refreshed screenshots,
-gh-pages privacy update, final review and annotated tag; the PM decides push.
+not covered by the PM's report. The screenshots were regenerated from demo
+data and the privacy page update is prepared locally on gh-pages; the final
+review and annotated tag follow, and the PM decides the push.
 Offline clone of `release-0.2.0` at `9b3e3e1` passed on 2026-09-16:
 plugin validation, `python3 -m py_compile` for all 46 `.py` files plus the CLI,
 313 isolated Python tests, all four Node files (90 individual checks), CLI

@@ -19,9 +19,7 @@ Quick Add parses as you type and previews the event before you save.
 Its native text field supports cursor movement, selection, undo and paste.
 
 It takes its colours from your theme, because it reads the theme's own
-palette rather than shipping one:
-
-![The panel under Tokyo Night](docs/screenshots/panel-tokyo-night.png)
+palette rather than shipping one.
 
 ## Install
 

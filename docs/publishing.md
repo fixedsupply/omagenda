@@ -15,8 +15,11 @@ are recorded for the candidate commit.
       regenerated from `tools/demo-vdir.py`
 - [x] Repository version and changelog prepared for v0.2.0
 - [x] Offline clone checks passed on `9b3e3e1` (see STATUS.md)
-- [ ] Screenshots regenerated for v0.2.0 (Claude)
-- [ ] Hosted privacy page updated on gh-pages (Claude)
+- [x] Screenshots regenerated for v0.2.0 (Claude): `preview.png`,
+      `docs/screenshots/panel.png` and `docs/screenshots/quick-add.png` from
+      `tools/demo-vdir.py`; the outdated Tokyo Night image was removed
+- [x] Hosted privacy page update prepared on gh-pages (Claude, local commit
+      `8cfcac9`); publish it together with the release push
 - [ ] Final go/no-go review and annotated v0.2.0 tag (Claude)
 - [ ] The version in `manifest.json` matches the git tag
 - [ ] A fresh-machine run of the README's install block actually works
@@ -49,7 +52,7 @@ are recorded for the candidate commit.
 > renCal or OmaCal for the month grid, keep them.
 
 **Screenshots:** `preview.png`,
-`docs/screenshots/panel.png`, `docs/screenshots/quick-add.png` (refresh pending)
+`docs/screenshots/panel.png`, `docs/screenshots/quick-add.png`
 
 ## awesome-omarchy
 
@@ -66,8 +69,6 @@ descriptively, to say where the idea came from. Do not use it in the
 name, the tagline, the plugin id, or the keywords, and do not reuse any
 Flexibits icon, screenshot, or copy.
 
-The existing quick-add screenshot shows the previous simulated text field.
-Replace it with an isolated, fictional-data capture before using it in a listing.
 
 The PM decides when to push and submits both listings. Repository preparation
 must not create the tag or publish the branch. The offline clone check is

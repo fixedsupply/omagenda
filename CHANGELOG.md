@@ -70,9 +70,8 @@
   Today's panel checks do not establish every step of the longer acceptance lists.
 - Alarm notifications require an explicit alarm on a timed event; all-day
   alarms and configurable default lead times are not implemented.
-- Screenshots and the hosted privacy page still need the release handoff. See
-  [STATUS.md](STATUS.md) and [reviewer checks](docs/reviewer-checklist.md) for
-  evidence and remaining work.
+- Evidence and remaining checks are in [STATUS.md](STATUS.md) and the
+  [reviewer checks](docs/reviewer-checklist.md).
 
 ## v0.1.0
 

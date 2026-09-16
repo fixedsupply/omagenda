@@ -191,6 +191,7 @@ reviewers who use their own registered client.
 - Move an event to another calendar (requested by the PM 2026-09-16); edit refuses this for now.
 - Edit and delete single occurrences of recurring events.
 - Edit events with guests.
+- A themed README screenshot (the Tokyo Night image was dropped for v0.2.0 because it showed the removed calendar sets).
 - Templates and the Microsoft bridge remain deferred; see the current-status deferrals at the top of this plan and the Phase 5 budget note in §9.
 
 ## 9. Delivery plan and budget

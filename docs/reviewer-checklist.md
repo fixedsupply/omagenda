@@ -52,6 +52,17 @@ reports the individual checks. Offline clone verification is recorded in
 
 ## Current limits
 
+### Recorded Google script run — 2026-09-16
+
+Candidate `e7d1e7e`, which stops Google's echo of a just-created event from
+reverting a pending local edit, passed `python tools/google-acceptance.py
+--run-live` on the maintainer's machine: all ten checks, including
+conflicting local edit recovery, and the disposable calendar was deleted.
+Run from a Claude Code session with desktop keyring and network access; no
+personal events were read. It does not exercise an edit made between a
+create and the next pull; `tests/test_sync_bridge_orchestration.py`
+`EditVersusEchoTest` covers that sequence with the fake bridge.
+
 ### Recorded Google script run — 2026-09-14
 
 Candidate `8f8a026` passed `python tools/google-acceptance.py --run-live`
