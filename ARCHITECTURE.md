@@ -57,7 +57,7 @@ No build step. Installation is `omarchy plugin add <git-url>` plus `omarchy pkg 
   "schemaVersion": 1,
   "id": "fixedsupply.omagenda",
   "name": "Omagenda",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Calvin Symes",
   "license": "MIT",
   "description": "Type a sentence, get an event. What's next, always in the bar.",
@@ -471,6 +471,7 @@ All rows accept `--help`; JSON support is listed explicitly.
 | `edit FILE SENTENCE` | `--dry-run`, `--json` |
 | `delete FILE` | `--json` |
 | `calendars` | `--set-default ID`, `--clear-default`, repeatable `--hide ID` / `--show ID`, `--show-all`, `--json` |
+| `--version` | `--json` |
 | `doctor` | `--json` |
 | `sync` | mutually exclusive `--pause DURATION` / `--resume`, `--json` |
 | `watch` | `--days`, `--poll-seconds`, `--sync-interval`, `--no-sync` |
@@ -478,6 +479,17 @@ All rows accept `--help`; JSON support is listed explicitly.
 | `account list` | `--json` |
 | `account remove ID` | `--json`, `--revoke` |
 | `resolve-conflict --account ID LOCAL REMOTE` | Internal pimsync helper; no JSON mode. |
+
+`--version` reads the manifest beside the resolved running package and reports
+that folder. Doctor checks that the CLI package is inside the installed
+plugin, and exits 1 for any failed check in text and JSON modes. A successful
+sync older than max(three configured intervals, 30 minutes) is stale unless
+sync is paused. Missing or invalid sync timestamps need a new manual sync.
+
+Account add with an existing explicit ID reconnects the same type in place,
+preserving saved settings except credentials and explicitly refreshed fields.
+An existing account of that type requires an explicit ID before sign-in;
+a different type at the requested ID is refused.
 
 Use the hidden prompt for subscription URLs rather than passing credentials
 as arguments. `watch`, `account add` and `resolve-conflict` have no `--json`.

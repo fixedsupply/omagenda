@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "fixedsupply.omagenda",
   "name": "Omagenda",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Calvin Symes",
   "license": "MIT",
   "description": "Type a sentence, get an event. What's next, always in the bar.",

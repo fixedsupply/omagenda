@@ -4,8 +4,18 @@
 
 - Account removal is local by default; Google revocation requires `--revoke`
   and warns that it signs out every computer. Local calendars remain.
+- Reconnect accounts in place with an existing explicit ID, preserving saved
+  settings. Refuse implicit duplicate logins before sign-in for every type.
+- Doctor finds orphan refresh tokens from keyring attributes on stderr as
+  well as stdout, without exposing secrets.
+- Doctor checks the installed plugin version and CLI path, detects stale
+  successful syncs, and exits 1 on failed checks in JSON mode too.
+- `omagenda --version` reports the manifest version and resolved install
+  folder, with optional JSON output.
+- Document upgrades, stale folder/symlink recovery and install verification
+  following the Dell fresh-install test on Omarchy 4.0.3-1.
 
-## v0.2.0 — unreleased
+## v0.2.0 — 2026-09-16
 
 ### Added
 

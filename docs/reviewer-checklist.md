@@ -7,6 +7,13 @@ issues, logs and commits.
 
 ## Before sharing a release
 
+- [ ] Upgrade an existing v0.2.0 installation with
+  `omarchy plugin update fixedsupply.omagenda`, then `omarchy restart shell`.
+  Confirm enabled status, `omagenda --version` reports 0.2.1 from the plugin
+  folder, and `omagenda doctor` is clean. Also verify recovery from a stale
+  developer symlink/folder using the README's Upgrading section and CLI link.
+  Use disposable calendars to check watcher sync and retained account settings.
+
 - Run `python tools/test-isolated.py`, the Node tests, the Qt text-field tests
   and `omarchy plugin validate .` from the candidate checkout.
 - Install the candidate on a fresh Omarchy profile, following only the README.
@@ -33,6 +40,16 @@ Record the candidate commit, Omarchy version, providers checked and outcomes.
 Do not use the existing v0.1.0 tag as evidence for later reliability changes;
 it still identifies the earlier candidate. Publish a new candidate tag only
 after its checks are complete.
+
+## Dell fresh-install report — 2026-09-16
+
+The PM tested public v0.2.0 (`ecb279c`) on the Dell, Omarchy 4.0.3-1.
+A stale developer symlink blocked `plugin add`; an old CLI on PATH hid the
+failed install. Removing the symlink and reinstalling succeeded. Enabling
+Omagenda in the centre section, watcher operation and sync worked, and doctor
+was clean. v0.2.1 documents recovery and adds install diagnostics.
+This report does not establish v0.2.1 upgrades, live reconnect/revocation,
+reboot, source-update or full overlay acceptance.
 
 ## PM live checks — 2026-09-16
 

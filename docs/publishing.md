@@ -13,16 +13,20 @@ are recorded for the candidate commit.
       `node --test 'tests/**/*.test.js'`)
 - [ ] `preview.png` and every screenshot contain invented data only,
       regenerated from `tools/demo-vdir.py`
-- [x] Repository version and changelog prepared for v0.2.0
+- [x] Repository version and changelog prepared for v0.2.1
 - [x] Offline clone checks passed on `9b3e3e1` (see STATUS.md)
 - [x] Screenshots regenerated for v0.2.0 (Claude): `preview.png`,
       `docs/screenshots/panel.png` and `docs/screenshots/quick-add.png` from
       `tools/demo-vdir.py`; the outdated Tokyo Night image was removed
 - [x] Hosted privacy page update prepared on gh-pages (Claude, local commit
       `8cfcac9`); publish it together with the release push
-- [ ] Final go/no-go review and annotated v0.2.0 tag (Claude)
+- [ ] Final go/no-go review for v0.2.1 (PM); no tag or push in this session
 - [ ] The version in `manifest.json` matches the git tag
-- [ ] A fresh-machine run of the README's install block actually works
+- [x] Fresh-machine install on the PM's Dell, Omarchy 4.0.3-1 (2026-09-16):
+      the stale developer symlink first blocked installation and an old CLI
+      hid the failure. After removing it, install, centre-section enablement,
+      watcher and sync worked; doctor was clean. See [STATUS.md](../STATUS.md).
+      This v0.2.0 result does not establish v0.2.1 upgrade acceptance.
 
 ## omarchyplugins.com
 

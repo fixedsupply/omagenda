@@ -2,7 +2,7 @@
 
 *Type a sentence, get an event. What's next, always in the bar.*
 
-**v0.2.0 candidate:** See [changes and known limitations](CHANGELOG.md).
+**v0.2.1 candidate:** See [changes and known limitations](CHANGELOG.md).
 
 **Reviewer preview:** Google access currently requires an approved test user;
 sign-in expires after seven days in Testing mode. See

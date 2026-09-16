@@ -1,4 +1,40 @@
-# v0.2.0 release candidate — 2026-09-16
+# v0.2.1 candidate — 2026-09-16
+
+Based on public v0.2.0 (`ecb279c`), on branch `v0.2.1`.
+The PM's Dell fresh-install test on Omarchy 4.0.3-1 initially appeared to
+succeed, but a stale developer symlink blocked `plugin add` and an old CLI
+on PATH hid the failed installation. After removing the symlink, install,
+enabling Omagenda in the centre section, the watcher and sync all worked,
+and doctor was clean. This is the PM's reported v0.2.0 test, not a live
+acceptance run of this candidate.
+
+The [v0.2.1 changelog](CHANGELOG.md#v021--unreleased) records the fixes:
+local-only account removal, explicit reconnect/duplicate handling, keyring
+orphan detection, install integrity, stale-sync diagnostics and `--version`.
+See [Upgrading](README.md#upgrading) for recovery and verification.
+
+Offline verification: 338 isolated Python tests and 90 Node checks pass
+(the requested Node command reports four passing files). Plugin validation
+and whitespace checks pass. No QML or screenshot changes. No live provider
+run, tag or push in this session. The PM must still verify the
+[v0.2.1 upgrade path](docs/reviewer-checklist.md#before-sharing-a-release);
+reboot, source-update and full overlay acceptance remain outstanding.
+
+Implementation choices: revocation warnings go to stderr, preserving JSON.
+Without a stored token, explicit revocation retains the existing null result;
+after local removal, use Google's permissions page to revoke access.
+Reconnect reuses saved iCloud/CalDAV connection fields and sync backend;
+ICS reconnect prompts for its credential URL. Missing/invalid manifests
+fail the install check; invalid sync timestamps request manual sync.
+Staleness uses the existing 300-second default and the 30-minute floor
+even when the configured interval is zero, with age shown in whole minutes
+or hours. An active pause takes precedence in the sign-in check.
+Version/location describe the running package, including resolved developer
+symlinks. Empty installs must connect a calendar before doctor is clean.
+
+The sections below record earlier candidates and their limitations at the time.
+
+## Historical v0.2.0 release candidate — 2026-09-16
 
 Repository release prep is based on `2fd4a01`; see [CHANGELOG.md](CHANGELOG.md).
 Recorded provider evidence: Google candidate `8f8a026` passed all 10 checks
@@ -36,7 +72,7 @@ present, no calendars, no prior sync, no CalDAV tool required, not paused,
 none hidden, keyring lookup skipped, and plugin not enabled (no shell.json).
 The keyring binary-presence check sees the test stub, not a working keyring.
 Messages are accurate; README now explains the empty-install next step.
-Doctor's per-check failures do not currently make its exit status nonzero.
+At that candidate, doctor's per-check failures did not make its JSON exit status nonzero; v0.2.1 fixes this.
 
 The dated sections below are historical evidence, not the current test count.
 
