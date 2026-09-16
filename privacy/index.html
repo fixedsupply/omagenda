@@ -11,7 +11,7 @@ h1,h2{line-height:1.25} a{color:#0b57d0} ul{padding-left:1.25rem} pre{overflow-x
 </head>
 <body>
 <h1>Omagenda Privacy Policy</h1>
-<p><strong>Effective:</strong> 2026-09-15</p>
+<p><strong>Effective:</strong> 2026-09-15 · <strong>Last updated:</strong> 2026-09-16</p>
 <p>Fixed Supply is operated by Calvin Symes.</p>
 <p>Contact: <a href="mailto:support@fixedsupply.dev">support@fixedsupply.dev</a></p>
 <p><a href="../">Omagenda</a> · <a href="../terms/">Terms</a></p>
@@ -23,6 +23,7 @@ h1,h2{line-height:1.25} a{color:#0b57d0} ul{padding-left:1.25rem} pre{overflow-x
 <ul>
 <li>Omagenda runs entirely on your own computer. There is no Omagenda server. The developer receives no calendar data, account data, usage data, or crash reports. There is no telemetry and no analytics.</li>
 <li>Calendar events are stored as standard <code>.ics</code> files in a folder on your computer.</li>
+<li>When you delete or edit an event, or when a sync conflict keeps the server's version, Omagenda saves a private copy of the previous version under <code>~/.local/state/omagenda/</code>, in folders readable only by you, so a mistake can be undone. These copies never leave your computer.</li>
 <li>Sign-in tokens and passwords are stored in the desktop’s system keyring. If no keyring is available, they are stored in a file readable only by you.</li>
 <li>Omagenda connects only to the calendar services you choose to add: Google (accounts.google.com, oauth2.googleapis.com, www.googleapis.com), Apple iCloud’s CalDAV service through the separate <code>pimsync</code> tool, and any calendar subscription addresses you enter.</li>
 </ul>
@@ -39,9 +40,10 @@ h1,h2{line-height:1.25} a{color:#0b57d0} ul{padding-left:1.25rem} pre{overflow-x
 <ul>
 <li>Revoke Omagenda’s access at <a href="https://myaccount.google.com/permissions">https://myaccount.google.com/permissions</a>.</li>
 <li>Remove the account in Omagenda with <code>omagenda account remove &lt;id&gt;</code>.</li>
-<li>Delete the local calendar folder, by default <code>~/.local/share/calendars/&lt;id&gt;/</code>.</li>
+<li>Delete the local calendar folder, by default <code>~/.local/share/calendars/&lt;id&gt;/</code>, and the saved copies under <code>~/.local/state/omagenda/</code>.</li>
 </ul>
-<p>Removing an account in Omagenda stops it syncing. To also delete the stored Google sign-in token, run:</p>
+<p>From Omagenda 0.2.0, removing a Google account revokes Omagenda's access at Google and deletes the stored sign-in token. If Google can't be reached, the token is still deleted and Omagenda tells you to revoke access at the link above.</p>
+<p>Omagenda 0.1.0 did not delete the token. To clean up one it left behind, run the commands below; <code>omagenda doctor</code> reports any leftover token.</p>
 <pre><code>secret-tool clear service omagenda account &lt;id&gt;-refresh-token
 rm -f ~/.local/state/omagenda/secrets/&lt;id&gt;-refresh-token</code></pre>
 
