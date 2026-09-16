@@ -46,3 +46,21 @@ test("footer advertises only available actions, in order", () => {
   assert.equal(M.eventOpenTarget({ conference: { url: "meeting" }, url: "other" }), "meeting")
   assert.equal(M.eventOpenTarget({ location: "Cafe" }), "")
 })
+
+// Reloading can replace the selected event without any navigation signal.
+test("a pending delete cannot prompt or confirm a different event after reload", () => {
+  const armed = step(empty, "delete")
+  const replacement = { ...event, file: "/replacement.ics" }
+  assert.equal(M.deleteHint(armed, replacement), "")
+  const next = step(armed, "delete", replacement)
+  assert.equal(next.confirm, "")
+  assert.equal(next.pending, replacement.file)
+})
+
+test("a pending delete cannot prompt or confirm an event removed by reload", () => {
+  const armed = step(empty, "delete")
+  assert.equal(M.deleteHint(armed, null), "")
+  const next = step(armed, "delete", null)
+  assert.equal(next.confirm, "")
+  assert.equal(next.pending, "")
+})

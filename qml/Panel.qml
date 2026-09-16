@@ -65,7 +65,6 @@ Panel {
 
   onCursorIndexChanged: cancelDelete("move")
   onSelectedKeyChanged: cancelDelete("day")
-  onSelectedFileChanged: cancelDelete("selection")
   onChoosingCalendarsChanged: cancelDelete("c")
   onOpenedChanged: if (!opened) cancelDelete("close")
 
