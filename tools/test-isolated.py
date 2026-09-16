@@ -27,7 +27,8 @@ with tempfile.TemporaryDirectory(prefix="omagenda-tests-") as tmp:
     with patch.object(accounts, "SECRETS_DIR", base / "secrets"), \
          patch.object(accounts, "PIMSYNC_CONFIG_DIR", base / "pimsync"), \
          patch.object(accounts, "PIMSYNC_STATUS_DIR", base / "pimsync-state"), \
-         patch.object(doctor, "SHELL_JSON_PATH", base / "shell.json"):
+         patch.object(doctor, "SHELL_JSON_PATH", base / "shell.json"), \
+         patch.object(doctor, "PLUGIN_PATH", base / "plugin"):
         suite = unittest.defaultTestLoader.discover(str(root / "tests"), top_level_dir=str(root))
         result = unittest.TextTestRunner(verbosity=1).run(suite)
         sys.exit(not result.wasSuccessful())

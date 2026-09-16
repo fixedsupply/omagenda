@@ -20,10 +20,14 @@ import subprocess
 import shlex
 import re
 from pathlib import Path
+from datetime import datetime, timezone
+
+import omagenda
 
 CONFIG_PATH = Path(os.environ.get("OMAGENDA_CONFIG", Path.home() / ".config" / "omagenda" / "config.toml"))
 SHELL_JSON_PATH = Path.home() / ".config" / "omarchy" / "shell.json"
 PLUGIN_ID = "fixedsupply.omagenda"
+PLUGIN_PATH = Path.home() / ".config" / "omarchy" / "plugins" / PLUGIN_ID
 REQUIRED_PACKAGES = ["icalendar", "dateutil", "recurring_ical_events"]
 
 
@@ -87,7 +91,27 @@ def _check_keyring() -> dict:
     return {"ok": False, "detail": "secret-tool not found; account credentials would fall back to a plain file (omarchy pkg add libsecret)"}
 
 
-def _check_plugin_enabled() -> dict:
+def _check_install() -> dict:
+    package = Path(omagenda.__file__).resolve()
+    target = PLUGIN_PATH.resolve()
+    symlink = PLUGIN_PATH.is_symlink()
+    detail = f"plugin folder {PLUGIN_PATH}"
+    detail += f"; developer install (symlink to {target})" if symlink else "; not a symlink"
+    detail += f"; CLI package {package}"
+    if not PLUGIN_PATH.is_dir():
+        return {"ok": False, "detail": detail + "; plugin folder missing; reinstall Omagenda"}
+    try:
+        version = json.loads((target / "manifest.json").read_text())["version"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"ok": False, "detail": detail + "; installed manifest missing or invalid; reinstall Omagenda"}
+    detail += f"; installed version {version}"
+    if not package.is_relative_to(target):
+        return {"ok": False, "detail": detail + f"; CLI is outside installed plugin {target}; try: "
+                "ln -sf ~/.config/omarchy/plugins/fixedsupply.omagenda/bin/omagenda ~/.local/bin/omagenda"}
+    return {"ok": True, "detail": detail}
+
+
+def _check_plugin_enabled(install_ok: bool = True) -> dict:
     if not SHELL_JSON_PATH.exists():
         return {"ok": False, "detail": "no shell.json yet; Omarchy is using its defaults, which don't include Omagenda"}
     try:
@@ -103,7 +127,9 @@ def _check_plugin_enabled() -> dict:
     plugins = shell_config.get("plugins", [])
     if any(p.get("id") == PLUGIN_ID for p in plugins):
         return {"ok": True, "detail": "enabled (non-widget)"}
-    return {"ok": False, "detail": "not enabled yet (omarchy plugin enable fixedsupply.omagenda)"}
+    remedy = ("omarchy plugin enable fixedsupply.omagenda" if install_ok
+              else "fix the install check first")
+    return {"ok": False, "detail": f"not enabled yet ({remedy})"}
 
 
 def _section_name(layout: dict, target_entry: dict) -> str:
@@ -122,7 +148,11 @@ def _check_sign_in() -> dict:
     an expired sign-in the single most likely thing to be wrong here.
     """
     from omagenda.sync import read_last_sync
+    from omagenda.pause import read_pause
 
+    paused = read_pause()
+    if paused:
+        return {"ok": True, "detail": f"sync paused until {paused}"}
     record = read_last_sync()
     if not record:
         return {"ok": True, "detail": "no sync has run yet"}
@@ -134,6 +164,17 @@ def _check_sign_in() -> dict:
         return {"ok": False,
                 "detail": f"last sync at {record.get('at', '?')} reported problems with "
                           f"{', '.join(record.get('problems', [])) or 'an account'}"}
+    try:
+        at = datetime.fromisoformat(record.get("at", ""))
+        age = (datetime.now(timezone.utc) - at).total_seconds()
+    except (ValueError, TypeError):
+        return {"ok": False, "detail": "last sync timestamp invalid; try: omagenda sync"}
+    threshold = max(1800, 3 * int(read_config().get("sync_interval", 300)))
+    if age > threshold:
+        minutes = int(age // 60)
+        age_text = f"{minutes} minutes" if minutes < 120 else f"{minutes // 60} hours"
+        return {"ok": False, "detail": f"last successful sync was {age_text} ago; "
+                "is the watcher running? try: omagenda sync"}
     return {"ok": True, "detail": f"last synced {record.get('at', '?')}"}
 
 
@@ -176,6 +217,7 @@ def run() -> dict:
     from omagenda.pause import read_pause
 
     config = read_config()
+    install = _check_install()
     paused = read_pause()
     from omagenda.vdir import discover_calendars
     hidden = config.get("hidden_calendars", [])
@@ -185,6 +227,7 @@ def run() -> dict:
     if missing:
         detail += "; no longer discovered: " + ", ".join(missing)
     return {
+        "install": install,
         "hiddenCalendars": {"ok": True, "detail": detail},
         "syncPause": {"ok": True, "detail": f"paused until {paused}" if paused else "not paused"},
         "leftoverTokens": _check_leftover_tokens(config),
@@ -193,5 +236,5 @@ def run() -> dict:
         "signIn": _check_sign_in(),
         "syncTool": _check_sync_tool(config),
         "keyring": _check_keyring(),
-        "pluginEnabled": _check_plugin_enabled(),
+        "pluginEnabled": _check_plugin_enabled(install["ok"]),
     }
