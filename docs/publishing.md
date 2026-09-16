@@ -14,6 +14,7 @@ are recorded for the candidate commit.
 - [ ] `preview.png` and every screenshot contain invented data only,
       regenerated from `tools/demo-vdir.py`
 - [x] Repository version and changelog prepared for v0.2.0
+- [x] Offline clone checks passed on `9b3e3e1` (see STATUS.md)
 - [ ] Screenshots regenerated for v0.2.0 (Claude)
 - [ ] Hosted privacy page updated on gh-pages (Claude)
 - [ ] Final go/no-go review and annotated v0.2.0 tag (Claude)

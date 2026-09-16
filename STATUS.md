@@ -20,7 +20,19 @@ installed config migration, normal five-minute watcher sync, expired-auth UX
 and guest-metadata acceptance. Detailed panel acceptance steps remain where
 not covered by the PM's report. Claude owns the two refreshed screenshots,
 gh-pages privacy update, final review and annotated tag; the PM decides push.
-Offline clone results will be recorded after the candidate commit.
+Offline clone of `release-0.2.0` at `9b3e3e1` passed on 2026-09-16:
+plugin validation, `python3 -m py_compile` for all 46 `.py` files plus the CLI,
+313 isolated Python tests, all four Node files (90 individual checks), CLI
+help and whitespace checks. No packages were installed and no network was
+used; this reused the host tools and external Python venv.
+
+With empty temporary config/state/vdir and the isolated runner's keyring,
+notification and shell-config guards, `doctor --json` exited 0: packages
+present, no calendars, no prior sync, no CalDAV tool required, not paused,
+none hidden, keyring lookup skipped, and plugin not enabled (no shell.json).
+The keyring binary-presence check sees the test stub, not a working keyring.
+Messages are accurate; README now explains the empty-install next step.
+Doctor's per-check failures do not currently make its exit status nonzero.
 
 The dated sections below are historical evidence, not the current test count.
 
