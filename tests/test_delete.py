@@ -87,6 +87,18 @@ class DeleteTest(unittest.TestCase):
                 self.assertTrue(self.file.exists())
         self.assertEqual(outside.read_bytes(), self.content)
 
+    def test_symlink_above_the_vdir_does_not_block_deletion(self):
+        # Some systems symlink /home, and some users symlink their calendar folder.
+        link = self.base / "home-link"
+        link.symlink_to(self.base, target_is_directory=True)
+        env = dict(os.environ, OMAGENDA_VDIR=str(link / "vdir"))
+        result = subprocess.run([sys.executable, str(CLI), "delete",
+                                 str(link / "vdir" / "personal" / "demo.ics"), "--json"],
+                                capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.file.exists())
+        self.assertEqual(Path(json.loads(result.stdout)["copy"]).read_bytes(), self.content)
+
     def test_refuses_read_only(self):
         from omagenda.vdir import discover_calendars
         calendars = discover_calendars()

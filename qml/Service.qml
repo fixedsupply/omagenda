@@ -103,7 +103,7 @@ Item {
       try {
         root.agenda = JSON.parse(text())
         visibilityProc.failure = Model.visibilityFailureAfterLoad(visibilityProc.failure, visibilityProc.running, root.visibilityPending)
-        if (visibilityProc.failure === "" && deleteProc.failure === "") root.lastError = ""
+        if (visibilityProc.failure === "") root.lastError = ""
       } catch (e) {
         root.lastError = "agenda.json is not valid JSON: " + e
       }
@@ -198,11 +198,9 @@ Item {
     id: deleteProc
     property string failure: ""
     onExited: function(exitCode, exitStatus) {
-      if (exitCode !== 0) {
-        failure = failure || "Event deletion failed"
-        root.lastError = failure
-        root.deleteFailed(failure)
-      }
+      // Reported in the panel footer for a few seconds (Panel.qml). It is
+      // not a health problem, so it must not become a sticky lastError.
+      if (exitCode !== 0) root.deleteFailed(failure || "Event deletion failed")
       root.reload()
     }
     stderr: StdioCollector {

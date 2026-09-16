@@ -22,10 +22,16 @@ def delete_event(event_file: str) -> dict:
 
 
 def _delete_event(event_file: str) -> dict:
-    root = vdir.resolve_vdir_root().resolve()
+    root_given = vdir.resolve_vdir_root().expanduser().absolute()
+    root = root_given.resolve()
     given = Path(event_file).expanduser().absolute()
-    if ".." in given.parts or any(p.is_symlink() for p in (given, *given.parents)):
-        raise ValueError("Event file must not use '..' or symlinks")
+    # A symlink inside the vdir could alias another calendar's file, so those
+    # are refused. Symlinks above it (a symlinked home, or a vdir folder that
+    # is itself a link) are ordinary setups and must not block deletion.
+    inside_vdir = [p for p in (given, *given.parents)
+                   if p not in (root_given, root) and (p.is_relative_to(root_given) or p.is_relative_to(root))]
+    if ".." in given.parts or any(p.is_symlink() for p in inside_vdir):
+        raise ValueError("Event file must not use '..' or symlinks inside the calendar folder")
     path = given.resolve(strict=True)
     if (not path.is_relative_to(root) or not path.is_file()
             or path.suffix != ".ics" or path.name.endswith(".conflict.ics")):
