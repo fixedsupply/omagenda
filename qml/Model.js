@@ -284,6 +284,32 @@ function tickerDays(agenda, startDate, selectedDate, dayCount, maxDots) {
   return days
 }
 
+function clampSelectedDay(selectedKey, todayKey, range) {
+  var first = todayKey
+  var last = range && range.to ? dateKey(addDays(range.to, -1)) : todayKey
+  if (last < first) last = first
+  if (selectedKey < first) return first
+  if (selectedKey > last) return last
+  return selectedKey
+}
+
+function stripStartFor(currentStart, selectedKey, todayKey, dayCount) {
+  var start = dateKey(currentStart || todayKey)
+  var selected = dateKey(selectedKey)
+  var today = dateKey(todayKey)
+  var count = Math.max(1, Number(dayCount) || 7)
+  if (start < today) start = today
+  if (selected < today) return today
+  if (selected < start) return today
+  var offset = Math.floor((toDate(selected).getTime() - toDate(today).getTime()) / 86400000)
+  return dateKey(addDays(today, Math.floor(offset / count) * count))
+}
+
+function relativeDayHint(selectedKey, todayKey) {
+  var days = Math.round((toDate(selectedKey).getTime() - toDate(todayKey).getTime()) / 86400000)
+  return days > 1 ? "in " + days + " days" : ""
+}
+
 // ---------------------------------------------------------------------
 // Agenda list
 // ---------------------------------------------------------------------
@@ -580,6 +606,9 @@ if (typeof module !== "undefined") {
     needsReauth: needsReauth,
     CALENDAR_GLYPH: CALENDAR_GLYPH,
     tickerDays: tickerDays,
+    clampSelectedDay: clampSelectedDay,
+    stripStartFor: stripStartFor,
+    relativeDayHint: relativeDayHint,
     eventsForDate: eventsForDate,
     secondLine: secondLine,
     footerText: footerText,

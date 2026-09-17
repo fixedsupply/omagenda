@@ -29,7 +29,7 @@ import recurring_ical_events
 
 from omagenda import conference, vdir
 
-DEFAULT_DAYS = 14
+DEFAULT_DAYS = 56
 
 
 def resolve_state_dir() -> Path:

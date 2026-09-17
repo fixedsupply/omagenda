@@ -192,6 +192,14 @@ test("ticker respects a shorter day count", () => {
   assert.equal(Model.tickerDays(AGENDA, "2026-09-07", "2026-09-07", 3).length, 3)
 })
 
+test("strip paging keeps selection visible and never precedes today", () => {
+  assert.equal(Model.stripStartFor("2026-09-07", "2026-09-15", "2026-09-07", 7), "2026-09-14")
+  assert.equal(Model.stripStartFor("2026-09-14", "2026-09-06", "2026-09-07", 7), "2026-09-07")
+  assert.equal(Model.clampSelectedDay("2026-09-01", "2026-09-07", { to: "2026-11-02" }), "2026-09-07")
+  assert.equal(Model.clampSelectedDay("2026-12-01", "2026-09-07", { to: "2026-11-02" }), "2026-11-01")
+  assert.equal(Model.relativeDayHint("2026-09-15", "2026-09-07"), "in 8 days")
+})
+
 // ---------------------------------------------------------------------
 test("eventsForDate puts all-day events first", () => {
   const events = Model.eventsForDate(AGENDA, "2026-09-07")

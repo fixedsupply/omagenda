@@ -100,8 +100,10 @@ Panel {
     setting("timeFormat", "system"),
     Qt.locale().timeFormat(Locale.ShortFormat).indexOf("AP") === -1)
   readonly property int dayCount: Math.max(3, Math.min(14, parseInt(setting("days", 7), 10) || 7))
-
-  readonly property var days: Model.tickerDays(agenda, todayKey, selectedKey, dayCount)
+  property string stripStartKey: todayKey
+  readonly property string lastDayKey: agenda.range && agenda.range.to
+    ? Model.dateKey(Model.addDays(agenda.range.to, -1)) : todayKey
+  readonly property var days: Model.tickerDays(agenda, stripStartKey, selectedKey, dayCount)
   readonly property var dayEvents: Model.eventsForDate(agenda, selectedKey)
   readonly property var heroEvent: Model.currentOrNextEvent(agenda, now)
   readonly property var selectedEvent: cursorIndex >= 0 && cursorIndex < dayEvents.length ? dayEvents[cursorIndex] : null
@@ -176,6 +178,7 @@ Panel {
     choosingCalendars = false
     now = new Date()
     selectedKey = Model.dateKey(now)
+    stripStartKey = selectedKey
     cursorIndex = 0
     expanded = false
   }
@@ -184,11 +187,24 @@ Panel {
     selectDay(Model.dateKey(Model.addDays(selectedKey, delta)))
   }
 
+  function pageStrip(delta) {
+    var next = Model.dateKey(Model.addDays(stripStartKey, delta * dayCount))
+    if (next < todayKey) next = todayKey
+    if (next > lastDayKey) return
+    stripStartKey = next
+    selectDay(next)
+  }
+
+  function wheelStrip(delta) {
+    pageStrip(delta > 0 ? -1 : 1)
+  }
+
   // The day model changes with selectedKey and destroys the tapped delegate.
   // Finish navigation in the panel context, which survives that replacement.
   function selectDay(key) {
     cancelDelete("day")
-    selectedKey = key
+    selectedKey = Model.clampSelectedDay(key, todayKey, agenda.range)
+    stripStartKey = Model.stripStartFor(stripStartKey, selectedKey, todayKey, dayCount)
     cursorIndex = 0
     expanded = false
   }
@@ -496,8 +512,30 @@ Panel {
             width: parent.width
             spacing: Style.space(2)
 
-            Repeater {
-              model: root.days
+            PanelActionButton {
+              id: previousPage
+              visible: root.stripStartKey > root.todayKey
+              enabled: visible
+              iconText: "‹"
+              tooltipText: "Previous days"
+              foreground: root.foreground
+              hoverColor: Color.accent
+              fontFamily: root.fontFamily
+              onClicked: root.pageStrip(-1)
+            }
+
+            Item {
+              id: tickerDays
+              width: ticker.width - previousPage.width - nextPage.width - Style.space(4)
+              height: tickerCells.height
+
+              Row {
+                id: tickerCells
+                width: parent.width
+                spacing: Style.space(2)
+
+                Repeater {
+                  model: root.days
 
               delegate: Item {
                 id: dayCell
@@ -508,7 +546,7 @@ Panel {
                   for (var i = 0; i < names.length; i++) out.push(root.dotColor(names[i]))
                   return out
                 }
-                width: (ticker.width - (root.days.length - 1) * Style.space(2)) / root.days.length
+                width: (tickerCells.width - (root.days.length - 1) * Style.space(2)) / root.days.length
                 height: dayColumn.implicitHeight + Style.space(10)
 
                 BorderSurface {
@@ -571,6 +609,30 @@ Panel {
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
               }
+                }
+              }
+              WheelHandler {
+                property real pending: 0
+                onWheel: function(event) {
+                  pending += event.angleDelta.y
+                  while (Math.abs(pending) >= 120) {
+                    root.wheelStrip(pending)
+                    pending += pending > 0 ? -120 : 120
+                  }
+                }
+              }
+            }
+
+            PanelActionButton {
+              id: nextPage
+              visible: Model.dateKey(Model.addDays(root.stripStartKey, root.dayCount)) <= root.lastDayKey
+              enabled: visible
+              iconText: "›"
+              tooltipText: "Next days"
+              foreground: root.foreground
+              hoverColor: Color.accent
+              fontFamily: root.fontFamily
+              onClicked: root.pageStrip(1)
             }
           }
 
@@ -578,6 +640,7 @@ Panel {
 
           PanelSectionHeader {
             text: Qt.formatDate(Model.toDate(root.selectedKey), "dddd d MMMM")
+              + (Model.relativeDayHint(root.selectedKey, root.todayKey) ? " · " + Model.relativeDayHint(root.selectedKey, root.todayKey) : "")
             foreground: root.foreground
             fontFamily: root.fontFamily
           }

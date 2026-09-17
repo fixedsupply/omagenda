@@ -13,7 +13,7 @@ class PanelNavigationTest(unittest.TestCase):
         if not runner.exists():
             self.skipTest("Qt QML test runtime is unavailable")
         panel = (Path(__file__).resolve().parents[1] / "qml/Panel.qml").read_text()
-        function = re.search(r"  function selectDay\(key\) \{.*?\n  }", panel, re.S).group()
+        function = re.search(r"  function selectDay\(key\) \{.*?\n  }", panel, re.S).group().replace("Model.", "root.model.")
         handler = re.search(r"onTapped: root.selectDay\(dayCell.modelData.key\)", panel).group()
         template = '''import QtQuick
 import QtTest
@@ -24,6 +24,11 @@ Item {
     property int cursorIndex: 3
     property bool expanded: true
     property string cancelled: ""
+    property var agenda: ({ range: { to: "2099-01-01" } })
+    property string todayKey: "first"
+    property string stripStartKey: "first"
+    property int dayCount: 7
+    property var model: ({ clampSelectedDay: function(key) { return key }, stripStartFor: function(start) { return start } })
     function cancelDelete(action) { cancelled = action }
     FUNCTION
     Repeater {

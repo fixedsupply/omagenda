@@ -806,12 +806,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     p_index = sub.add_parser("index", help="rebuild agenda.json from the vdir")
-    p_index.add_argument("--days", type=int, default=14)
+    p_index.add_argument("--days", type=int, default=56)
     p_index.add_argument("--json", action="store_true")
     p_index.set_defaults(func=cmd_index)
 
     p_agenda = sub.add_parser("agenda", help="what the panel shows")
-    p_agenda.add_argument("--days", type=int, default=14)
+    p_agenda.add_argument("--days", type=int, default=56)
     p_agenda.add_argument("--from", dest="date_from", default=None)
     p_agenda.add_argument("--json", action="store_true")
     p_agenda.set_defaults(func=cmd_agenda)
@@ -879,7 +879,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync.set_defaults(func=cmd_sync)
 
     p_watch = sub.add_parser("watch", help="long-running: reindex on vdir changes, fire alarms")
-    p_watch.add_argument("--days", type=int, default=14)
+    p_watch.add_argument("--days", type=int, default=56)
     p_watch.add_argument("--poll-seconds", type=int, default=15)
     p_watch.add_argument("--sync-interval", type=int, default=None,
                          help=f"seconds between syncs (default {DEFAULT_SYNC_INTERVAL}, "
