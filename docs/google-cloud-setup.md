@@ -20,9 +20,16 @@ Cost: free. The Calendar scope Omagenda needs is classified "sensitive," not "re
 1. **APIs & Services** → **OAuth consent screen**.
 2. User type: **External** (anyone with a Google account, not just your Workspace).
 3. Fill in: app name `Omagenda`, user support email, developer contact email. Skip logo and links for now.
-4. **Scopes** → **Add or remove scopes** → find or manually enter `https://www.googleapis.com/auth/calendar` → save.
+4. **Data Access / Scopes** → **Add or remove scopes** → add exactly `https://www.googleapis.com/auth/calendar.events` and `https://www.googleapis.com/auth/calendar.calendarlist.readonly` → save. These allow event editing and calendar discovery without permission to create, share or delete calendars; verification reviewers expect exactly these two scopes.
 5. **Test users** → add your own Google account (and any early testers, up to 100). Leave publishing status as **Testing** for now.
 6. Save. Do **not** click "Publish app" yet — that comes right before the README ships (see §5).
+
+## Unverified-app sign-in screen
+
+Until Google verification is complete, sign-in shows **Google hasn't verified
+this app**. Choose **Advanced** → **Go to Omagenda** to continue. On the
+permission screen, keep both permission checkboxes ticked; Omagenda needs
+both event access and permission to view the calendar list.
 
 ## 4. Create the OAuth client
 

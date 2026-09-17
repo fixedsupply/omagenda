@@ -37,7 +37,7 @@ ln -sf ~/.config/omarchy/plugins/fixedsupply.omagenda/bin/omagenda ~/.local/bin/
 ```
 
 Check that `omarchy plugin list | grep omagenda` shows Omagenda enabled and
-`omagenda --version` shows `0.2.1` from
+`omagenda --version` shows `0.3.0` from
 `~/.config/omarchy/plugins/fixedsupply.omagenda` (resolved if it is a symlink).
 After connecting a calendar, `omagenda doctor` should be clean.
 
@@ -48,7 +48,11 @@ read-only `.ics` subscription:
 omagenda account add google
 ```
 
-and check it landed:
+Until verification is complete, Google shows **Google hasn't verified this app**.
+Choose **Advanced** → **Go to Omagenda**, then keep both permission checkboxes
+(event access and viewing your calendar list) ticked.
+
+Then check it landed:
 
 ```bash
 omagenda doctor

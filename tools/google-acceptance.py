@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Opt-in live Google acceptance, confined to a newly created calendar.
 
-Uses an existing Google account's authorization. No invitees, personal event
-reads, or production configuration changes. Deletes its own calendar in finally.
+Uses the stored account for events and one-off consent for calendar creation.
+No invitees, personal event reads, or production configuration changes. Deletes its own calendar in finally.
 A private recovery receipt remains if cleanup fails. Not part of unit discovery.
 """
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager, ExitStack
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -16,13 +17,35 @@ import subprocess
 import sys
 import tempfile
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 import urllib.request
 import uuid
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+
+APP_CREATED_SCOPES = ("https://www.googleapis.com/auth/calendar.app.created",)
+
+
+@contextmanager
+def calendar_authorization(account):
+    """Keep the disposable-calendar grant in memory and always revoke it."""
+    from omagenda.bridges import google
+
+    tokens = google.exchange_authorization(account, scopes=APP_CREATED_SCOPES, offline=False)
+    token = tokens["access_token"]
+    try:
+        if not set(APP_CREATED_SCOPES) <= set(tokens.get("scope", "").split()):
+            raise RuntimeError("Disposable-calendar permission was not granted")
+        yield token
+    finally:
+        request = urllib.request.Request("https://oauth2.googleapis.com/revoke", method="POST",
+            data=urlencode({"token": token}).encode(),
+            headers={"Content-Type": "application/x-www-form-urlencoded"})
+        with urllib.request.urlopen(request, timeout=20):
+            pass
 
 
 def main():
@@ -47,7 +70,8 @@ def main():
     folder = Path(tempfile.mkdtemp(prefix='omagenda-google-acceptance-'))
     receipt = folder / 'recovery.json'
     passed = []
-    stage = 'create disposable calendar'
+    stage = 'one-off calendar authorization'
+    authorization = ExitStack()
 
     def check(label, condition=True):
         if not condition:
@@ -75,13 +99,15 @@ def main():
     success = False
     cleaned = False
     try:
+        calendar_token = authorization.enter_context(calendar_authorization(account))
+        stage = 'create disposable calendar'
         # Do not retry this POST: an uncertain response must not create a
         # second calendar. The unique name helps manual recovery if needed.
         name = 'Omagenda acceptance ' + uuid.uuid4().hex[:12]
         receipt.write_text(json.dumps({'calendar_name': name}))
         receipt.chmod(0o600)
         request = urllib.request.Request(google.API_BASE + '/calendars', method='POST',
-            headers={'Authorization': 'Bearer ' + google._get_access_token(account),
+            headers={'Authorization': 'Bearer ' + calendar_token,
                      'Content-Type': 'application/json'},
             data=json.dumps({'summary': name, 'timeZone': 'UTC'}).encode())
         with urllib.request.urlopen(request, timeout=20) as response:
@@ -205,25 +231,37 @@ def main():
     except Exception as exc:
         print('FAIL: ' + stage + ' (' + type(exc).__name__ + ')', flush=True)
     finally:
-        if watcher is not None:
-            watcher.terminate()
+        try:
             try:
-                watcher.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                watcher.kill()
-                watcher.wait(timeout=10)
-        if calendar_id:
+                if watcher is not None:
+                    watcher.terminate()
+                    try:
+                        watcher.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        watcher.kill()
+                        watcher.wait(timeout=10)
+            finally:
+                if calendar_id:
+                    try:
+                        google._api_request('DELETE', google.API_BASE + '/calendars/'
+                                            + quote(calendar_id, safe=''), calendar_token)
+                        cleaned = True
+                        print('PASS: deleted disposable Google calendar', flush=True)
+                    except Exception as exc:
+                        print('CLEANUP NEEDED: ' + str(receipt) + ' (' + type(exc).__name__ + ')', flush=True)
+                else:
+                    print('Creation outcome needs review; recovery receipt: ' + str(receipt), flush=True)
+        finally:
             try:
-                api('DELETE')
-                cleaned = True
-                print('PASS: deleted disposable Google calendar', flush=True)
+                authorization.close()
             except Exception as exc:
-                print('CLEANUP NEEDED: ' + str(receipt) + ' (' + type(exc).__name__ + ')', flush=True)
-        else:
-            print('Creation outcome needs review; recovery receipt: ' + str(receipt), flush=True)
-        if cleaned:
-            import shutil
-            shutil.rmtree(folder)
+                success = False
+                print('FAIL: revoke one-off authorization (' + type(exc).__name__ + ')', flush=True)
+    if success and cleaned:
+        import shutil
+        shutil.rmtree(folder)
+    else:
+        print('Recovery folder: ' + str(folder), flush=True)
     print(json.dumps({'passed_checks': len(passed), 'success': success, 'calendar_cleaned_up': cleaned}), flush=True)
     return 0 if success and cleaned else 1
 

@@ -573,6 +573,16 @@ Mapping rules, Google: `summary`↔`SUMMARY`, `start/end` with `dateTime`+`timeZ
 
 Planned mapping rules, Microsoft (not implemented): `subject`, `start/end` with `dateTime`+`timeZone` (Windows zone names, map through a small table to IANA), `recurrence.pattern/range`→`RRULE` (weekly/daily/absoluteMonthly/relativeMonthly/absoluteYearly/relativeYearly; anything else is imported read-only and flagged), `onlineMeeting.joinUrl`→`CONFERENCE`, `isAllDay`, `isCancelled`, `seriesMasterId`, delta via `/me/calendars/{id}/calendarView/delta`.
 
-OAuth (Google implemented; Microsoft planned): loopback redirect to `http://127.0.0.1:<random port>/` served by `http.server` for one request, PKCE, browser opened with `omarchy launch browser <url>` or `xdg-open`. Refresh tokens stored with `secret-tool store --label "Omagenda <account>" service omagenda account <id>-refresh-token`. Google scope `https://www.googleapis.com/auth/calendar`; Microsoft scopes `Calendars.ReadWrite offline_access`.
+OAuth (Google implemented; Microsoft planned): loopback redirect to `http://127.0.0.1:<random port>/` served by `http.server` for one request, PKCE, browser opened with `omarchy launch browser <url>` or `xdg-open`. Refresh tokens stored with `secret-tool store --label "Omagenda <account>" service omagenda account <id>-refresh-token`. Google scopes `https://www.googleapis.com/auth/calendar.events` and `https://www.googleapis.com/auth/calendar.calendarlist.readonly`; Microsoft scopes `Calendars.ReadWrite offline_access`.
 
 Network calls use `urllib.request` with a 15 s timeout and exponential backoff on 429/5xx. The bridge never runs on the QML side; `omagenda watch` schedules it by `sync_interval` (seconds) and on demand from the panel's `s`.
+
+The Google acceptance script separately requests the one-off scope
+`https://www.googleapis.com/auth/calendar.app.created` through the same loopback
+PKCE flow. Its in-memory token creates and deletes only the disposable calendar
+and is revoked in cleanup, including on failure or interruption. All event and
+sync scenarios use the normal stored account token. Live acceptance must start
+with a normal account grant limited to the two product scopes to establish
+narrow-scope compatibility. Existing broader grants remain usable by the product.
+Google revocation may also invalidate the normal grant for the same client;
+check the account after the run and reconnect if needed.

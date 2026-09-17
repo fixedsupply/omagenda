@@ -237,3 +237,20 @@ notification or additional copy. Escape after changing text must cancel.
 Tab and Shift+Enter must do nothing in edit mode. Reopen with `n` and the
 global shortcut: both must start clean in add mode. Delete only this disposable
 event with `x`, `x` when finished. Do not use real appointments or screenshots.
+
+## Narrow Google permissions — offline only (2026-09-17)
+
+The v0.3.0 permission change has isolated coverage for exact consent scopes,
+partial consent refusal without credential storage, legacy broader grants,
+scope-insufficient reconnect reporting, and one-off acceptance-token cleanup.
+No live authorization or provider acceptance was run in this session.
+
+Claude still needs to confirm both product scope names in real consent,
+untick each permission in turn, and run `tools/google-acceptance.py --run-live`
+with a normal account grant limited to `calendar.events` and
+`calendar.calendarlist.readonly`. The script asks separately for
+`calendar.app.created`; only calendar creation and deletion use that token.
+Verify every event/watcher scenario, disposable-calendar deletion and token
+revocation. Check whether revocation also invalidates the normal account's
+same-client grant, and reconnect afterwards if needed. Prior acceptance with
+full-calendar access does not establish acceptance under the narrower scopes.

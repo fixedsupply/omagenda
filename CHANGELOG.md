@@ -1,6 +1,17 @@
 # Changelog
 
-## v0.2.1 — unreleased
+## v0.3.0 — unreleased
+
+### Changed
+
+- Narrower Google permissions: event access and read-only calendar discovery.
+  Existing sign-ins still work. Reconnecting is optional but recommended to
+  drop the broader grant; revoke the old grant in Google account permissions
+  first to ensure it is removed (this signs out other computers too).
+- Google acceptance uses a separate, in-memory permission for its disposable
+  calendar and revokes it after the run.
+
+## v0.2.1
 
 - Account removal is local by default; Google revocation requires `--revoke`
   and warns that it signs out every computer. Local calendars remain.

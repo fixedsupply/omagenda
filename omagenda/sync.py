@@ -382,6 +382,8 @@ def _sync_calendar_contents(bridge, account: dict, calendar, calendar_path: Path
                 ref = bridge.push_create(account, calendar, content)
             except Exception as exc:  # noqa: BLE001 -- one bad event must not stop the others
                 counts.setdefault("errors", []).append(f"create {uid}: {exc}")
+                if isinstance(exc, AuthExpiredError):
+                    counts.update(needsReauth=True, detail=exc.remedy)
                 continue
             uid, file_path, content = _adopt_remote_uid(file_path, content, ref.remote_id, state_dir)
             local_hash = hashlib.sha256(content).hexdigest()
@@ -406,6 +408,8 @@ def _sync_calendar_contents(bridge, account: dict, calendar, calendar_path: Path
                 state.cursor = None  # Fetch the winning remote version on the next sync.
             except Exception as exc:  # noqa: BLE001
                 counts.setdefault("errors", []).append(f"update {uid}: {exc}")
+                if isinstance(exc, AuthExpiredError):
+                    counts.update(needsReauth=True, detail=exc.remedy)
 
     on_disk.update(adopted)
     # A uid this sync already knew about, whose file the user removed
@@ -426,6 +430,8 @@ def _sync_calendar_contents(bridge, account: dict, calendar, calendar_path: Path
             continue
         except Exception as exc:  # noqa: BLE001
             counts.setdefault("errors", []).append(f"delete {uid}: {exc}")
+            if isinstance(exc, AuthExpiredError):
+                counts.update(needsReauth=True, detail=exc.remedy)
             continue
         # If the pull resurrected the file, take it back out; the user's
         # deletion is the newer intent.

@@ -188,3 +188,17 @@ and configuration only; local calendar files remain. For Google, use
 `omagenda account remove <id> --revoke` instead to revoke access everywhere.
 Revoking signs Omagenda out on every computer using that Google account.
 After local removal, revoke access through https://myaccount.google.com/permissions.
+
+Google sign-in requests `https://www.googleapis.com/auth/calendar.events` and
+`https://www.googleapis.com/auth/calendar.calendarlist.readonly`. Keep both
+permission checkboxes ticked. Existing full-calendar grants still work;
+reconnecting is optional but recommended to reduce access. To ensure an old
+broader grant is removed, revoke Omagenda in Google account permissions before
+reconnecting; this signs out other computers using the same Google account.
+
+`tools/google-acceptance.py --run-live` requests a separate, one-off
+`https://www.googleapis.com/auth/calendar.app.created` permission to create and
+delete its disposable calendar. That token stays in memory and is revoked in
+cleanup; event tests use the normal stored account token. Use a normal grant
+limited to the two product scopes for narrow-scope acceptance. Revocation may
+invalidate the same client's normal grant too; reconnect after the run if needed.

@@ -48,7 +48,8 @@ DEFAULT_CLIENT_ID = os.environ.get(
 )
 DEFAULT_CLIENT_SECRET = os.environ.get("OMAGENDA_GOOGLE_CLIENT_SECRET", "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")
 
-SCOPE = "https://www.googleapis.com/auth/calendar"
+SCOPES = ("https://www.googleapis.com/auth/calendar.events",
+          "https://www.googleapis.com/auth/calendar.calendarlist.readonly")
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 API_BASE = "https://www.googleapis.com/calendar/v3"
@@ -116,13 +117,34 @@ def _authed_request(account: dict, method: str, url: str, body: dict | None = No
     fresh token either succeeds or fails at the refresh, which is where
     an expired sign-in gets named properly.
     """
+    for attempt in range(2):
+        try:
+            return _api_request(method, url, _get_access_token(account), body, extra_headers)
+        except ApiError as exc:
+            if exc.status == 403 and _insufficient_scope(exc.body):
+                raise AuthExpiredError(
+                    account["id"],
+                    remedy=f"Reconnect with: omagenda account add google --id {account['id']}",
+                    detail="Required Google Calendar permission was not granted") from None
+            if exc.status != 401 or attempt:
+                raise
+            forget_access_token(account["id"])
+
+
+def _insufficient_scope(body: str) -> bool:
+    """Google uses both legacy error reasons and structured ErrorInfo."""
     try:
-        return _api_request(method, url, _get_access_token(account), body, extra_headers)
-    except ApiError as exc:
-        if exc.status != 401:
-            raise
-    forget_access_token(account["id"])
-    return _api_request(method, url, _get_access_token(account), body, extra_headers)
+        payload = json_module.loads(body)
+    except ValueError:
+        return False
+
+    def contains_reason(value):
+        if isinstance(value, dict):
+            return (value.get("reason") in ("insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT")
+                    or any(contains_reason(item) for item in value.values()))
+        return isinstance(value, list) and any(contains_reason(item) for item in value)
+
+    return contains_reason(payload)
 
 
 def _pkce_pair() -> tuple[str, str]:
@@ -158,7 +180,8 @@ def _open_browser(url: str) -> None:
     print(f"Open this URL to continue: {url}")
 
 
-def build_auth_url(redirect_uri: str, challenge: str, email: str | None = None) -> str:
+def build_auth_url(redirect_uri: str, challenge: str, email: str | None = None, *,
+                   scopes: tuple[str, ...] = SCOPES, offline: bool = True) -> str:
     """The consent URL. `login_hint` is what makes an account's own address
     actually matter: without it Google shows a generic account chooser, so
     on a machine signed into several accounts you have to know which one
@@ -167,10 +190,10 @@ def build_auth_url(redirect_uri: str, challenge: str, email: str | None = None) 
         "client_id": DEFAULT_CLIENT_ID,
         "redirect_uri": redirect_uri,
         "response_type": "code",
-        "scope": SCOPE,
+        "scope": " ".join(scopes),
         "code_challenge": challenge,
         "code_challenge_method": "S256",
-        "access_type": "offline",
+        "access_type": "offline" if offline else "online",
         "prompt": "consent",
     }
     if email:
@@ -178,9 +201,9 @@ def build_auth_url(redirect_uri: str, challenge: str, email: str | None = None) 
     return f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
 
 
-def authorize(account: dict) -> None:
-    """Interactive: opens a browser for consent, waits for the loopback
-    redirect, exchanges the code, and stores the refresh token."""
+def exchange_authorization(account: dict, *, scopes: tuple[str, ...] = SCOPES,
+                           offline: bool = True) -> dict:
+    """Exchange browser consent using loopback PKCE without storing credentials."""
     verifier, challenge = _pkce_pair()
     server = http.server.HTTPServer(("127.0.0.1", 0), _OneShotAuthHandler)
     server.oauth_code = None
@@ -188,10 +211,13 @@ def authorize(account: dict) -> None:
     port = server.server_address[1]
     redirect_uri = f"http://127.0.0.1:{port}/"
 
-    auth_url = build_auth_url(redirect_uri, challenge, account.get("email"))
-    _open_browser(auth_url)
-    server.handle_request()
-    server.server_close()
+    try:
+        auth_url = build_auth_url(redirect_uri, challenge, account.get("email"),
+                                  scopes=scopes, offline=offline)
+        _open_browser(auth_url)
+        server.handle_request()
+    finally:
+        server.server_close()
 
     if server.oauth_error or not server.oauth_code:
         raise RuntimeError(f"Google authorization failed: {server.oauth_error or 'no code returned'}")
@@ -209,6 +235,18 @@ def authorize(account: dict) -> None:
     with urllib.request.urlopen(request, timeout=15) as response:
         tokens = json_module.loads(response.read())
 
+    return tokens
+
+
+def authorize(account: dict) -> None:
+    """Store a refresh token only after both required permissions are granted."""
+    tokens = exchange_authorization(account)
+    granted = set(tokens.get("scope", "").split())
+    missing = set(SCOPES) - granted
+    if missing and "https://www.googleapis.com/auth/calendar" not in granted:
+        raise RuntimeError(
+            f"Google permission not granted: {', '.join(sorted(missing))}; "
+            f"run omagenda account add google --id {account['id']} again with both boxes ticked")
     refresh_token = tokens.get("refresh_token")
     if not refresh_token:
         raise RuntimeError(
