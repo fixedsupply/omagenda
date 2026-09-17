@@ -6,6 +6,7 @@
 
 - Calendar dots, bars and labels now choose distinct existing theme colours when
   a theme's assigned calendar colours are nearly identical.
+- Delete and edit saves now say when they are waiting for an in-progress sync.
 - Narrower Google permissions: event access and read-only calendar discovery.
   Existing sign-ins still work. Reconnecting gives a token limited to the
   narrower permissions; to also remove the old full-access entry from your

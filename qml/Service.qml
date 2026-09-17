@@ -39,6 +39,7 @@ Item {
   property var agenda: ({ calendars: [], events: [] })
   property var palette: ({})
   readonly property var resolvedPalette: Model.resolvedPalette(palette)
+  readonly property bool deleteRunning: deleteProc.running
   property bool watchRunning: false
   property string lastError: ""
 

@@ -594,6 +594,20 @@ function deleteHint(state, event) {
   return state.message || ""
 }
 
+// A delete/edit holds the same lock as sync. Name that wait explicitly so a
+// second key press is not mistaken for a failed first request.
+function saveProgressText(running, waiting) {
+  if (!running) return ""
+  return waiting ? "Saving… waiting for sync to finish" : "Saving…"
+}
+
+function deleteProgressHint(title, waiting) {
+  var label = String(title || "Untitled")
+  if (label.length > 36) label = label.slice(0, 35) + "…"
+  var hint = "DELETING '" + label + "'…"
+  return waiting ? hint + " WAITING FOR SYNC TO FINISH" : hint
+}
+
 // The footer only advertises keys that do something. Offering "TAB
 // CALENDAR" when there is one writable calendar teaches the user the
 // feature is broken; withdrawing it teaches them nothing false.
@@ -672,6 +686,8 @@ if (typeof module !== "undefined") {
     eventActionHints: eventActionHints,
     deleteTransition: deleteTransition,
     deleteHint: deleteHint,
+    saveProgressText: saveProgressText,
+    deleteProgressHint: deleteProgressHint,
     sameDeleteState: sameDeleteState,
     dateKey: dateKey,
     addDays: addDays,

@@ -16,6 +16,11 @@ test('edit hints omit calendar cycling and save-and-add-another', () => {
   assert.equal(M.quickAddHints(agenda, 'demo', true), 'ENTER SAVE · ESC CANCEL')
   assert.match(M.quickAddHints(agenda, 'demo', false), /SHIFT\+ENTER/)
 })
+test('save progress makes a sync-lock wait visible', () => {
+  assert.equal(M.saveProgressText(false, false), '')
+  assert.equal(M.saveProgressText(true, false), 'Saving…')
+  assert.equal(M.saveProgressText(true, true), 'Saving… waiting for sync to finish')
+})
 
 const fs = require('node:fs')
 const vm = require('node:vm')
@@ -26,7 +31,7 @@ function overlay() {
   Object.defineProperty(root, 'editing', {get: () => root.editFile !== ''})
   const context = vm.createContext({root, Model: M, Qt: {callLater: f => f()},
     field: {get text() { return root.text }, forceActiveFocus() {}}, parseDebounce: {restart() {}},
-    addProc: {running: false}, cycleNoteTimer: {restart() {}}})
+    addProc: {running: false}, cycleNoteTimer: {restart() {}}, saveWaitTimer: {restart() {}}})
   for (const match of source.matchAll(/^  function \w+\([^]*?^  }/gm)) vm.runInContext(match[0], context)
   for (const name of ['open', 'openEdit', 'close', 'sentence', 'setText', 'submit', 'cycleCalendar']) root[name] = context[name]
   return context

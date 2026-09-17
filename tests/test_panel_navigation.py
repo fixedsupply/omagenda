@@ -8,6 +8,51 @@ from pathlib import Path
 
 
 class PanelNavigationTest(unittest.TestCase):
+    def test_delete_progress_hint_appears_and_clears_for_a_long_fake_process(self):
+        runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        if not runner.exists():
+            self.skipTest("Qt QML test runtime is unavailable")
+        root = Path(__file__).resolve().parents[1]
+        panel = (root / "qml/Panel.qml").read_text()
+        self.assertIn("service.deleteRunning", panel)
+        self.assertIn("onDeleteRunningChanged()", panel)
+        model = (root / "qml/Model.js").read_text()
+        progress = re.search(r"function deleteProgressHint\(title, waiting\) \{.*?\n\}", model, re.S).group()
+        template = '''import QtQuick
+import QtTest
+Item {
+  id: root
+  width: 100; height: 100
+  property bool deleteRunning: false
+  property string deleteInProgressTitle: "Disposable event"
+  property bool deleteWaitElapsed: false
+  FUNCTION
+  function hint() { return deleteRunning ? deleteProgressHint(deleteInProgressTitle, deleteWaitElapsed) : "" }
+  Timer { id: waitTimer; interval: 2000; repeat: false; onTriggered: if (root.deleteRunning) root.deleteWaitElapsed = true }
+  onDeleteRunningChanged: {
+    if (deleteRunning) { deleteWaitElapsed = false; waitTimer.restart() }
+    else { waitTimer.stop(); deleteWaitElapsed = false; deleteInProgressTitle = "" }
+  }
+  TestCase { name: "DeleteProgress"; when: windowShown
+    function test_wait_then_exit() {
+      root.deleteRunning = true
+      compare(root.hint(), "DELETING 'Disposable event'…")
+      wait(2100)
+      compare(root.hint(), "DELETING 'Disposable event'… WAITING FOR SYNC TO FINISH")
+      root.deleteRunning = false
+      compare(root.hint(), "")
+      compare(root.deleteInProgressTitle, "")
+    }
+  }
+}'''
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_PLATFORMTHEME="basic",
+                   QT_QUICK_BACKEND="software")
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "tst_delete_progress.qml").write_text(template.replace("FUNCTION", progress))
+            result = subprocess.run([str(runner), "-input", tmp], env=env,
+                                    capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_day_tap_survives_delegate_replacement(self):
         runner = Path("/usr/lib/qt6/bin/qmltestrunner")
         if not runner.exists():

@@ -45,6 +45,7 @@ Item {
   property bool keepOpenAfterSave: false
   property string savedTitle: ""
   property string saveError: ""
+  property bool saveWaitElapsed: false
 
   readonly property color foreground: Color.menu.text
   readonly property color accent: Color.accent
@@ -53,6 +54,7 @@ Item {
     "system", Qt.locale().timeFormat(Locale.ShortFormat).indexOf("AP") === -1)
 
   readonly property string preview: Model.previewLine(parsed, timeFormat)
+  readonly property string saveProgress: Model.saveProgressText(addProc.running, saveWaitElapsed)
   readonly property var warnings: parsed && parsed.warnings ? parsed.warnings : []
   readonly property var agenda: service ? service.agenda : ({ calendars: [], events: [] })
 
@@ -168,8 +170,17 @@ Item {
     root.savedTitle = ""
     root.savedUpdate = false
     root.saveError = ""
+    root.saveWaitElapsed = false
     addProc.command = command
     addProc.running = true
+    saveWaitTimer.restart()
+  }
+
+  Timer {
+    id: saveWaitTimer
+    interval: 2000
+    repeat: false
+    onTriggered: if (addProc.running) root.saveWaitElapsed = true
   }
 
   Timer {
@@ -230,6 +241,8 @@ Item {
       onStreamFinished: root.saveError = text.trim()
     }
     onExited: function(exitCode, exitStatus) {
+      saveWaitTimer.stop()
+      root.saveWaitElapsed = false
       if (exitCode !== 0) {
         root.parseError = root.saveError || "Could not save the event. Your text is still here."
         return
@@ -322,7 +335,9 @@ Item {
             font.pixelSize: Style.font.heading
             onTextEdited: root.setText(text)
             onSaveRequested: function(keepOpen) { root.submit(keepOpen) }
-            onCancelRequested: if (!addProc.running) root.close()
+            // Closing leaves the child process running; it will still finish
+            // its locked write and reload the agenda after the overlay hides.
+            onCancelRequested: root.close()
             onCalendarRequested: root.cycleCalendar()
           }
         }
@@ -330,6 +345,16 @@ Item {
         PanelSeparator { foreground: root.foreground }
 
         // ---- what will actually be written ------------------------------
+        Text {
+          width: parent.width
+          visible: root.saveProgress !== ""
+          textFormat: Text.PlainText
+          text: root.saveProgress
+          color: root.accent
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+        }
+
         Text {
           width: parent.width
           textFormat: Text.PlainText

@@ -50,7 +50,11 @@ Panel {
   property int cursorIndex: 0
   property bool expanded: false
   property var deleteState: ({ pending: "", message: "", confirm: "" })
+  property string deleteInProgressTitle: ""
+  property bool deleteWaitElapsed: false
   readonly property string deleteHint: Model.deleteHint(deleteState, selectedEvent)
+  readonly property string deleteProgressHint: service && service.deleteRunning
+    ? Model.deleteProgressHint(deleteInProgressTitle, deleteWaitElapsed) : ""
   readonly property string actionHints: Model.eventActionHints(agenda, selectedEvent)
 
   function cancelDelete(action) {
@@ -59,9 +63,13 @@ Panel {
   }
 
   function requestDelete() {
+    if (service && service.deleteRunning) return
     deleteState = Model.deleteTransition(deleteState, "delete", agenda, selectedEvent, choosingCalendars)
     if (deleteState.message) deleteMessageTimer.restart()
-    if (deleteState.confirm && service) service.deleteEvent(deleteState.confirm)
+    if (deleteState.confirm && service) {
+      deleteInProgressTitle = selectedEvent ? selectedEvent.title || "" : ""
+      service.deleteEvent(deleteState.confirm)
+    }
   }
 
   onCursorIndexChanged: cancelDelete("move")
@@ -75,6 +83,13 @@ Panel {
     onTriggered: if (!root.deleteState.pending) root.cancelDelete("timeout")
   }
 
+  Timer {
+    id: deleteWaitTimer
+    interval: 2000
+    repeat: false
+    onTriggered: if (root.service && root.service.deleteRunning) root.deleteWaitElapsed = true
+  }
+
   function showActionMessage(message) {
     root.deleteState = { pending: "", message: message, confirm: "" }
     deleteMessageTimer.restart()
@@ -85,6 +100,16 @@ Panel {
     function onEditReady() { root.close() }
     function onEditFailed(message) { root.showActionMessage(message) }
     function onDeleteFailed(message) { root.showActionMessage(message) }
+    function onDeleteRunningChanged() {
+      if (root.service && root.service.deleteRunning) {
+        root.deleteWaitElapsed = false
+        deleteWaitTimer.restart()
+      } else {
+        deleteWaitTimer.stop()
+        root.deleteWaitElapsed = false
+        root.deleteInProgressTitle = ""
+      }
+    }
   }
 
   property bool choosingCalendars: false
@@ -840,9 +865,9 @@ Panel {
               anchors.bottom: footerHints.top
               anchors.bottomMargin: Style.space(4)
               visible: text !== ""
-              text: root.deleteHint || root.actionHints
+              text: root.deleteProgressHint || root.deleteHint || root.actionHints
               wrapMode: Text.Wrap
-              color: root.deleteState.pending ? Color.urgent : Qt.darker(root.foreground, 1.6)
+              color: (root.deleteProgressHint !== "" || root.deleteState.pending) ? Color.urgent : Qt.darker(root.foreground, 1.6)
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
             }

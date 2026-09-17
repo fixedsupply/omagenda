@@ -36,6 +36,11 @@ test("delete hints include confirmation and cancellation with an elided long tit
   assert.equal(M.deleteHint({ ...empty, message: "Reason" }, event), "Reason")
   assert.equal(M.deleteHint(empty, event), "")
 })
+test("delete progress identifies a queued delete and its sync wait", () => {
+  assert.equal(M.deleteProgressHint("Disposable event", false), "DELETING 'Disposable event'…")
+  assert.equal(M.deleteProgressHint("Disposable event", true), "DELETING 'Disposable event'… WAITING FOR SYNC TO FINISH")
+  assert.match(M.deleteProgressHint("a".repeat(100), false), /^DELETING 'a{35}…'…$/)
+})
 test("footer advertises only available actions, in order", () => {
   assert.equal(M.eventActionHints(agenda, event), "E EDIT · X DELETE")
   assert.equal(M.eventActionHints(agenda, { ...event, url: "https://example.com" }), "E EDIT · X DELETE · O OPEN")
