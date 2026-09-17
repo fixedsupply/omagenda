@@ -100,6 +100,14 @@ full shell interaction, fresh installation and reboot/source update remain
 unverified. iCloud acceptance was subsequently recorded below. The watcher used an accelerated two-second
 sync interval.
 
+### Recorded Google script run on narrow permissions — 2026-09-17
+
+Candidate `823229c` passed `python tools/google-acceptance.py --run-live`
+(10/10, calendar deleted) using an everyday token limited to
+`calendar.events` and `calendar.calendarlist.readonly`, confirmed by
+tokeninfo, plus a one-off `calendar.app.created` permission for the
+disposable calendar.
+
 ### Recorded upgrade to v0.2.1 — 2026-09-16
 
 `omarchy plugin update fixedsupply.omagenda` upgraded a real git install

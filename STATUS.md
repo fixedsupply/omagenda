@@ -1,5 +1,22 @@
 # v0.2.1 candidate — 2026-09-16
 
+## v0.3.0 candidate — 2026-09-17
+
+Narrower Google permissions verified live. The maintainer reconnected on
+`823229c`, and Google's tokeninfo reported exactly
+`https://www.googleapis.com/auth/calendar.events` and
+`https://www.googleapis.com/auth/calendar.calendarlist.readonly`.
+calendarList (12 calendars) and event reads succeeded with that token.
+`tools/google-acceptance.py --run-live` then passed all 10 checks on
+`823229c` with the narrow everyday token and a one-off `calendar.app.created`
+permission for the disposable calendar, which was deleted. The one-off
+token is never revoked. Afterwards the everyday token still worked and no
+acceptance calendar remained.
+
+The two panel features (browsing ahead up to eight weeks, and the calendar
+line with its web link) are covered by Python, Node and offscreen QML
+tests. Live panel acceptance of both is still pending.
+
 ## v0.2.1 upgrade acceptance — 2026-09-16
 
 On the maintainer's Dell 7573 (Omarchy 4.0.3-1), a genuine git install of
