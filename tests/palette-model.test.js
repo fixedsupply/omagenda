@@ -2,7 +2,30 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 const M = require("../qml/Model.js")
 
-test("near-duplicate PM greens receive distinct theme colours", () => {
+// The PM's panel showed 33 orange events beside 14 green ones in Tokyo Night,
+// and every one of them looked the same colour: orange was separated from red
+// (36 apart in RGB) into bright_green, which sits beside green.
+test("Tokyo Night keeps orange and green apart", () => {
+  const palette = {
+    background: "#1a1b26", red: "#f7768e", yellow: "#e0af68", orange: "#eb927b",
+    green: "#9ece6a", cyan: "#449dab", blue: "#7aa2f7", magenta: "#ad8ee6", brown: "#75493d",
+    bright_red: "#ff7a93", bright_yellow: "#ff9e64", bright_green: "#b9f27c",
+    bright_cyan: "#0db9d7", bright_blue: "#7da6ff", bright_magenta: "#bb9af7"
+  }
+  const resolved = M.resolvedPalette(palette)
+  assert.equal(resolved.orange, "#eb927b", "orange and red are already tellable apart")
+  assert.equal(resolved.green, "#9ece6a")
+  assert.ok(M.colorDistance(resolved.orange, resolved.green) >= 20)
+})
+
+test("colour distance follows the eye, not the RGB cube", () => {
+  // Same green to look at, far apart in RGB.
+  assert.ok(M.colorDistance("#9ece6a", "#b9f27c") < 20)
+  // Tellable apart at a glance, closer together in RGB than that pair.
+  assert.ok(M.colorDistance("#eb927b", "#f7768e") >= 20)
+})
+
+test("near-duplicate greens receive a distinct theme colour", () => {
   const palette = {
     blue: "#509475", green: "#549e6a", magenta: "#c040c0", yellow: "#459451",
     cyan: "#20bccc", red: "#dc4850", orange: "#e88c28", brown: "#75421e"
@@ -10,8 +33,10 @@ test("near-duplicate PM greens receive distinct theme colours", () => {
   const resolved = M.resolvedPalette(palette)
   assert.equal(resolved.blue, "#509475")
   assert.equal(resolved.green, "#75421e")
-  assert.equal(resolved.yellow, "#20bccc")
-  assert.equal(new Set([resolved.blue, resolved.green, resolved.yellow]).size, 3)
+  // Nothing is left for yellow: taking cyan's colour would only make the cyan
+  // calendars the indistinguishable pair instead.
+  assert.equal(resolved.yellow, "#459451")
+  assert.equal(resolved.cyan, "#20bccc")
 })
 
 test("a palette with distinct named colours remains unchanged", () => {
@@ -55,6 +80,12 @@ test("substitutes stay readable on the theme background (the PM's Osaka Jade the
   assert.notEqual(resolved.green, "#513925", "dark brown would vanish on this background")
   assert.equal(new Set([resolved.blue, resolved.green, resolved.yellow]).size, 3)
   for (const name of ["green", "yellow"]) assert.ok(M.readableOn(resolved[name], palette.background), name)
+  const names = Object.keys(resolved)
+  for (let i = 0; i < names.length; i++) {
+    for (let j = i + 1; j < names.length; j++) {
+      assert.ok(M.colorDistance(resolved[names[i]], resolved[names[j]]) >= 20, names[i] + "/" + names[j])
+    }
+  }
 })
 
 test("a dark substitute is rejected on a dark background, accepted on a light one", () => {

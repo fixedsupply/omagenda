@@ -9,9 +9,13 @@
 // Theme palette
 // ---------------------------------------------------------------------
 var THEME_COLOR_ORDER = ["blue", "green", "magenta", "yellow", "cyan", "red", "orange"]
-// RGB distance below 40 is indistinguishable at a calendar-dot size; it
-// separates the named colours in the stock themes while grouping close greens.
-var NEAR_DUPLICATE_RGB_DISTANCE = 40
+// Distance is measured in CIE L*a*b* (CIE76 dE), not RGB: RGB distance does
+// not match what the eye sees, and it misjudged exactly the pairs that matter.
+// Tokyo Night's green #9ece6a and bright_green #b9f27c are 48 apart in RGB but
+// dE 14 -- the same colour on a dot -- while its orange and red are 36 apart in
+// RGB but dE 26, a pair anyone can tell apart. Below dE 20 two calendars stop
+// being distinguishable at dot size; above it they read as different colours.
+var NEAR_DUPLICATE_DELTA_E = 20
 // agenda.json gives each calendar a theme colour *name* ("blue", "green"),
 // never a hex value, so a theme switch repaints every calendar without
 // Omagenda storing anything. The shell's own Color singleton only exposes
@@ -34,22 +38,51 @@ function rgbColor(value) {
   return [parseInt(match[1].slice(0, 2), 16), parseInt(match[1].slice(2, 4), 16), parseInt(match[1].slice(4, 6), 16)]
 }
 
+function linearChannel(value) {
+  var c = value / 255
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+}
+
+// sRGB to CIE L*a*b*, D65, the space the dE comparisons above are measured in.
+function labColor(value) {
+  var rgb = rgbColor(value)
+  if (!rgb) return null
+  var r = linearChannel(rgb[0]), g = linearChannel(rgb[1]), b = linearChannel(rgb[2])
+  var x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+  var y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  var z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+  var f = function(t) { return t > 0.008856 ? Math.pow(t, 1 / 3) : 7.787 * t + 16 / 116 }
+  x = f(x); y = f(y); z = f(z)
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)]
+}
+
+function colorDistance(left, right) {
+  var a = labColor(left)
+  var b = labColor(right)
+  if (!a || !b) return null
+  var light = a[0] - b[0], green = a[1] - b[1], blue = a[2] - b[2]
+  return Math.sqrt(light * light + green * green + blue * blue)
+}
+
 function nearDuplicateColor(left, right) {
-  var a = rgbColor(left)
-  var b = rgbColor(right)
-  if (!a || !b) return false
-  var red = a[0] - b[0]
-  var green = a[1] - b[1]
-  var blue = a[2] - b[2]
-  return Math.sqrt(red * red + green * green + blue * blue) < NEAR_DUPLICATE_RGB_DISTANCE
+  var distance = colorDistance(left, right)
+  return distance !== null && distance < NEAR_DUPLICATE_DELTA_E
+}
+
+// How far a candidate sits from the colours it has to be told apart from.
+function nearestDistance(value, others) {
+  if (!rgbColor(value)) return null
+  var nearest = Infinity
+  for (var i = 0; i < others.length; i++) {
+    var distance = colorDistance(value, others[i])
+    if (distance !== null && distance < nearest) nearest = distance
+  }
+  return nearest
 }
 
 function isDistinctFromChosen(value, chosen) {
-  if (!rgbColor(value)) return false
-  for (var i = 0; i < chosen.length; i++) {
-    if (nearDuplicateColor(value, chosen[i])) return false
-  }
-  return true
+  var nearest = nearestDistance(value, chosen)
+  return nearest !== null && nearest >= NEAR_DUPLICATE_DELTA_E
 }
 
 // Calendar colour names are stable in agenda.json. Resolve only collisions
@@ -62,11 +95,7 @@ var SUBSTITUTE_MIN_CONTRAST = 3
 function relativeLuminance(hex) {
   var rgb = rgbColor(hex)
   if (!rgb) return null
-  var channel = function(value) {
-    var c = value / 255
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
-  }
-  return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+  return 0.2126 * linearChannel(rgb[0]) + 0.7152 * linearChannel(rgb[1]) + 0.0722 * linearChannel(rgb[2])
 }
 
 function readableOn(color, background) {
@@ -88,21 +117,32 @@ function resolvedPalette(palette) {
     if (!own) continue
     var value = own
     if (!isDistinctFromChosen(own, chosen)) {
-      // Bright variants first: in most themes `brown` is dark, and on a dark
-      // background a "separated" calendar would become the hardest to see.
+      // Only the bright variants and `brown` are candidates. Borrowing another
+      // calendar colour's own value just moves the collision onto that colour,
+      // so a substitute also has to stay clear of the names still to come.
+      var avoid = chosen.slice()
+      for (var later = i + 1; later < THEME_COLOR_ORDER.length; later++) {
+        var upcoming = palette[THEME_COLOR_ORDER[later]]
+        if (upcoming) avoid.push(upcoming)
+      }
       var substitutes = []
       for (var bright = 0; bright < 6; bright++) substitutes.push("bright_" + THEME_COLOR_ORDER[bright])
       substitutes.push("brown")
-      for (var other = 0; other < THEME_COLOR_ORDER.length; other++) {
-        if (THEME_COLOR_ORDER[other] !== name) substitutes.push(THEME_COLOR_ORDER[other])
-      }
+      // The furthest candidate wins, not the first one that clears the bar:
+      // with few colours to choose from, "just distinct enough" collapses again
+      // as soon as the next calendar needs separating.
+      var best = null
+      var bestDistance = NEAR_DUPLICATE_DELTA_E
       for (var candidate = 0; candidate < substitutes.length; candidate++) {
         var substitute = palette[substitutes[candidate]]
-        if (isDistinctFromChosen(substitute, chosen) && readableOn(substitute, palette.background)) {
-          value = substitute
-          break
-        }
+        if (!substitute || !readableOn(substitute, palette.background)) continue
+        var distance = nearestDistance(substitute, avoid)
+        if (distance === null || distance < bestDistance) continue
+        if (best === null || distance > bestDistance) { best = substitute; bestDistance = distance }
       }
+      // No usable substitute means the theme simply has no other colour to
+      // give. Keeping the theme's own value beats inventing one.
+      if (best !== null) value = best
     }
     resolved[name] = value
     if (rgbColor(value)) chosen.push(value)
@@ -699,6 +739,7 @@ if (typeof module !== "undefined") {
     parsePalette: parsePalette,
     resolvedPalette: resolvedPalette,
     readableOn: readableOn,
+    colorDistance: colorDistance,
     paletteColor: paletteColor,
     calendarColorName: calendarColorName,
     calendarName: calendarName,
