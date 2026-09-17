@@ -457,6 +457,54 @@ class ConcurrencyTest(unittest.TestCase):
         self.assertTrue(result["ok"])
 
 
+class MappingVersionResyncTest(unittest.TestCase):
+    """A bridge that starts mapping a new remote field (Google's htmlLink in
+    v0.3.0) forces one full pull per calendar, then goes back to incremental."""
+
+    EVENT = (b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:r1\r\nSUMMARY:Lunch\r\n"
+             b"DTSTART:20260917T190000Z\r\nDTEND:20260917T200000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+
+    def test_old_state_pulls_in_full_once_and_keeps_a_pending_edit(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        path = root / "acct" / "cal-1"
+        path.mkdir(parents=True)
+        calendar = RemoteCalendar(id="cal-1", name="Primary")
+        seed = FakeBridge(pull_results=[PullResult(changed=[PullChange(
+            uid="r1", ics_bytes=self.EVENT, ref=RemoteRef(remote_id="r1", etag="e1"))], next_cursor="old-token")])
+        _sync_one_calendar(seed, {"id": "acct"}, calendar, path, state_dir=root / "state")
+
+        edited = self.EVENT.replace(b"SUMMARY:Lunch", b"SUMMARY:Lunch moved")
+        (path / "r1.ics").write_bytes(edited)
+
+        class VersionedBridge(FakeBridge):
+            MAPPING_VERSION = 2
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.cursors = []
+
+            def pull(self, account, calendar, cursor):
+                self.cursors.append(cursor)
+                return super().pull(account, calendar, cursor)
+
+        remapped = self.EVENT.replace(b"END:VEVENT", b"X-OMAGENDA-WEB-URL:https://calendar.google.com/x\r\nEND:VEVENT")
+        bridge = VersionedBridge(pull_results=[
+            PullResult(changed=[PullChange(uid="r1", ics_bytes=remapped, ref=RemoteRef(remote_id="r1", etag="e1"))],
+                       next_cursor="new-token", full_resync=True),
+            PullResult(next_cursor="newer-token")])
+        counts = _sync_one_calendar(bridge, {"id": "acct"}, calendar, path, state_dir=root / "state")
+        self.assertEqual(bridge.cursors, [None], "an older mapping must pull in full")
+        self.assertEqual(counts["conflicts"], 0)
+        self.assertEqual(counts["deletedRemote"], 0)
+        self.assertEqual([body for body, _ in bridge.push_update_calls], [edited])
+        self.assertEqual((path / "r1.ics").read_bytes(), edited)
+
+        _sync_one_calendar(bridge, {"id": "acct"}, calendar, path, state_dir=root / "state")
+        self.assertEqual(bridge.cursors, [None, "new-token"], "the resync happens only once")
+
+
 class EditVersusEchoTest(unittest.TestCase):
     """Editing an event you had only just created used to be reverted.
 

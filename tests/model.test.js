@@ -195,6 +195,11 @@ test("ticker respects a shorter day count", () => {
 test("strip paging keeps selection visible and never precedes today", () => {
   assert.equal(Model.stripStartFor("2026-09-07", "2026-09-15", "2026-09-07", 7), "2026-09-14")
   assert.equal(Model.stripStartFor("2026-09-14", "2026-09-06", "2026-09-07", 7), "2026-09-07")
+  // Moving back past the strip's start lands on the page holding the selection,
+  // not on the first page (which would leave the selection out of view).
+  assert.equal(Model.stripStartFor("2026-09-21", "2026-09-19", "2026-09-07", 7), "2026-09-14")
+  assert.equal(Model.stripStartFor("2026-09-28", "2026-09-14", "2026-09-07", 7), "2026-09-14")
+  assert.equal(Model.stripStartFor("2026-09-14", "2026-09-13", "2026-09-07", 7), "2026-09-07")
   assert.equal(Model.clampSelectedDay("2026-09-01", "2026-09-07", { to: "2026-11-02" }), "2026-09-07")
   assert.equal(Model.clampSelectedDay("2026-12-01", "2026-09-07", { to: "2026-11-02" }), "2026-11-01")
   assert.equal(Model.relativeDayHint("2026-09-15", "2026-09-07"), "in 8 days")

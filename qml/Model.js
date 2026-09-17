@@ -320,7 +320,6 @@ function stripStartFor(currentStart, selectedKey, todayKey, dayCount) {
   var count = Math.max(1, Number(dayCount) || 7)
   if (start < today) start = today
   if (selected < today) return today
-  if (selected < start) return today
   var offset = Math.floor((toDate(selected).getTime() - toDate(today).getTime()) / 86400000)
   return dateKey(addDays(today, Math.floor(offset / count) * count))
 }
