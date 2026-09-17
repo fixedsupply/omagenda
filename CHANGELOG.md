@@ -32,6 +32,11 @@
 
 ### Added
 
+- Browse the agenda strip forward through eight weeks with keyboard movement,
+  `‹`/`›`, or the scroll wheel.
+- Expanded events identify their calendar and provider, with Google event and
+  iCloud calendar web links available on the row and with `w`.
+
 - Calendar pick list on `c`, with persistent visibility choices. Hidden calendars
   keep syncing but leave the agenda, pill and alarms. Quick Add skips them when
   cycling destinations and labels a hidden default.

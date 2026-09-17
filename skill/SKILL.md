@@ -14,7 +14,7 @@ Install this skill by copying the directory to `~/.claude/skills/omagenda`.
 ## Read first
 
 ```bash
-omagenda agenda --json                 # the next 14 days
+omagenda agenda --json                 # the next 56 days
 omagenda agenda --days 3 --json        # a shorter window
 omagenda agenda --from 2026-09-14 --json
 omagenda next --json                   # what is running, else what is next
@@ -33,7 +33,7 @@ day. Do not report that extra day to the user.
 ## Answering questions
 
 Filter the JSON yourself rather than asking for a narrower window; the
-whole fortnight is one cheap call.
+whole eight-week window is one cheap call.
 
 - "What's on Thursday?" — `omagenda agenda --json`, filter on the date.
 - "What's next?" — `omagenda next --json`. It skips all-day events on

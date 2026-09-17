@@ -158,6 +158,14 @@ or closing the panel also cancels deletion. The footer shows available event act
 Type the event the way you would say it:
 
 ```
+
+### Panel navigation
+
+`h`/`l` and Left/Right move a day; `H`/`L` move a week. The strip can browse
+forward for eight weeks with `‹`/`›` or its scroll wheel. `w` opens the
+selected event's calendar on the web when available. Expanded events show
+their calendar and provider; the calendar line is a link for Google events
+and iCloud calendars.
 lunch with Sam tomorrow at 1pm at Cafe Torino
 standup every weekday at 9:30
 dentist on 14/9 at 10am for 45m

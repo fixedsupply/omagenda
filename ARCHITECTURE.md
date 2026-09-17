@@ -170,13 +170,13 @@ Written atomically (temp file + rename). Times are RFC 3339 with offset; all-day
 ```json
 {
   "generatedAt": "2026-09-07T14:10:00-06:00",
-  "range": { "from": "2026-09-07", "to": "2026-09-21" },
+  "range": { "from": "2026-09-07", "to": "2026-11-02" },
   "lastSync": "2026-09-07T14:05:12-06:00",
   "calendarCount": 1,
   "visibleCalendarCount": 1,
   "syncPausedUntil": null,
   "calendars": [
-    { "id": "personal", "name": "Personal", "path": "/home/crs/.local/share/calendars/personal", "color": "blue", "readOnly": false, "hidden": false, "source": "vdir" }
+    { "id": "personal", "name": "Personal", "path": "/home/crs/.local/share/calendars/personal", "color": "blue", "readOnly": false, "hidden": false, "source": "vdir", "account": "", "provider": "local", "webUrl": "" }
   ],
   "events": [
     {
@@ -190,6 +190,7 @@ Written atomically (temp file + rename). Times are RFC 3339 with offset; all-day
       "location": "Cafe Linnea",
       "description": "",
       "url": "",
+      "webUrl": "",
       "conference": { "provider": "meet", "url": "https://meet.google.com/abc-defg-hij" },
       "attendees": 2,
       "recurring": true,
@@ -569,7 +570,7 @@ refused until instance-level editing is implemented. Partial updates leave
 unmapped metadata untouched. Supported mappings and their limits are tested
 with invented provider responses in `tests/test_reliability.py`.
 
-Mapping rules, Google: `summary`↔`SUMMARY`, `start/end` with `dateTime`+`timeZone` or `date`↔`DTSTART`/`DTEND`, `recurrence[]`↔`RRULE`/`EXDATE` lines verbatim, `location`, `description`, `hangoutLink` and `conferenceData.entryPoints[].uri`→`CONFERENCE`/`X-GOOGLE-CONFERENCE`, `reminders.overrides`↔`VALARM`, `attendees` read-only, `status: cancelled`→delete, instances of recurring events with `recurringEventId`→`RECURRENCE-ID`. Time zones: Google gives IANA names; keep them as `TZID`.
+Mapping rules, Google: `summary`↔`SUMMARY`, `start/end` with `dateTime`+`timeZone` or `date`↔`DTSTART`/`DTEND`, `recurrence[]`↔`RRULE`/`EXDATE` lines verbatim, `location`, `description`, `htmlLink`→pull-only `X-OMAGENDA-WEB-URL`, `hangoutLink` and `conferenceData.entryPoints[].uri`→`CONFERENCE`/`X-GOOGLE-CONFERENCE`, `reminders.overrides`↔`VALARM`, `attendees` read-only, `status: cancelled`→delete, instances of recurring events with `recurringEventId`→`RECURRENCE-ID`. Time zones: Google gives IANA names; keep them as `TZID`. A per-calendar mapping version clears the incremental cursor once after a new mapping, retaining item versions so snapshot deletion reconciliation and pending local-edit protection remain safe.
 
 Planned mapping rules, Microsoft (not implemented): `subject`, `start/end` with `dateTime`+`timeZone` (Windows zone names, map through a small table to IANA), `recurrence.pattern/range`→`RRULE` (weekly/daily/absoluteMonthly/relativeMonthly/absoluteYearly/relativeYearly; anything else is imported read-only and flagged), `onlineMeeting.joinUrl`→`CONFERENCE`, `isAllDay`, `isCancelled`, `seriesMasterId`, delta via `/me/calendars/{id}/calendarView/delta`.
 
