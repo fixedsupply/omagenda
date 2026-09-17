@@ -1,4 +1,4 @@
-# v0.2.1 candidate — 2026-09-16
+# v0.3.0 — 2026-09-17
 
 ## v0.3.0 candidate — 2026-09-17
 
@@ -15,7 +15,13 @@ acceptance calendar remained.
 
 The two panel features (browsing ahead up to eight weeks, and the calendar
 line with its web link) are covered by Python, Node and offscreen QML
-tests. Live panel acceptance of both is still pending.
+tests, and the PM accepted both live in the panel, along with delete and
+edit.
+
+Tagged v0.3.0 on `dc8b6d6`, which is installed and loaded in the shell
+(restarted 2026-09-17 12:49). 354 isolated Python tests, 101 Node checks
+and plugin validation pass. The PM's live look at the separated calendar
+colours and the delete/edit waiting indicator is the last check.
 
 ## v0.2.1 upgrade acceptance — 2026-09-16
 
@@ -40,7 +46,7 @@ enabling Omagenda in the centre section, the watcher and sync all worked,
 and doctor was clean. This is the PM's reported v0.2.0 test, not a live
 acceptance run of this candidate.
 
-The [v0.2.1 changelog](CHANGELOG.md#v021--unreleased) records the fixes:
+The [v0.2.1 changelog](CHANGELOG.md#v021) records the fixes:
 local-only account removal, explicit reconnect/duplicate handling, keyring
 orphan detection, install integrity, stale-sync diagnostics and `--version`.
 See [Upgrading](README.md#upgrading) for recovery and verification.
