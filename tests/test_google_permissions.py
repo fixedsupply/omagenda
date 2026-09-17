@@ -98,7 +98,7 @@ class AcceptancePermissionTest(unittest.TestCase):
         self.script = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.script)
 
-    def test_one_off_flow_never_stores_and_always_revokes(self):
+    def test_one_off_flow_never_stores_and_never_revokes(self):
         for failure in (None, RuntimeError, KeyboardInterrupt):
             with self.subTest(failure=failure), patch.object(google.http.server, 'HTTPServer') as server, \
                     patch.object(google, '_open_browser') as browser, \
@@ -123,25 +123,25 @@ class AcceptancePermissionTest(unittest.TestCase):
                 params = parse_qs(urlparse(browser.call_args.args[0]).query)
                 self.assertEqual(params['scope'], ['https://www.googleapis.com/auth/calendar.app.created'])
                 self.assertEqual(params['access_type'], ['online'])
-                self.assertEqual(urlopen.call_count, 2)
-                revoke = urlopen.call_args.args[0]
-                self.assertEqual(revoke.full_url, 'https://oauth2.googleapis.com/revoke')
-                self.assertEqual(parse_qs(revoke.data.decode()), {'token': ['one-off-secret']})
+                # Only the code exchange: revoking could withdraw the normal grant too.
+                self.assertEqual(urlopen.call_count, 1)
+                self.assertFalse(any(call.args[0].full_url.endswith('/revoke')
+                                     for call in urlopen.call_args_list))
                 self.assertNotIn('one-off-secret', output.getvalue())
                 store.assert_not_called()
                 config.assert_not_called()
                 server.return_value.server_close.assert_called_once()
 
-    def test_refused_one_off_scope_is_revoked(self):
+    def test_refused_one_off_scope_stops_without_revoking(self):
         with patch.object(google, 'exchange_authorization', return_value={
                 'access_token': 'one-off-secret', 'scope': ''}), \
                 patch.object(google.urllib.request, 'urlopen') as revoke:
             with self.assertRaisesRegex(RuntimeError, 'permission was not granted'):
                 with self.script.calendar_authorization(ACCOUNT):
                     self.fail('Partial consent must not start acceptance')
-            self.assertEqual(revoke.call_args.args[0].full_url, 'https://oauth2.googleapis.com/revoke')
+            revoke.assert_not_called()
 
-    def test_main_failure_and_interruption_revoke_after_calendar_delete(self):
+    def test_main_failure_and_interruption_still_delete_the_calendar_without_revoking(self):
         for failure in (RuntimeError, KeyboardInterrupt):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp, \
                     patch('sys.argv', ['google-acceptance.py', '--run-live']), \
@@ -166,7 +166,7 @@ class AcceptancePermissionTest(unittest.TestCase):
                         self.assertEqual(self.script.main(), 1)
                     except KeyboardInterrupt:
                         self.assertIs(failure, KeyboardInterrupt)
-                self.assertEqual(order, ['delete', 'revoke'])
+                self.assertEqual(order, ['delete'])
                 self.assertEqual(delete.call_args.args[2], 'one-off-secret')
                 for path in Path(tmp).rglob('*'):
                     if path.is_file():

@@ -5,11 +5,13 @@
 ### Changed
 
 - Narrower Google permissions: event access and read-only calendar discovery.
-  Existing sign-ins still work. Reconnecting is optional but recommended to
-  drop the broader grant; revoke the old grant in Google account permissions
-  first to ensure it is removed (this signs out other computers too).
-- Google acceptance uses a separate, in-memory permission for its disposable
-  calendar and revokes it after the run.
+  Existing sign-ins still work. Reconnecting gives a token limited to the
+  narrower permissions; to also remove the old full-access entry from your
+  Google account, remove Omagenda at Google account permissions first, then
+  reconnect (this signs out other computers using that account).
+- Google acceptance uses a separate, in-memory, short-lived permission for its
+  disposable calendar. It is not revoked afterwards, because revoking could also
+  sign the normal Omagenda grant out; it expires on its own within an hour.
 
 ## v0.2.1
 

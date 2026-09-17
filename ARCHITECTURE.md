@@ -580,9 +580,10 @@ Network calls use `urllib.request` with a 15 s timeout and exponential backoff o
 The Google acceptance script separately requests the one-off scope
 `https://www.googleapis.com/auth/calendar.app.created` through the same loopback
 PKCE flow. Its in-memory token creates and deletes only the disposable calendar
-and is revoked in cleanup, including on failure or interruption. All event and
+and is never revoked: it has no refresh token and expires within an hour, and a
+revocation may withdraw the whole grant for this client. All event and
 sync scenarios use the normal stored account token. Live acceptance must start
 with a normal account grant limited to the two product scopes to establish
 narrow-scope compatibility. Existing broader grants remain usable by the product.
-Google revocation may also invalidate the normal grant for the same client;
-check the account after the run and reconnect if needed.
+Because Google revocation may invalidate the normal grant for the same client,
+nothing in the acceptance run revokes a token.

@@ -198,7 +198,6 @@ reconnecting; this signs out other computers using the same Google account.
 
 `tools/google-acceptance.py --run-live` requests a separate, one-off
 `https://www.googleapis.com/auth/calendar.app.created` permission to create and
-delete its disposable calendar. That token stays in memory and is revoked in
-cleanup; event tests use the normal stored account token. Use a normal grant
-limited to the two product scopes for narrow-scope acceptance. Revocation may
-invalidate the same client's normal grant too; reconnect after the run if needed.
+delete its disposable calendar. That token stays in memory, is short-lived and is
+not revoked; event tests use the normal stored account token. Use a normal grant
+limited to the two product scopes for narrow-scope acceptance.

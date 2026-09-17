@@ -17,7 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 import urllib.request
 import uuid
 from unittest.mock import patch
@@ -31,21 +31,20 @@ APP_CREATED_SCOPES = ("https://www.googleapis.com/auth/calendar.app.created",)
 
 @contextmanager
 def calendar_authorization(account):
-    """Keep the disposable-calendar grant in memory and always revoke it."""
+    """Keep the disposable-calendar token in memory only, and never revoke it.
+
+    It is requested without offline access, so no refresh token exists and
+    the access token expires by itself within an hour. Revoking it is
+    deliberately avoided: Google may treat a revocation as withdrawing the
+    whole grant for this OAuth client and Google account, which would also
+    sign the maintainer's everyday Omagenda out (the same concern that made
+    `omagenda account remove` local by default in v0.2.1)."""
     from omagenda.bridges import google
 
     tokens = google.exchange_authorization(account, scopes=APP_CREATED_SCOPES, offline=False)
-    token = tokens["access_token"]
-    try:
-        if not set(APP_CREATED_SCOPES) <= set(tokens.get("scope", "").split()):
-            raise RuntimeError("Disposable-calendar permission was not granted")
-        yield token
-    finally:
-        request = urllib.request.Request("https://oauth2.googleapis.com/revoke", method="POST",
-            data=urlencode({"token": token}).encode(),
-            headers={"Content-Type": "application/x-www-form-urlencoded"})
-        with urllib.request.urlopen(request, timeout=20):
-            pass
+    if not set(APP_CREATED_SCOPES) <= set(tokens.get("scope", "").split()):
+        raise RuntimeError("Disposable-calendar permission was not granted")
+    yield tokens["access_token"]
 
 
 def main():
@@ -252,11 +251,7 @@ def main():
                 else:
                     print('Creation outcome needs review; recovery receipt: ' + str(receipt), flush=True)
         finally:
-            try:
-                authorization.close()
-            except Exception as exc:
-                success = False
-                print('FAIL: revoke one-off authorization (' + type(exc).__name__ + ')', flush=True)
+            authorization.close()
     if success and cleaned:
         import shutil
         shutil.rmtree(folder)
