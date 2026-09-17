@@ -42,3 +42,24 @@ test("palette resolution is deterministic", () => {
   const palette = { blue: "#509475", green: "#549e6a", yellow: "#459451", brown: "#75421e" }
   assert.deepEqual(M.resolvedPalette(palette), M.resolvedPalette(palette))
 })
+
+test("substitutes stay readable on the theme background (the PM's Osaka Jade theme)", () => {
+  const palette = {
+    background: "#111c18", blue: "#509475", green: "#549e6a", yellow: "#459451", magenta: "#D2689C",
+    cyan: "#2DD5B7", red: "#FF5345", orange: "#a2734b", brown: "#513925",
+    bright_blue: "#ACD4CF", bright_green: "#63b07a", bright_magenta: "#75bbb3",
+    bright_yellow: "#E5C736", bright_cyan: "#8CD3CB", bright_red: "#db9f9c"
+  }
+  const resolved = M.resolvedPalette(palette)
+  assert.equal(resolved.blue, "#509475")
+  assert.notEqual(resolved.green, "#513925", "dark brown would vanish on this background")
+  assert.equal(new Set([resolved.blue, resolved.green, resolved.yellow]).size, 3)
+  for (const name of ["green", "yellow"]) assert.ok(M.readableOn(resolved[name], palette.background), name)
+})
+
+test("a dark substitute is rejected on a dark background, accepted on a light one", () => {
+  assert.equal(M.readableOn("#513925", "#111c18"), false)
+  assert.equal(M.readableOn("#513925", "#fafafa"), true)
+  assert.equal(M.readableOn("#ACD4CF", "#111c18"), true)
+  assert.equal(M.readableOn("#513925", undefined), true)
+})

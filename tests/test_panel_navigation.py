@@ -36,9 +36,9 @@ Item {
   TestCase { name: "DeleteProgress"; when: windowShown
     function test_wait_then_exit() {
       root.deleteRunning = true
-      compare(root.hint(), "DELETING 'Disposable event'…")
+      compare(root.hint(), "DELETING 'DISPOSABLE EVENT'…")
       wait(2100)
-      compare(root.hint(), "DELETING 'Disposable event'… WAITING FOR SYNC TO FINISH")
+      compare(root.hint(), "DELETING 'DISPOSABLE EVENT'… WAITING FOR SYNC TO FINISH")
       root.deleteRunning = false
       compare(root.hint(), "")
       compare(root.deleteInProgressTitle, "")

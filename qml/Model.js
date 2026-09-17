@@ -54,6 +54,30 @@ function isDistinctFromChosen(value, chosen) {
 
 // Calendar colour names are stable in agenda.json. Resolve only collisions
 // from this theme to another colour already provided by that same theme.
+// A substitute colour must stay visible on the theme background. WCAG's
+// minimum contrast for user-interface components is 3:1. With no background
+// defined, any substitute is allowed.
+var SUBSTITUTE_MIN_CONTRAST = 3
+
+function relativeLuminance(hex) {
+  var rgb = rgbColor(hex)
+  if (!rgb) return null
+  var channel = function(value) {
+    var c = value / 255
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+  }
+  return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+}
+
+function readableOn(color, background) {
+  var fg = relativeLuminance(color)
+  if (fg === null) return false
+  var bg = relativeLuminance(background)
+  if (bg === null) return true
+  var lighter = Math.max(fg, bg), darker = Math.min(fg, bg)
+  return (lighter + 0.05) / (darker + 0.05) >= SUBSTITUTE_MIN_CONTRAST
+}
+
 function resolvedPalette(palette) {
   palette = palette || {}
   var resolved = {}
@@ -64,14 +88,17 @@ function resolvedPalette(palette) {
     if (!own) continue
     var value = own
     if (!isDistinctFromChosen(own, chosen)) {
-      var substitutes = ["brown"]
+      // Bright variants first: in most themes `brown` is dark, and on a dark
+      // background a "separated" calendar would become the hardest to see.
+      var substitutes = []
       for (var bright = 0; bright < 6; bright++) substitutes.push("bright_" + THEME_COLOR_ORDER[bright])
+      substitutes.push("brown")
       for (var other = 0; other < THEME_COLOR_ORDER.length; other++) {
         if (THEME_COLOR_ORDER[other] !== name) substitutes.push(THEME_COLOR_ORDER[other])
       }
       for (var candidate = 0; candidate < substitutes.length; candidate++) {
         var substitute = palette[substitutes[candidate]]
-        if (isDistinctFromChosen(substitute, chosen)) {
+        if (isDistinctFromChosen(substitute, chosen) && readableOn(substitute, palette.background)) {
           value = substitute
           break
         }
@@ -602,7 +629,7 @@ function saveProgressText(running, waiting) {
 }
 
 function deleteProgressHint(title, waiting) {
-  var label = String(title || "Untitled")
+  var label = String(title || "Untitled").toUpperCase()
   if (label.length > 36) label = label.slice(0, 35) + "…"
   var hint = "DELETING '" + label + "'…"
   return waiting ? hint + " WAITING FOR SYNC TO FINISH" : hint
@@ -671,6 +698,7 @@ if (typeof module !== "undefined") {
   module.exports = {
     parsePalette: parsePalette,
     resolvedPalette: resolvedPalette,
+    readableOn: readableOn,
     paletteColor: paletteColor,
     calendarColorName: calendarColorName,
     calendarName: calendarName,
