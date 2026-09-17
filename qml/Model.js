@@ -8,6 +8,10 @@
 // ---------------------------------------------------------------------
 // Theme palette
 // ---------------------------------------------------------------------
+var THEME_COLOR_ORDER = ["blue", "green", "magenta", "yellow", "cyan", "red", "orange"]
+// RGB distance below 40 is indistinguishable at a calendar-dot size; it
+// separates the named colours in the stock themes while grouping close greens.
+var NEAR_DUPLICATE_RGB_DISTANCE = 40
 // agenda.json gives each calendar a theme colour *name* ("blue", "green"),
 // never a hex value, so a theme switch repaints every calendar without
 // Omagenda storing anything. The shell's own Color singleton only exposes
@@ -22,6 +26,61 @@ function parsePalette(tomlText) {
     if (match) palette[match[1]] = match[2]
   }
   return palette
+}
+
+function rgbColor(value) {
+  var match = String(value || "").match(/^#([0-9a-f]{6})/i)
+  if (!match) return null
+  return [parseInt(match[1].slice(0, 2), 16), parseInt(match[1].slice(2, 4), 16), parseInt(match[1].slice(4, 6), 16)]
+}
+
+function nearDuplicateColor(left, right) {
+  var a = rgbColor(left)
+  var b = rgbColor(right)
+  if (!a || !b) return false
+  var red = a[0] - b[0]
+  var green = a[1] - b[1]
+  var blue = a[2] - b[2]
+  return Math.sqrt(red * red + green * green + blue * blue) < NEAR_DUPLICATE_RGB_DISTANCE
+}
+
+function isDistinctFromChosen(value, chosen) {
+  if (!rgbColor(value)) return false
+  for (var i = 0; i < chosen.length; i++) {
+    if (nearDuplicateColor(value, chosen[i])) return false
+  }
+  return true
+}
+
+// Calendar colour names are stable in agenda.json. Resolve only collisions
+// from this theme to another colour already provided by that same theme.
+function resolvedPalette(palette) {
+  palette = palette || {}
+  var resolved = {}
+  var chosen = []
+  for (var i = 0; i < THEME_COLOR_ORDER.length; i++) {
+    var name = THEME_COLOR_ORDER[i]
+    var own = palette[name]
+    if (!own) continue
+    var value = own
+    if (!isDistinctFromChosen(own, chosen)) {
+      var substitutes = ["brown"]
+      for (var bright = 0; bright < 6; bright++) substitutes.push("bright_" + THEME_COLOR_ORDER[bright])
+      for (var other = 0; other < THEME_COLOR_ORDER.length; other++) {
+        if (THEME_COLOR_ORDER[other] !== name) substitutes.push(THEME_COLOR_ORDER[other])
+      }
+      for (var candidate = 0; candidate < substitutes.length; candidate++) {
+        var substitute = palette[substitutes[candidate]]
+        if (isDistinctFromChosen(substitute, chosen)) {
+          value = substitute
+          break
+        }
+      }
+    }
+    resolved[name] = value
+    if (rgbColor(value)) chosen.push(value)
+  }
+  return resolved
 }
 
 // Resolve a calendar's colour name against the theme, falling back to the
@@ -597,6 +656,7 @@ function destinationText(agenda, id) {
 if (typeof module !== "undefined") {
   module.exports = {
     parsePalette: parsePalette,
+    resolvedPalette: resolvedPalette,
     paletteColor: paletteColor,
     calendarColorName: calendarColorName,
     calendarName: calendarName,

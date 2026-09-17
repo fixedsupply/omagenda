@@ -38,6 +38,7 @@ Item {
   // what makes the widget's and panel's bindings re-evaluate.
   property var agenda: ({ calendars: [], events: [] })
   property var palette: ({})
+  readonly property var resolvedPalette: Model.resolvedPalette(palette)
   property bool watchRunning: false
   property string lastError: ""
 
@@ -98,7 +99,7 @@ Item {
   }
 
   function paletteColor(name, fallback) {
-    return Model.paletteColor(root.palette, name, fallback)
+    return Model.paletteColor(root.resolvedPalette, name, fallback)
   }
 
   // "" when everything is fine; otherwise a sentence naming what to do.
