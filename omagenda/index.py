@@ -166,7 +166,7 @@ def _cache_key(ics_path: Path, start: date, days: int) -> str:
     it on every vdir change was the whole cost of an index."""
     stat = ics_path.stat()
     # Version the interpretation so older cached RDATE events gain the recurring flag.
-    return f"v2|{ics_path}|{stat.st_mtime_ns}|{stat.st_size}|{start.isoformat()}|{days}"
+    return f"v3|{ics_path}|{stat.st_mtime_ns}|{stat.st_size}|{start.isoformat()}|{days}"
 
 
 def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = None,
@@ -178,7 +178,15 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
     from omagenda.pause import read_pause
     from omagenda.doctor import read_config
 
-    hidden = read_config().get("hidden_calendars", [])
+    config = read_config()
+    hidden = config.get("hidden_calendars", [])
+    account_types = {account.get("id"): account.get("type") for account in config.get("accounts", [])}
+    for calendar in calendars:
+        account = calendar["id"].split("/", 1)[0] if "/" in calendar["id"] else ""
+        provider = account_types.get(account, "local")
+        calendar["account"] = account
+        calendar["provider"] = provider if provider in {"google", "icloud", "caldav", "ics"} else "local"
+        calendar["webUrl"] = "https://www.icloud.com/calendar/" if calendar["provider"] == "icloud" else ""
 
     if last_sync is None:
         # The panel footer has always had a "synced HH:MM" slot; nothing
@@ -262,6 +270,7 @@ def build_agenda(vdir_root=None, days: int = DEFAULT_DAYS, start: date | None = 
                     "location": _one_line(occ.get("LOCATION", "")),
                     "description": str(occ.get("DESCRIPTION", "")) or "",
                     "url": str(occ.get("URL", "")) or "",
+                    "webUrl": str(occ.get("X-OMAGENDA-WEB-URL", "")) or "",
                     "conference": conference.detect(occ),
                     "attendees": _attendee_count(occ),
                     "recurring": recurring,

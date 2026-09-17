@@ -25,6 +25,11 @@ class BuildAgendaTest(unittest.TestCase):
     def test_default_window_is_eight_weeks(self):
         agenda = build_agenda(FIXTURES, use_cache=False, start=date(2026, 9, 7))
         self.assertEqual(agenda["range"], {"from": "2026-09-07", "to": "2026-11-02"})
+
+    def test_events_and_local_calendars_have_web_metadata(self):
+        agenda = build_agenda(FIXTURES, use_cache=False, days=14, start=date(2026, 9, 7))
+        self.assertTrue(all("webUrl" in event for event in agenda["events"]))
+        self.assertTrue(all(calendar["provider"] == "local" and calendar["account"] == "" for calendar in agenda["calendars"]))
     def test_indexes_fixture_vdir_under_budget(self):
         start = time.monotonic()
         agenda = build_agenda(FIXTURES, use_cache=False, days=14, start=date(2026, 9, 7))

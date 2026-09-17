@@ -237,6 +237,16 @@ Panel {
     root.close()
   }
 
+  function openCalendarLink(event) {
+    var target = Model.calendarWebTarget(agenda, event)
+    if (!target) {
+      root.showActionMessage("This event has no calendar web link")
+      return
+    }
+    Quickshell.execDetached(["xdg-open", target])
+    root.close()
+  }
+
   function editSelected() {
     var event = selectedEvent
     var reason = Model.editReason(agenda, event)
@@ -271,6 +281,7 @@ Panel {
     else if (text === "s") sync()
     else if (text === "n") quickAdd()
     else if (text === "o") openSelected()
+    else if (text === "w") openCalendarLink(selectedEvent)
     else if (text === "e") editSelected()
     else if (text === "H") stepDay(-7)
     else if (text === "L") stepDay(7)
@@ -772,6 +783,20 @@ Panel {
                       font.pixelSize: Style.font.caption
                       wrapMode: Text.WordWrap
                       topPadding: Style.space(3)
+                    }
+
+                    Text {
+                      id: calendarLink
+                      textFormat: Text.PlainText
+                      width: parent.width
+                      visible: eventRow.isOpen
+                      text: Model.calendarLine(root.agenda, modelData)
+                      color: Model.calendarWebTarget(root.agenda, modelData) ? Color.accent : Qt.darker(root.foreground, 1.5)
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      font.underline: calendarLinkHover.hovered
+                      TapHandler { onTapped: root.openCalendarLink(modelData) }
+                      HoverHandler { id: calendarLinkHover; cursorShape: Model.calendarWebTarget(root.agenda, modelData) ? Qt.PointingHandCursor : Qt.ArrowCursor }
                     }
                   }
                 }

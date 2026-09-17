@@ -200,6 +200,14 @@ test("strip paging keeps selection visible and never precedes today", () => {
   assert.equal(Model.relativeDayHint("2026-09-15", "2026-09-07"), "in 8 days")
 })
 
+test("calendar web labels choose the event then iCloud calendar link", () => {
+  const agenda = { calendars: [{ id: "g/work", name: "Work", provider: "google", webUrl: "" }, { id: "i/home", name: "Home", provider: "icloud", webUrl: "https://www.icloud.com/calendar/" }] }
+  assert.equal(Model.calendarLine(agenda, { calendar: "g/work" }), "Work · Google")
+  assert.equal(Model.calendarWebTarget(agenda, { calendar: "g/work", webUrl: "https://calendar.google.com/x" }), "https://calendar.google.com/x")
+  assert.equal(Model.calendarWebTarget(agenda, { calendar: "i/home" }), "https://www.icloud.com/calendar/")
+  assert.equal(Model.eventActionHints(agenda, { calendar: "i/home", file: "x", recurring: false }), "E EDIT · X DELETE · W OPEN ICLOUD CALENDAR")
+})
+
 // ---------------------------------------------------------------------
 test("eventsForDate puts all-day events first", () => {
   const events = Model.eventsForDate(AGENDA, "2026-09-07")

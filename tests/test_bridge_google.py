@@ -65,6 +65,7 @@ STANDALONE_EVENT = {
     "location": "Cafe Linnea",
     "hangoutLink": "https://meet.google.com/abc-defg-hij",
     "attendees": [{"email": "sarah@example.com"}],
+    "htmlLink": "https://calendar.google.com/event?eid=abc",
 }
 
 ALL_DAY_EVENT = {
@@ -115,6 +116,7 @@ class MapEventsPageTest(unittest.TestCase):
         self.assertIn("DTEND;TZID=America/Edmonton:20260908T140000", text)
         self.assertIn("LOCATION:Cafe Linnea", text)
         self.assertIn("X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij", text)
+        self.assertIn("X-OMAGENDA-WEB-URL:https://calendar.google.com/event?eid=abc", text)
         self.assertIn("ATTENDEE:mailto:sarah@example.com", text)
 
     def test_all_day_event_uses_value_date(self):
@@ -210,6 +212,10 @@ class LocalEventToGoogleBodyTest(unittest.TestCase):
         )
         body = _local_event_to_google_body(event)
         self.assertEqual(body["recurrence"], ["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"])
+
+    def test_web_url_is_pull_only(self):
+        event = self._event("BEGIN:VEVENT\r\nUID:x@omagenda\r\nSUMMARY:Lunch\r\nDTSTART:20260908T130000\r\nDTEND:20260908T140000\r\nX-OMAGENDA-WEB-URL:https://example.com/event\r\nEND:VEVENT")
+        self.assertNotIn("htmlLink", _local_event_to_google_body(event))
 
 
 # ---------------------------------------------------------------------

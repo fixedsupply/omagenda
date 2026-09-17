@@ -48,6 +48,26 @@ function calendarName(agenda, calendarId) {
   return calendarId || ""
 }
 
+function eventCalendar(agenda, event) {
+  return ((agenda && agenda.calendars) || []).find(function(c) { return event && c.id === event.calendar }) || null
+}
+
+function calendarProviderLabel(calendar) {
+  var labels = { google: "Google", icloud: "iCloud", caldav: "CalDAV", ics: "Subscription", local: "Local" }
+  return labels[(calendar && calendar.provider) || "local"] || "Local"
+}
+
+function calendarLine(agenda, event) {
+  var calendar = eventCalendar(agenda, event)
+  return calendar ? (calendar.name + " · " + calendarProviderLabel(calendar)) : ""
+}
+
+function calendarWebTarget(agenda, event) {
+  if (event && event.webUrl) return event.webUrl
+  var calendar = eventCalendar(agenda, event)
+  return calendar && calendar.webUrl ? calendar.webUrl : ""
+}
+
 // ---------------------------------------------------------------------
 // Dates and times
 // ---------------------------------------------------------------------
@@ -479,6 +499,8 @@ function eventActionHints(agenda, event) {
   if (eventEditable(agenda, event)) hints.push("E EDIT")
   if (deleteReason(agenda, event) === "") hints.push("X DELETE")
   if (eventOpenTarget(event)) hints.push("O OPEN")
+  var web = calendarWebTarget(agenda, event)
+  if (web) hints.push(eventCalendar(agenda, event).provider === "icloud" ? "W OPEN ICLOUD CALENDAR" : "W OPEN IN GOOGLE")
   return hints.join(" · ")
 }
 
@@ -579,6 +601,10 @@ if (typeof module !== "undefined") {
     paletteColor: paletteColor,
     calendarColorName: calendarColorName,
     calendarName: calendarName,
+    eventCalendar: eventCalendar,
+    calendarProviderLabel: calendarProviderLabel,
+    calendarLine: calendarLine,
+    calendarWebTarget: calendarWebTarget,
     toDate: toDate,
     eventOpenTarget: eventOpenTarget,
     eventEditable: eventEditable,

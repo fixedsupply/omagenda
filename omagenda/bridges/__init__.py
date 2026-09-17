@@ -118,6 +118,7 @@ class AuthExpiredError(Exception):
 class SyncState:
     cursor: str | None = None
     items: dict[str, dict] = field(default_factory=dict)  # uid -> {remoteId, etag, localHash}
+    mapping_version: int = 0
 
     @classmethod
     def load(cls, path: Path) -> "SyncState":
@@ -125,14 +126,14 @@ class SyncState:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return cls()
-        return cls(cursor=data.get("cursor"), items=data.get("items", {}))
+        return cls(cursor=data.get("cursor"), items=data.get("items", {}), mapping_version=data.get("mappingVersion", 0))
 
     def save(self, path: Path) -> None:
         import os
         import tempfile
 
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps({"cursor": self.cursor, "items": self.items}, indent=2)
+        payload = json.dumps({"cursor": self.cursor, "items": self.items, "mappingVersion": self.mapping_version}, indent=2)
         fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".sync-", suffix=".json.tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:

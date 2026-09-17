@@ -265,6 +265,12 @@ def _sync_calendar_contents(bridge, account: dict, calendar, calendar_path: Path
     _write_vdir_metadata(calendar_path, calendar)
     state_path = state_path_for(account["id"], calendar.id, state_dir)
     state = SyncState.load(state_path)
+    mapping_version = getattr(bridge, "MAPPING_VERSION", 0)
+    if mapping_version and state.mapping_version < mapping_version:
+        # A newly mapped remote field needs a complete snapshot. Keep item
+        # versions: deletion reconciliation and the local-edit echo guard
+        # still protect pending edits while the snapshot is applied.
+        state.cursor = None
     counts = {"pulled": 0, "createdRemote": 0, "createdLocal": 0, "updated": 0, "deletedRemote": 0,
               "deletedLocal": 0, "conflicts": 0}
 
@@ -356,6 +362,8 @@ def _sync_calendar_contents(bridge, account: dict, calendar, calendar_path: Path
         state.items.pop(uid, None)
         counts["deletedRemote"] += 1
     state.cursor = pull_result.next_cursor
+    if mapping_version:
+        state.mapping_version = mapping_version
     if not calendar.writable:
         state.save(state_path)
         counts["ok"] = True

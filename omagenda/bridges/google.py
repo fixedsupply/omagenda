@@ -53,6 +53,7 @@ SCOPES = ("https://www.googleapis.com/auth/calendar.events",
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 API_BASE = "https://www.googleapis.com/calendar/v3"
+MAPPING_VERSION = 2
 
 _TOKEN_SECRET_SUFFIX = "-refresh-token"
 
@@ -440,6 +441,8 @@ def _vevent_block(uid: str, item: dict, recurrence_id: tuple[str, str | None, bo
         lines.append(f"LOCATION:{_escape_text(item['location'])}")
     if item.get("description"):
         lines.append(f"DESCRIPTION:{_escape_text(item['description'])}")
+    if item.get("htmlLink"):
+        lines.append(f"X-OMAGENDA-WEB-URL:{item['htmlLink']}")
 
     conference_url = _conference_url(item)
     if conference_url:
