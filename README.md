@@ -158,6 +158,13 @@ or closing the panel also cancels deletion. The footer shows available event act
 Type the event the way you would say it:
 
 ```
+lunch with Sam tomorrow at 1pm at Cafe Torino
+standup every weekday at 9:30
+dentist on 14/9 at 10am for 45m
+review 2-3pm /work
+Coffee 10am tomorrow
+appointment on Sep 14 2027 at 10am
+```
 
 ### Panel navigation
 
@@ -166,13 +173,6 @@ forward for eight weeks with `‹`/`›` or its scroll wheel. `w` opens the
 selected event's calendar on the web when available. Expanded events show
 their calendar and provider; the calendar line is a link for Google events
 and iCloud calendars.
-lunch with Sam tomorrow at 1pm at Cafe Torino
-standup every weekday at 9:30
-dentist on 14/9 at 10am for 45m
-review 2-3pm /work
-Coffee 10am tomorrow
-appointment on Sep 14 2027 at 10am
-```
 
 The line underneath previews the date, time and title that will be written. Ambiguous times such as "at 3" produce a warning. The preview lets you
 check the interpretation before saving.
