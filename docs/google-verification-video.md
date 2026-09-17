@@ -28,19 +28,44 @@ Omagenda requests two scopes, and each gets its own beat in the video:
 | `calendar.calendarlist.readonly` | the calendar pick list on `c`, naming the account's calendars |
 | `calendar.events` | the agenda reading events, then Quick Add, edit and delete writing them back |
 
+## What the demo data has to be
+
+The local demo vdir (`tools/demo-vdir.py`) cannot be used here. Those events
+exist only on disk, and it is run with `--no-sync` on purpose — Google has never
+heard of them, so they cannot show `calendar.events` being used. The video has
+to show an event appearing, changing and disappearing in Google Calendar on the
+web, which means real API traffic against a real account.
+
+The staging that satisfies both that and privacy: a dedicated **Omagenda demo**
+calendar inside the maintainer's own Google account, holding invented events,
+with every other calendar hidden in Omagenda.
+
+The finished video is an unlisted link, which is not the same as private: it
+needs no login, and anyone it is forwarded to can watch it. What remains visible
+with this approach is the signed-in address on the consent screen — which Google
+already has — and the real calendar names in the pick-list shot, which are
+blurred in post.
+
 ## Before recording
 
-1. **Use a throwaway Google account**, not the personal one. The consent screen
-   shows the signed-in address and the agenda shows that account's events, and
-   the finished video is a link that can be forwarded. Put three or four
-   innocuous events in it (`Team standup`, `Dentist`, `Flight to Vancouver`).
-2. Connect it as its own Omagenda account: `omagenda account add google --id demo`
-   is the shot itself, so do not connect it beforehand.
-3. Hide every other calendar in the pick list (`c`) so no private calendar can
-   appear, and check the bar pill is not showing a real event before recording.
-4. Quiet the desktop: close other windows, silence notifications, and set the
+1. **Create a calendar called `Omagenda demo`** in Google Calendar and put four
+   or five invented events in it (`Team standup`, `Dentist`, `Farmers market`,
+   `Project review`, `Lunch with Sam`). They can be written with Omagenda
+   itself: `omagenda add 'Team standup tomorrow 10am' --calendar <demo id>`.
+2. **Pin it for sync.** A Google account with an explicit `calendars` list in
+   `config.toml` ignores calendars that are not in it, so a newly created
+   calendar never appears until its ID is added there.
+3. **Hide every other calendar** (`hidden_calendars`, or `c` in the panel) so
+   the agenda, the pill and the alarms can only show invented events. Keep the
+   original list: it has to be restored afterwards.
+4. **In Google Calendar on the web**, untick every calendar but the demo one, so
+   the web shots are invented events too.
+5. Quiet the desktop: close other windows, silence notifications, and set the
    browser to a clean window with no other tabs, no bookmarks bar, no extensions
    visible, and no other profile signed in.
+6. Sign out of Omagenda's Google account (`omagenda account remove google`,
+   which is local-only) so that shot 4 can show the sign-in from the start. Do
+   this last, immediately before recording.
 5. Confirm the console entry matches what the video will show: app name
    **Omagenda**, homepage `https://fixedsupply.dev/omagenda/`, privacy
    `.../privacy/`, terms `.../terms/`.
@@ -60,7 +85,7 @@ written or let them be burned-in captions.
 3. **The desktop**, bar pill visible, agenda panel opened and closed. "Omagenda
    runs entirely on the user's own computer. It shows the next event in the top
    bar and a seven-day agenda."
-4. **Terminal**: `omagenda account add google --id demo`. "Adding a Google
+4. **Terminal**: `omagenda account add google --id google`. "Adding a Google
    account starts the OAuth flow in the browser."
 5. **The consent screen, held still for ten seconds.** Show the address bar with
    `client_id=` legible, the language toggle at the bottom-left reading English,
@@ -73,7 +98,8 @@ written or let them be burned-in captions.
 7. **Panel, press `c`.** "The calendar list scope is used for exactly this: the
    names of the account's calendars, so the user can choose which to show and
    which calendar a new event goes to. Omagenda never writes to the calendar
-   list."
+   list." This is the shot whose calendar names get blurred in post; hold it
+   still so the blur box does not have to track anything.
 8. **Panel, the agenda.** "The events scope reads the user's events to draw the
    agenda and the bar. Events are stored as plain .ics files in a folder on this
    computer."
@@ -84,7 +110,7 @@ written or let them be burned-in captions.
     change on the web. "Editing rewrites the event through the same scope."
 11. **Delete**: select the event, `x`, `x` to confirm. Show it gone on the web.
     "And deleting removes it."
-12. **Terminal**: `omagenda account remove demo`, then
+12. **Terminal**: `omagenda account remove google`, then
     `https://myaccount.google.com/permissions` showing the app and the Remove
     access button. "Removing the account deletes the stored sign-in from this
     computer. Access can also be revoked from the Google account page at any
@@ -114,12 +140,16 @@ Two ways to narrate, in order of preference:
 2. **Live narration.** One take, no post-production, but any fluff means
    recording the whole flow again.
 
-Trimming and captioning:
+Trimming, blurring the calendar names, and captioning:
 
 ```bash
 ffmpeg -i in.mkv -ss 00:00:03 -to 00:04:30 -c copy trimmed.mkv
-ffmpeg -i trimmed.mkv -vf subtitles=narration.srt -c:a copy final.mp4
+ffmpeg -i trimmed.mkv -vf "boxblur=12:enable='between(t,95,110)':x=..." blurred.mkv
+ffmpeg -i blurred.mkv -vf subtitles=narration.srt -c:a copy final.mp4
 ```
+
+The blur region and its time window are read off the recording, so that middle
+command gets its real numbers once the take exists.
 
 ## Upload
 
@@ -127,9 +157,15 @@ Upload to YouTube as **Unlisted** and submit that one link with the
 verification. Keep the source file; a rejection usually asks for one more beat
 rather than a new video.
 
+## Afterwards
+
+Undo the staging: restore the hidden-calendar list to what it was, and decide
+whether the demo calendar stays (harmless, it syncs like any other) or goes,
+along with its events and its entry in the account's pinned `calendars`.
+
 ## Who does what
 
-- **Claude**: this script, staging the demo account's data and the panel state,
+- **Claude**: this script, staging the demo calendar's data and the panel state,
   starting and stopping the recording, trimming, captions, and checking the
   finished file against the requirements above before it is submitted.
 - **The PM**: signing in to Google and clicking through the consent screen (his
