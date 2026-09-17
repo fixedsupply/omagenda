@@ -1,0 +1,142 @@
+# The Google verification demo video
+
+Google's OAuth verification asks for one video that shows the consent screen,
+the exact scopes, and how each scope is used. This is the shot list, the
+narration, and who does which part.
+
+## What Google requires
+
+From [Demo video](https://support.google.com/cloud/answer/13804565) and
+[Verification requirements](https://support.google.com/cloud/answer/13464321):
+
+- The complete OAuth consent screen, showing the same exact scopes being
+  requested at submission.
+- The language toggle at the bottom-left of the consent screen set to English.
+- How each requested scope is used for the app's functionality, and the app's
+  overall purpose.
+- The same app, name and branding as the console entry.
+- Hosted on YouTube, Google Drive or another accessible file. One link only.
+- Narration is recommended so a reviewer can hear where each criterion is met.
+
+Reviewers also routinely ask to see the OAuth client ID in the address bar
+during the grant. It costs nothing, so the shot list includes it.
+
+Omagenda requests two scopes, and each gets its own beat in the video:
+
+| Scope | Shown by |
+|---|---|
+| `calendar.calendarlist.readonly` | the calendar pick list on `c`, naming the account's calendars |
+| `calendar.events` | the agenda reading events, then Quick Add, edit and delete writing them back |
+
+## Before recording
+
+1. **Use a throwaway Google account**, not the personal one. The consent screen
+   shows the signed-in address and the agenda shows that account's events, and
+   the finished video is a link that can be forwarded. Put three or four
+   innocuous events in it (`Team standup`, `Dentist`, `Flight to Vancouver`).
+2. Connect it as its own Omagenda account: `omagenda account add google --id demo`
+   is the shot itself, so do not connect it beforehand.
+3. Hide every other calendar in the pick list (`c`) so no private calendar can
+   appear, and check the bar pill is not showing a real event before recording.
+4. Quiet the desktop: close other windows, silence notifications, and set the
+   browser to a clean window with no other tabs, no bookmarks bar, no extensions
+   visible, and no other profile signed in.
+5. Confirm the console entry matches what the video will show: app name
+   **Omagenda**, homepage `https://fixedsupply.dev/omagenda/`, privacy
+   `.../privacy/`, terms `.../terms/`.
+6. The OAuth app is already published to production, which is the state Google
+   expects to see.
+
+## Shot list
+
+Target four to five minutes. Each shot has its narration line; read them as
+written or let them be burned-in captions.
+
+1. **Title card, 5s.** "Omagenda, a calendar plugin for the Omarchy Linux
+   desktop. Client ID ending <last six characters>."
+2. **The homepage**, `https://fixedsupply.dev/omagenda/`, scrolling to the
+   privacy and terms links. "This is the app's homepage, privacy policy and
+   terms, at the domain registered in the console."
+3. **The desktop**, bar pill visible, agenda panel opened and closed. "Omagenda
+   runs entirely on the user's own computer. It shows the next event in the top
+   bar and a seven-day agenda."
+4. **Terminal**: `omagenda account add google --id demo`. "Adding a Google
+   account starts the OAuth flow in the browser."
+5. **The consent screen, held still for ten seconds.** Show the address bar with
+   `client_id=` legible, the language toggle at the bottom-left reading English,
+   the app name, and both scopes expanded. "This is the consent screen for the
+   app being verified. It requests exactly two scopes: see and edit events on
+   the user's calendars, and view the list of calendars. The client ID is
+   visible in the address bar." Then grant.
+6. **Terminal**: the success line and the first sync. "Sign-in succeeded. The
+   refresh token is stored in the desktop keyring, on this computer only."
+7. **Panel, press `c`.** "The calendar list scope is used for exactly this: the
+   names of the account's calendars, so the user can choose which to show and
+   which calendar a new event goes to. Omagenda never writes to the calendar
+   list."
+8. **Panel, the agenda.** "The events scope reads the user's events to draw the
+   agenda and the bar. Events are stored as plain .ics files in a folder on this
+   computer."
+9. **Quick Add**: type `Coffee with Alex tomorrow 10am`, save. Then switch to
+   Google Calendar on the web and show the new event. "The same scope creates an
+   event when the user asks. Here it is in Google Calendar."
+10. **Edit**: select the event, `e`, change the time to 11am, save. Show the
+    change on the web. "Editing rewrites the event through the same scope."
+11. **Delete**: select the event, `x`, `x` to confirm. Show it gone on the web.
+    "And deleting removes it."
+12. **Terminal**: `omagenda account remove demo`, then
+    `https://myaccount.google.com/permissions` showing the app and the Remove
+    access button. "Removing the account deletes the stored sign-in from this
+    computer. Access can also be revoked from the Google account page at any
+    time."
+13. **End card, 5s.** "Omagenda sends no data anywhere except back to Google.
+    There is no Omagenda server, no telemetry and no analytics. Contact:
+    support@fixedsupply.dev."
+
+Shots 9, 10 and 11 are the ones reviewers watch for: a scope requested is a
+scope visibly used.
+
+## Recording
+
+`gpu-screen-recorder` ships with Omarchy and ffmpeg is installed.
+
+```bash
+omarchy screenrecord --fullscreen
+```
+
+Run it again to stop; the file lands in `~/Videos`. Add
+`--with-microphone-audio` for live narration.
+
+Two ways to narrate, in order of preference:
+
+1. **Burned-in captions.** Record silently, then caption from an `.srt`. No
+   retakes for a stumbled line, and the wording stays reviewable and editable.
+2. **Live narration.** One take, no post-production, but any fluff means
+   recording the whole flow again.
+
+Trimming and captioning:
+
+```bash
+ffmpeg -i in.mkv -ss 00:00:03 -to 00:04:30 -c copy trimmed.mkv
+ffmpeg -i trimmed.mkv -vf subtitles=narration.srt -c:a copy final.mp4
+```
+
+## Upload
+
+Upload to YouTube as **Unlisted** and submit that one link with the
+verification. Keep the source file; a rejection usually asks for one more beat
+rather than a new video.
+
+## Who does what
+
+- **Claude**: this script, staging the demo account's data and the panel state,
+  starting and stopping the recording, trimming, captions, and checking the
+  finished file against the requirements above before it is submitted.
+- **The PM**: signing in to Google and clicking through the consent screen (his
+  account, his credentials), and uploading to YouTube.
+- **Not Codex**: it works in the same terminal, with no browser and no session
+  of its own. Nothing here needs it.
+- **Not Grok Bot**: it must never sign in to the owner's Google account, which
+  is the whole middle of this video.
+- **Not TypeSafe**: it is for building AI decisions into software, unrelated to
+  recording or verification.

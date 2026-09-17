@@ -60,7 +60,7 @@ OMAGENDA_GOOGLE_CLIENT_SECRET=...
 Two separate steps, do them in order:
 
 1. **Publish to production** (OAuth consent screen → **Publish app**). This removes the 7-day token expiry. The 100-user cap and the unverified warning both remain until verification completes — so this step alone is enough for an initial small release to friends or a beta group.
-2. **Submit for verification** once the README, a privacy policy page, and a short screen recording of the OAuth flow exist (Google asks for exactly this for a sensitive-scope app). Typical turnaround is days to a couple of weeks. Once approved, the 100-user cap and the warning both go away for everyone.
+2. **Submit for verification** once the README, a privacy policy page, and a short screen recording of the OAuth flow exist (Google asks for exactly this for a sensitive-scope app). The shot list, narration and requirements for that recording are in [the demo video guide](google-verification-video.md). Typical turnaround is days to a couple of weeks. Once approved, the 100-user cap and the warning both go away for everyone.
 
 `omagenda doctor` should report the client's current publishing status by calling `tokeninfo` against a stored token, so contributors don't have to guess why sign-in behaves differently on their machine.
 
