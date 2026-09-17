@@ -98,3 +98,32 @@ Item {
             result = subprocess.run([str(runner), "-input", tmp], env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertNotIn("ReferenceError", result.stdout + result.stderr)
+
+    def test_calendar_link_tap_does_not_toggle_event_row(self):
+        runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        if not runner.exists():
+            self.skipTest("Qt QML test runtime is unavailable")
+        panel = (Path(__file__).resolve().parents[1] / "qml/Panel.qml").read_text()
+        self.assertIn("onTapped: root.openCalendarLink(modelData)", panel)
+        self.assertIn("root.expanded = !root.expanded", panel)
+        template = '''import QtQuick
+import QtTest
+Item {
+  id: root; width: 200; height: 80
+  property bool expanded: true; property int opened: 0
+  function openCalendarLink(event) { opened++ }
+  Rectangle { anchors.fill: parent; color: "transparent"
+    MouseArea { anchors.fill: parent; onClicked: root.expanded = !root.expanded }
+    Rectangle { x: 20; y: 20; width: 120; height: 30; color: "transparent"
+      MouseArea { anchors.fill: parent; onClicked: root.openCalendarLink({}) }
+    }
+  }
+  TestCase { name: "CalendarLink"; when: windowShown
+    function test_link_then_row() { mouseClick(root, 50, 35); compare(root.opened, 1); compare(root.expanded, true); mouseClick(root, 180, 60); compare(root.expanded, false) }
+  }
+}'''
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_PLATFORMTHEME="basic", QT_QUICK_BACKEND="software")
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "tst_calendar_link.qml").write_text(template)
+            result = subprocess.run([str(runner), "-input", tmp], env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
