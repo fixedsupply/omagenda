@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.1 — 2026-09-17
+
+### Fixed
+
+- Calendar colours are compared the way the eye sees them, so a theme's
+  genuinely distinct colours are left alone. In Tokyo Night the busiest two
+  calendars had both been painted the same green.
+
 ## v0.3.0 — 2026-09-17
 
 ### Added

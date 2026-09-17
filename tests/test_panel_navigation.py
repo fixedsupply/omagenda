@@ -37,8 +37,9 @@ Item {
     function test_wait_then_exit() {
       root.deleteRunning = true
       compare(root.hint(), "DELETING 'DISPOSABLE EVENT'…")
-      wait(2100)
-      compare(root.hint(), "DELETING 'DISPOSABLE EVENT'… WAITING FOR SYNC TO FINISH")
+      // Wait for the hint, not for the clock: a fixed wait just over the
+      // timer's 2s loses the race on a loaded machine.
+      tryVerify(function() { return root.hint() === "DELETING 'DISPOSABLE EVENT'… WAITING FOR SYNC TO FINISH" }, 8000)
       root.deleteRunning = false
       compare(root.hint(), "")
       compare(root.deleteInProgressTitle, "")
