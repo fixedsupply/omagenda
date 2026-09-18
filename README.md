@@ -88,6 +88,46 @@ Check `omarchy plugin list | grep omagenda`, `omagenda --version` and
 `omagenda doctor` again. Doctor identifies a stale CLI on PATH and reports
 a failure when any check needs attention, including with `--json`.
 
+## Uninstalling
+
+List the accounts, then disconnect each one before removing the plugin:
+
+```bash
+omagenda account list
+omagenda account remove <id>
+```
+
+This deletes the sign-in on this computer only. For a Google account,
+`omagenda account remove <id> --revoke` also revokes access everywhere and
+signs out other computers using that account.
+
+Remove the plugin and restart the shell:
+
+```bash
+omarchy plugin remove fixedsupply.omagenda
+omarchy restart shell
+```
+
+Use `omarchy plugin disable fixedsupply.omagenda` instead to switch it off
+without uninstalling. Remove the CLI link separately:
+
+```bash
+rm -f ~/.local/bin/omagenda
+```
+
+Your calendars remain at `~/.local/share/calendars/`. Deleting that folder
+deletes local copies, not the events on Google or iCloud. State remains at
+`~/.local/state/omagenda/`, including private safety copies of deleted and
+edited events. Configuration remains at
+`~/.config/omagenda/config.toml`. Remove any of those paths if you no longer
+want them.
+
+If you used iCloud or CalDAV, remove the generated pimsync configuration at
+`~/.config/pimsync/omagenda-<id>.scfg` for each account. Run `omagenda doctor`
+before removal to check whether the system keyring is available. It does not
+enumerate individual keyring entries; account removal asks `secret-tool` to
+clear its Omagenda credential.
+
 ## Account maintenance
 
 Reconnect an existing account with `omagenda account add <type> --id <id>`.
