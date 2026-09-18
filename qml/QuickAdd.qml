@@ -42,6 +42,12 @@ Item {
   property bool busy: false
   property string pendingText: ""
   property string parsingText: ""
+  // The parse of exactly what the user typed, with no panel date appended.
+  // Every decision about appending is made against this one; `parsed` may
+  // describe the appended sentence instead, which is what gets saved.
+  property var typedParse: null
+  property string parsingSentence: ""
+  property bool retryWithDate: false
   property bool keepOpenAfterSave: false
   property string savedTitle: ""
   property string saveError: ""
@@ -117,12 +123,15 @@ Item {
     root.opened = false
     root.text = ""
     root.parsed = null
+    root.typedParse = null
+    root.retryWithDate = false
   }
 
   function setText(next) {
     root.text = next
     if (next.trim() === "") {
       root.parsed = null
+      root.typedParse = null
       return
     }
     parseDebounce.restart()
@@ -136,21 +145,28 @@ Item {
     }
     root.busy = true
     root.parsingText = root.text
-    parseProc.command = [root.binPath, "parse", root.sentence(), "--json"]
+    root.parsingSentence = root.text.trim()
+    parseProc.command = [root.binPath, "parse", root.parsingSentence, "--json"]
+    parseProc.running = true
+  }
+
+  // The second pass, run only when the typed text named no day of its own.
+  function runParseWithDate() {
+    root.busy = true
+    root.parsingText = root.text
+    root.parsingSentence = Model.quickAddSentence(root.text, root.prefillDate, root.editing, root.typedParse)
+    parseProc.command = [root.binPath, "parse", root.parsingSentence, "--json"]
     parseProc.running = true
   }
 
   // A date picked in the panel is context the sentence shouldn't have to
-  // repeat, so it's appended only when the user hasn't named a day.
+  // repeat, so it's appended only when the user hasn't named a day. The test
+  // runs against `typedParse`, never against `parsed`: a parse of the
+  // appended sentence always contains a date, so testing that would append
+  // on every other keystroke and glue the date onto whatever the sentence
+  // ended with -- "at Cafe Torino 2026-09-18" as a location.
   function sentence() {
-    var typed = root.text.trim()
-    if (root.editing || !root.prefillDate) return typed
-    if (root.parsed && root.parsed.spans) {
-      for (var i = 0; i < root.parsed.spans.length; i++) {
-        if (root.parsed.spans[i].kind === "date") return typed
-      }
-    }
-    return typed + " " + root.prefillDate
+    return Model.quickAddSentence(root.text, root.prefillDate, root.editing, root.typedParse)
   }
 
   function submit(keepOpen) {
@@ -203,12 +219,23 @@ Item {
       waitForEnd: true
       onStreamFinished: {
         if (!root.opened || root.text !== root.parsingText) return
+        var result = null
         try {
-          root.parsed = JSON.parse(text)
-          root.parseError = ""
+          result = JSON.parse(text)
         } catch (e) {
           root.parseError = "couldn't read the parser's answer"
+          return
         }
+        root.parseError = ""
+        var typedOnly = root.parsingSentence === root.text.trim()
+        if (typedOnly) root.typedParse = result
+        // Ask again with the panel's date only when the typed text named no
+        // day; the answer to that question is now in hand.
+        if (typedOnly && root.sentence() !== root.parsingSentence) {
+          root.retryWithDate = true
+          return
+        }
+        root.parsed = result
       }
     }
     stderr: StdioCollector {
@@ -217,7 +244,13 @@ Item {
     }
     onExited: {
       root.busy = false
-      if (root.opened && root.text.trim() !== "" && root.text !== root.parsingText) {
+      if (!root.opened) return
+      if (root.retryWithDate) {
+        root.retryWithDate = false
+        if (root.text.trim() !== "") root.runParseWithDate()
+        return
+      }
+      if (root.text.trim() !== "" && root.text !== root.parsingText) {
         root.pendingText = ""
         root.runParse()
       }
