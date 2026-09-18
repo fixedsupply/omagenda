@@ -559,6 +559,33 @@ function previewLine(parsed, timeFormat) {
 
 var MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+// ---------------------------------------------------------------------
+// Quick Add's sentence
+// ---------------------------------------------------------------------
+// A day picked in the panel is context the sentence shouldn't have to
+// repeat, so Quick Add appends it -- but only when the user has not named a
+// day themselves, or the parser reads the appended date as part of whatever
+// came last in the sentence ("at Cafe Torino 2026-09-18" becomes a location).
+// The decision has to be made against a parse of *what the user typed*, not
+// against a parse of a sentence that already carries the appended date:
+// that date creates a date span of its own, so the test would flip on every
+// other parse and never settle.
+function parsedHasDate(parsed) {
+  var spans = (parsed && parsed.spans) || []
+  for (var i = 0; i < spans.length; i++) {
+    if (spans[i].kind === "date") return true
+  }
+  return false
+}
+
+function quickAddSentence(typed, prefillDate, editing, parsedTyped) {
+  var sentence = String(typed || "").trim()
+  if (editing || !prefillDate) return sentence
+  if (sentence === "") return sentence
+  if (parsedHasDate(parsedTyped)) return sentence
+  return sentence + " " + prefillDate
+}
+
 // Calendars an event can actually be written to. A read-only subscription
 // is in the agenda but can never be a target, so it is never offered.
 function writableCalendars(agenda) {
@@ -738,6 +765,8 @@ if (typeof module !== "undefined") {
   module.exports = {
     parsePalette: parsePalette,
     resolvedPalette: resolvedPalette,
+    parsedHasDate: parsedHasDate,
+    quickAddSentence: quickAddSentence,
     readableOn: readableOn,
     colorDistance: colorDistance,
     paletteColor: paletteColor,
