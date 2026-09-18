@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Quick Add no longer appends the day selected in the panel to a sentence that
+  names a day itself. It could land in whatever the sentence ended with, saving
+  events with locations like "Cafe Torino 2026-09-18".
+
+### Documentation
+
+- The README covers uninstalling, and the publishing notes describe the plugin
+  marketplace's current submission process. Screenshots regenerated.
+
 ## v0.3.1 — 2026-09-17
 
 ### Fixed
