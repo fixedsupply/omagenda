@@ -43,8 +43,9 @@ with every other calendar hidden in Omagenda.
 The finished video is an unlisted link, which is not the same as private: it
 needs no login, and anyone it is forwarded to can watch it. What remains visible
 with this approach is the signed-in address on the consent screen — which Google
-already has — and the real calendar names in the pick-list shot, which are
-blurred in post.
+already has —. The real calendar names never appear at all: the panel
+is pointed at a clean state directory, so the pick list holds one calendar. See
+"A clean room" below.
 
 ## Before recording
 
@@ -63,13 +64,15 @@ blurred in post.
 5. Quiet the desktop: close other windows, silence notifications, and set the
    browser to a clean window with no other tabs, no bookmarks bar, no extensions
    visible, and no other profile signed in.
-6. Sign out of Omagenda's Google account (`omagenda account remove google`,
-   which is local-only) so that shot 4 can show the sign-in from the start. Do
-   this last, immediately before recording.
-5. Confirm the console entry matches what the video will show: app name
+6. **Revoke the grant** at <https://myaccount.google.com/permissions> so the
+   consent screen lists the scopes rather than summarising an existing grant,
+   and sign out locally (`omagenda account remove <id>`, which is local-only).
+   Do this last, immediately before recording, and reconnect the everyday
+   account afterwards.
+7. Confirm the console entry matches what the video will show: app name
    **Omagenda**, homepage `https://fixedsupply.dev/omagenda/`, privacy
    `.../privacy/`, terms `.../terms/`.
-6. The OAuth app is already published to production, which is the state Google
+8. The OAuth app is already published to production, which is the state Google
    expects to see.
 
 ## Shot list
@@ -98,8 +101,8 @@ written or let them be burned-in captions.
 7. **Panel, press `c`.** "The calendar list scope is used for exactly this: the
    names of the account's calendars, so the user can choose which to show and
    which calendar a new event goes to. Omagenda never writes to the calendar
-   list." This is the shot whose calendar names get blurred in post; hold it
-   still so the blur box does not have to track anything.
+   list." With the clean-room staging below, this list holds exactly one
+   calendar, so nothing needs blurring.
 8. **Panel, the agenda.** "The events scope reads the user's events to draw the
    agenda and the bar. Events are stored as plain .ics files in a folder on this
    computer."
@@ -140,16 +143,35 @@ Two ways to narrate, in order of preference:
 2. **Live narration.** One take, no post-production, but any fluff means
    recording the whole flow again.
 
-Trimming, blurring the calendar names, and captioning:
+Trimming and captioning:
 
 ```bash
 ffmpeg -i in.mkv -ss 00:00:03 -to 00:04:30 -c copy trimmed.mkv
-ffmpeg -i trimmed.mkv -vf "boxblur=12:enable='between(t,95,110)':x=..." blurred.mkv
-ffmpeg -i blurred.mkv -vf subtitles=narration.srt -c:a copy final.mp4
+ffmpeg -i trimmed.mkv -vf subtitles=narration.srt -c:a copy final.mp4
 ```
 
-The blur region and its time window are read off the recording, so that middle
-command gets its real numbers once the take exists.
+## A clean room
+
+The panel and the CLI both honour `OMAGENDA_CONFIG`, `OMAGENDA_STATE` and
+`OMAGENDA_VDIR`, and the shell launcher does not sanitise its environment, so
+the whole desktop can be pointed at a throwaway state:
+
+```bash
+while quickshell kill -p /usr/share/omarchy/shell --any-display; do :; done
+hyprctl dispatch 'hl.dsp.exec_cmd("env OMAGENDA_CONFIG=/tmp/omagenda-video/config.toml OMAGENDA_STATE=/tmp/omagenda-video/state OMAGENDA_VDIR=/tmp/omagenda-video/calendars omarchy-launch-shell")'
+```
+
+With a staged config pinning only the demo calendar, the pick list holds one
+entry and the agenda holds only invented events. Restore by restarting the
+shell normally.
+
+## Shots that were dropped
+
+- **Editing an event.** The local edit applied, but the delete that followed
+  removed the file before the edit synced, so Google never received it. Showing
+  create and delete is enough: each requested scope is still shown in use.
+- **The Google account permissions page.** It lists every third-party app
+  connected to the account. The removal command's own output names the page.
 
 ## Upload
 
