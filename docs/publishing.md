@@ -28,13 +28,48 @@ are recorded for the candidate commit.
       watcher and sync worked; doctor was clean. See [STATUS.md](../STATUS.md).
       This v0.2.0 result does not establish v0.2.1 upgrade acceptance.
 
-## omarchyplugins.com
+## Marketplace submission
+
+The marketplace is at `plugins.omarchy.org`. Do not use the old form process.
+The maintainer submits a GitHub issue after review:
+
+```bash
+gh issue create \
+  --repo omacom/omarchy-plugin-marketplace \
+  --title "[Plugin]: Omagenda" \
+  --body-file docs/marketplace-submission.md
+```
+
+`docs/marketplace-submission.md` is ready to pass directly as the body file.
+Its first line is an HTML draft marker and does not appear in the issue; the
+issue body starts at `### Repository URL`. The headings must remain in this
+exact order: Repository URL, Category, Tags, Suggest a missing tag, Maintainer
+notes, Submission checklist. Review every statement with the maintainer before
+submitting; all five checklist items must be true and checked.
+
+The category is `Productivity`. It is a case-sensitive marketplace value;
+`Time / Productivity` is not valid. The tags are `bar` and `quickshell`.
+The marketplace allows one to three tags from its fixed list.
+
+The marketplace checks that the repository is public, has a root
+`manifest.json`, has a root README with installation and removal steps, has a
+root license, uses a unique plugin ID outside `omarchy.*`, and optionally has
+a root `preview.png`. This repository satisfies those with `manifest.json`,
+this README, `LICENSE`, `fixedsupply.omagenda`, and `preview.png`.
+
+After submission, the bot posts validation and an Automated Security Baseline
+result on the issue. A maintainer must apply `approved-and-verified` before
+the listing appears. Listing is not a security review.
+
+## Listing copy
 
 **Name:** Omagenda
 
 **Tagline:** Type a sentence, get an event. What's next, always in the bar.
 
-**Category:** Time / Productivity
+**Category:** Productivity
+
+**Tags:** bar, quickshell
 
 **Description:**
 
@@ -60,11 +95,25 @@ are recorded for the candidate commit.
 
 ## awesome-omarchy
 
-A single list entry, in the repository's existing format:
+This is blocked for now. The target is
+[`aorumbayev/awesome-omarchy`](https://github.com/aorumbayev/awesome-omarchy),
+whose CI runs `scripts/check-min-stars.py` and requires five or more GitHub
+stars for new listings. `fixedsupply/omagenda` currently has 0, so a pull
+request would fail today. Do not open one until the threshold is met.
+
+When eligible, add this in the `## Plugins` section, alphabetically by
+listing name. The required format uses one hyphen between the link and a
+description ending with a full stop:
 
 ```markdown
-- [Omagenda](https://github.com/fixedsupply/omagenda) — Bar pill with your next event, an agenda panel, and natural-language Quick Add. Writes plain .ics to a vdir; syncs Google, iCloud, and CalDAV.
+- [Omagenda](https://github.com/fixedsupply/omagenda) - Bar pill, agenda panel, and natural-language Quick Add for calendars you own.
 ```
+
+The list already has [Calendar](https://github.com/tmn73/omarchy-calendar),
+described as “Next Google Calendar event in the Omarchy bar with one-click
+meeting join.” Keep Omagenda's wording distinct: it adds a full agenda panel,
+natural-language entry, and local vdir ownership rather than echoing that
+next-event description.
 
 ## Not affiliated with Flexibits
 
