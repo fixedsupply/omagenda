@@ -218,6 +218,41 @@ Things learned the hard way, for the next recording:
 - The Google account permissions page lists every third-party app connected to
   the account. Do not film it; the CLI's removal message names the page anyway.
 
+## Submitting
+
+The Verification Center gates data-access verification behind branding: the app
+needs a logo, homepage, privacy and terms links, an authorized domain and
+production publishing status before "Prepare for verification" becomes
+clickable. Google re-evaluates branding a few minutes after it is saved.
+
+Paste these scope justifications into the form. They match what the video shows.
+
+**`https://www.googleapis.com/auth/calendar.events`**
+
+> Omagenda is a desktop calendar plugin that runs entirely on the user's own
+> computer. It uses this scope to read the user's events so it can display them
+> in the desktop's top bar and in a seven-day agenda panel, and to create,
+> update and delete events when the user explicitly asks, through the Quick Add
+> box or the panel's delete action. Events are stored locally as standard .ics
+> files. No event data is sent anywhere except back to Google. There is no
+> Omagenda server, no telemetry and no analytics. The narrower calendar.events
+> scope is requested rather than full calendar access because Omagenda never
+> creates, deletes or shares calendars themselves.
+
+**`https://www.googleapis.com/auth/calendar.calendarlist.readonly`**
+
+> Omagenda uses this read-only scope to obtain the names, colours and IDs of the
+> calendars in the user's account. This is required so the user can choose which
+> calendars appear in the agenda, and so a new event can be written to the
+> calendar the user selects. Omagenda only reads the calendar list; it never
+> modifies it. The read-only variant is requested specifically to avoid holding
+> write access to calendar settings.
+
+Contact addresses, both confirmed to receive external mail on 2026-09-17:
+`support@fixedsupply.dev` (Cloudflare routing, on the privacy and terms pages)
+and `omagenda-support@googlegroups.com` (the consent screen's user support
+address; the group accepts posts from anyone on the web).
+
 ## Who does what
 
 - **Claude**: this script, staging the demo calendar's data and the panel state,
