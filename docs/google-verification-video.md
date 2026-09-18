@@ -163,6 +163,39 @@ Undo the staging: restore the hidden-calendar list to what it was, and decide
 whether the demo calendar stays (harmless, it syncs like any other) or goes,
 along with its events and its entry in the account's pinned `calendars`.
 
+## The recorded video, 2026-09-17
+
+Recorded and submitted: <https://youtu.be/5AZxfH_7RV0> (unlisted), 3:36, kept
+locally at `~/Videos/omagenda-oauth-demo.mp4`.
+
+What it shows, in order: title card, homepage, privacy policy (with both narrow
+permissions), terms, `omagenda account add google --id demo`, Google's
+unverified-app warning, **the consent screen listing both permissions**, first
+sync, agenda, calendar pick list, Quick Add creating an event, that event in
+Google Calendar on the web, delete with `x` `x`, the empty day in Google
+Calendar, `omagenda account remove demo`, end card. Captions are burned in; the
+video is silent.
+
+Things learned the hard way, for the next recording:
+
+- **The consent screen only lists the scopes for an account that has not
+  already granted them.** A re-grant shows a summary screen saying "Omagenda
+  already has some access", which does not satisfy the requirement. Revoke at
+  <https://myaccount.google.com/permissions> first, and remember that revoking
+  also signs out the maintainer's everyday account, which then needs
+  reconnecting.
+- **`omagenda account add` prints every calendar it can see**, which on a real
+  account means real calendar names in the frame. Clear the terminal as soon as
+  the token lands, and cut the take before that output appears.
+- The bar carries other plugins' data: a finance widget showed a portfolio
+  total in every frame of the first attempt. Disable other bar widgets before
+  recording.
+- The screen recorder keeps running for a second or so after a workspace
+  switch, so takes end with frames of whatever workspace came next. Shave the
+  tail of every clip and verify afterwards, frame by frame.
+- The Google account permissions page lists every third-party app connected to
+  the account. Do not film it; the CLI's removal message names the page anyway.
+
 ## Who does what
 
 - **Claude**: this script, staging the demo calendar's data and the panel state,
