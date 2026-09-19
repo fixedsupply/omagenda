@@ -37,7 +37,7 @@ ln -sf ~/.config/omarchy/plugins/fixedsupply.omagenda/bin/omagenda ~/.local/bin/
 ```
 
 Check that `omarchy plugin list | grep omagenda` shows Omagenda enabled and
-`omagenda --version` shows `0.3.1` from
+`omagenda --version` shows `0.3.2` from
 `~/.config/omarchy/plugins/fixedsupply.omagenda` (resolved if it is a symlink).
 After connecting a calendar, `omagenda doctor` should be clean.
 
