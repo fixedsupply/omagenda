@@ -222,31 +222,57 @@ Things learned the hard way, for the next recording:
 
 The Verification Center gates data-access verification behind branding: the app
 needs a logo, homepage, privacy and terms links, an authorized domain and
-production publishing status before "Prepare for verification" becomes
-clickable. Google re-evaluates branding a few minutes after it is saved.
+production publishing status, and then the branding itself must be verified and
+published, before "Prepare for verification" becomes clickable.
 
-Paste these scope justifications into the form. They match what the video shows.
+The control for that is easy to miss. On Google Auth Platform → Branding, click
+the small blue (i) icon to the right of the "Branding" heading: it opens "Verify
+branding", and once that passes a "Publish branding" button appears. The page
+shows no other button for it, which is why "Prepare for verification" can sit
+greyed out for days with every field filled in.
 
-**`https://www.googleapis.com/auth/calendar.events`**
+Before submitting, check Data Access lists exactly the scopes the app requests.
+It does not follow the code: after the 0.3.0 scope narrowing the console still
+held the old full `auth/calendar` plus unused `openid` and `userinfo.*`, and
+those would have been submitted. The Clients page must list only the one
+Desktop client the video uses.
 
-> Omagenda is a desktop calendar plugin that runs entirely on the user's own
-> computer. It uses this scope to read the user's events so it can display them
-> in the desktop's top bar and in a seven-day agenda panel, and to create,
-> update and delete events when the user explicitly asks, through the Quick Add
-> box or the panel's delete action. Events are stored locally as standard .ics
-> files. No event data is sent anywhere except back to Google. There is no
-> Omagenda server, no telemetry and no analytics. The narrower calendar.events
-> scope is requested rather than full calendar access because Omagenda never
-> creates, deletes or shares calendars themselves.
+Google classes `calendar.calendarlist.readonly` as non-sensitive, so the form
+has a single justification box (1000 characters) for `calendar.events`. The
+text submitted on 2026-09-22:
 
-**`https://www.googleapis.com/auth/calendar.calendarlist.readonly`**
+> Omagenda is an open-source desktop calendar plugin that runs entirely on the
+> user's own computer. It uses calendar.events to read the user's events so it
+> can show them in the desktop's top bar and a seven-day agenda panel, and to
+> create, edit and delete events when the user explicitly asks, through the
+> Quick Add box or the panel. Events are stored locally as standard .ics files
+> and are sent nowhere except back to Google. There is no Omagenda server,
+> telemetry or analytics. A read-only scope is not sufficient because users
+> create, edit and delete events from the app. Full calendar access is not
+> requested because Omagenda never creates, deletes or shares calendars
+> themselves. calendar.events.owned is not sufficient because users also add
+> events to shared calendars they can edit but do not own. The demo video shows
+> the consent screen, then events being read, created, edited and deleted, each
+> change confirmed in Google Calendar on the web.
 
-> Omagenda uses this read-only scope to obtain the names, colours and IDs of the
-> calendars in the user's account. This is required so the user can choose which
-> calendars appear in the agenda, and so a new event can be written to the
-> calendar the user selects. Omagenda only reads the calendar list; it never
-> modifies it. The read-only variant is requested specifically to avoid holding
-> write access to calendar settings.
+Paste it as one line: text copied out of a terminal carries the terminal's
+wrapping as hard line breaks.
+
+"Additional info":
+
+> Omagenda is an open-source desktop plugin for the Omarchy Linux desktop
+> (source: https://github.com/fixedsupply/omagenda). It is a desktop OAuth
+> client using the loopback redirect; there is no server component. The demo
+> video shows the consent screen, then each scope in use: the calendar list in
+> the panel's calendar picker, and events being read, created, edited and
+> deleted, with each change confirmed in Google Calendar on the web. The video
+> uses a dedicated demo calendar with invented events. This is the only Cloud
+> project that uses OAuth for this app.
+
+The questionnaire that follows asks whether the app is for personal, internal,
+testing or WordPress SMTP use only. It is none of these, so every answer is No;
+a Yes skips review. The CASA acknowledgement applies to restricted scopes only,
+and Omagenda requests none.
 
 Contact addresses, both confirmed to receive external mail on 2026-09-17:
 `support@fixedsupply.dev` (Cloudflare routing, on the privacy and terms pages)
