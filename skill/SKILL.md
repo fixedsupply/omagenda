@@ -145,6 +145,7 @@ Use the exact `file` from the agenda for the equivalent CLI commands:
 ```bash
 omagenda describe /path/from/agenda/event.ics --json
 omagenda edit /path/from/agenda/event.ics "Dentist on Sep 17 at 3pm for 1h at Main St Clinic" --dry-run --json
+omagenda move /path/from/agenda/event.ics work --dry-run --json
 ```
 
 `describe` returns `{sentence, calendar}` only after checking that the sentence
@@ -154,17 +155,23 @@ interpretation; remove `--dry-run` to apply the user's approved change.
 `edit` returns `{updated, title, calendar, changed, copy, file}`; `updated: false`
 means no changes and no write. Dry runs report proposed changes with `copy: null`.
 
-Editing refuses read-only calendars, recurrence, guests, multiple VEVENTs,
-conflict files and unsafe paths. Calendar moves and recurrence/alert changes
-are unsupported. One-day all-day events can round-trip; longer all-day spans
+Editing and moving refuse read-only calendars, recurrence, guests, multiple
+VEVENTs, conflict files and unsafe paths. `edit --calendar <id>` moves while
+applying the sentence to the new copy; `move` changes no event fields. Moves
+create the target first with a fresh UID, then remove the source. Recurrence/
+alert changes are unsupported. One-day all-day events can round-trip; longer all-day spans
 and grammar-like titles may be refused by
 `describe`. Explicit years support past dates. Do not bypass a refusal by rewriting the raw file.
 
-The update preserves UID and unrelated properties, saves the previous bytes
-under `$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics`
-(default `~/.local/state/omagenda`), replaces atomically and rebuilds the agenda.
-The watcher handles provider sync. In edit mode Enter saves, Escape cancels,
-and Tab and Shift+Enter are disabled. Normal Quick Add resets to add mode.
+An edit preserves UID and unrelated properties. A move strips `X-OMAGENDA-*`
+provider metadata, resets revision timestamps and sequence, and saves the
+source bytes under `$OMAGENDA_STATE/moved/<sanitised-calendar-id>/`. Both save
+their safety bytes privately; edits use
+`$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics`
+(default `~/.local/state/omagenda`). Each operation rebuilds the agenda. The
+watcher handles provider sync. In edit mode Enter saves, Escape cancels, Tab
+chooses a writable destination, and Shift+Enter is disabled. Normal Quick Add
+resets to add mode.
 
 ## Installation and accounts
 

@@ -28,8 +28,10 @@ Item {
   property string binPath: ""
   property string prefillDate: ""
   property string editFile: ""
+  property string sourceCalendar: ""
   readonly property bool editing: editFile !== ""
   property bool savedUpdate: false
+  property bool savedMoved: false
 
   property bool opened: false
   property string text: ""
@@ -67,19 +69,22 @@ Item {
   // What the event will land in, said plainly: a /tag in the sentence wins,
   // then a Tab choice, then the configured default the CLI would apply.
   readonly property string effectiveCalendar: {
-    if (editing) return targetCalendar
+    if (editing) {
+      if (targetCalendar !== sourceCalendar) return targetCalendar
+      if (parsed && parsed.calendar) return parsed.calendar
+      return sourceCalendar
+    }
     if (parsed && parsed.calendar) return parsed.calendar
     if (targetCalendar !== "") return targetCalendar
     return service && service.defaultCalendar ? service.defaultCalendar : ""
   }
 
   signal added(string title)
-  signal updated(string title)
+  signal updated(string title, bool moved)
 
   property string cycleNote: ""
 
   function cycleCalendar() {
-    if (root.editing) return
     var reason = Model.cycleUnavailableReason(root.agenda, root.effectiveCalendar)
     if (reason !== "") {
       // Say why rather than appearing broken.
@@ -95,6 +100,7 @@ Item {
   function open(dateKey) {
     if (addProc.running) return
     root.editFile = ""
+    root.sourceCalendar = ""
     root.saveError = ""
     root.keepOpenAfterSave = false
     root.prefillDate = dateKey || ""
@@ -111,6 +117,7 @@ Item {
     if (addProc.running) return
     open("")
     root.editFile = file
+    root.sourceCalendar = calendar
     root.targetCalendar = calendar
     root.setText(sentence)
     Qt.callLater(function() {
@@ -182,9 +189,14 @@ Item {
     // configured default, which is the behaviour they set up deliberately.
     if (!root.editing && root.targetCalendar !== "" && !(root.parsed && root.parsed.calendar))
       command = command.concat(["--calendar", root.targetCalendar])
+    // Only a Tab choice goes on the command line. The event's own calendar is
+    // the default, and passing it anyway would override a /tag in the sentence.
+    if (root.editing && root.targetCalendar !== "" && root.targetCalendar !== root.sourceCalendar)
+      command = command.concat(["--calendar", root.targetCalendar])
     root.keepOpenAfterSave = keepOpen
     root.savedTitle = ""
     root.savedUpdate = false
+    root.savedMoved = false
     root.saveError = ""
     root.saveWaitElapsed = false
     addProc.command = command
@@ -266,6 +278,7 @@ Item {
           var result = JSON.parse(text)
           root.savedTitle = root.editing ? result.title : (result.event || {}).title || ""
           root.savedUpdate = result.updated === true
+          root.savedMoved = result.moved === true
         } catch (e) {}
       }
     }
@@ -281,7 +294,7 @@ Item {
         return
       }
       if (root.editing) {
-        if (root.savedUpdate) root.updated(root.savedTitle)
+        if (root.savedUpdate) root.updated(root.savedTitle, root.savedMoved)
       } else root.added(root.savedTitle)
       if (root.keepOpenAfterSave) {
         root.text = ""
@@ -440,8 +453,10 @@ Item {
           width: parent.width
           textFormat: Text.PlainText
           visible: root.effectiveCalendar !== ""
-          text: Model.destinationText(root.agenda, root.effectiveCalendar)
-                + (root.editing ? " (editing)" : root.parsed && root.parsed.calendar ? "  (from the sentence)" : "")
+          text: root.editing
+                ? Model.moveDestinationText(root.agenda, root.effectiveCalendar, root.sourceCalendar)
+                : Model.destinationText(root.agenda, root.effectiveCalendar)
+                  + (root.parsed && root.parsed.calendar ? "  (from the sentence)" : "")
           color: root.accent
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption

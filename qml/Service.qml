@@ -307,9 +307,9 @@ Item {
     onLoaded: {
       item.service = root
       item.binPath = root.binPath
-      item.updated.connect(function(title) {
+      item.updated.connect(function(title, moved) {
         Quickshell.execDetached([
-          "omarchy-notification-send", "-g", "󰃭", "Updated in your calendar", title || "Event"
+          "omarchy-notification-send", "-g", "󰃭", moved ? "Moved in your calendar" : "Updated in your calendar", title || "Event"
         ])
         root.reload()
       })

@@ -154,28 +154,42 @@ def save_previous(path: Path, calendar_id: str, content: bytes) -> Path:
     return saved
 
 
-def edit_event(event_file: str, sentence: str, reference: datetime, dry_run: bool = False) -> dict:
+def _sentence_properties(event: icalendar.Event, sentence: str, reference: datetime) -> tuple[dict, dict]:
+    """Return the parsed result and only the direct VEVENT fields it changes."""
+    parsed = parse_sentence(sentence, reference)
+    if parsed["rrule"] or parsed["alarms"]:
+        raise ValueError("Changing recurrence or alerts through sentence editing isn't supported yet")
+    before, after = event_values(event, reference), parsed_values(parsed, reference)
+    properties = {}
+    for field, key in (("title", "SUMMARY"), ("start", "DTSTART"), ("location", "LOCATION")):
+        if not same_value(before[field], after[field]):
+            properties[key] = after[field] if field != "location" else after[field] or None
+    if "DURATION" in event:
+        duration = after["end"] - after["start"]
+        times_changed = any(not same_value(before[key], after[key]) for key in ("start", "end"))
+        if times_changed and duration != event.decoded("DURATION"):
+            properties["DURATION"] = duration
+    elif not same_value(before["end"], after["end"]):
+        properties["DTEND"] = after["end"]
+    return parsed, {"after": after, "properties": properties}
+
+
+def edit_event(event_file: str, sentence: str, reference: datetime, dry_run: bool = False,
+               calendar_id: str | None = None) -> dict:
     from omagenda.sync import _sync_lock
 
     with _sync_lock():
         path, calendar, content, event = validate_event_file(event_file, "edit")
-        parsed = parse_sentence(sentence, reference)
-        if parsed["calendar"] and parsed["calendar"] != calendar["id"]:
-            raise ValueError("Moving events between calendars isn't supported yet")
-        if parsed["rrule"] or parsed["alarms"]:
-            raise ValueError("Changing recurrence or alerts through sentence editing isn't supported yet")
-        before, after = event_values(event, reference), parsed_values(parsed, reference)
-        properties = {}
-        for field, key in (("title", "SUMMARY"), ("start", "DTSTART"), ("location", "LOCATION")):
-            if not same_value(before[field], after[field]):
-                properties[key] = after[field] if field != "location" else after[field] or None
-        if "DURATION" in event:
-            duration = after["end"] - after["start"]
-            times_changed = any(not same_value(before[key], after[key]) for key in ("start", "end"))
-            if times_changed and duration != event.decoded("DURATION"):
-                properties["DURATION"] = duration
-        elif not same_value(before["end"], after["end"]):
-            properties["DTEND"] = after["end"]
+        parsed, update = _sentence_properties(event, sentence, reference)
+        after, properties = update["after"], update["properties"]
+        target_id = calendar_id or parsed["calendar"]
+        if target_id and target_id != calendar["id"]:
+            from omagenda.move import _move_event
+
+            moved = _move_event(event_file, target_id, dry_run, properties, after["title"])
+            moved["updated"] = moved["moved"] or bool(properties)
+            moved["changed"] = list(properties)
+            return moved
         result = {"updated": bool(properties), "title": after["title"], "calendar": calendar["id"],
                   "file": str(path), "changed": list(properties), "copy": None, "name": calendar["name"]}
         if not properties or dry_run:

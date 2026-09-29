@@ -224,8 +224,12 @@ check the interpretation before saving.
 - `Esc` cancels without saving.
 
 Press `e` on an event to edit its sentence. `Enter` updates that same event;
-`Esc` cancels. The destination says `(editing)`, and Tab and Shift+Enter are
-disabled. Normal Quick Add starts empty in add mode afterwards.
+`Esc` cancels. Tab cycles writable destinations, and when it differs the line
+says `→ Work (moving from Personal)`. The moved event receives a new identity,
+so its original calendar's provider state cannot follow it: details only
+the provider stores, rather than the event file (a Meet link, attachments, a
+per-event colour), stay behind. Shift+Enter is
+disabled while editing. Normal Quick Add starts empty in add mode afterwards.
 
 Editing refuses read-only calendars, recurring events, events with guests,
 multiple-event files, conflict files and unsafe paths. If the title, dates or
@@ -235,19 +239,23 @@ events cannot currently be described. Explicit years allow editing past dates.
 
 Previous versions are saved privately before replacement at
 `$OMAGENDA_STATE/edited/<sanitised-calendar-id>/<stem>.<UTC-timestamp>.ics`
-(default state directory: `~/.local/state/omagenda`). The watcher syncs updates;
-editing does not start a sync.
+(default state directory: `~/.local/state/omagenda`). A move saves its original
+source bytes under `$OMAGENDA_STATE/moved/<sanitised-calendar-id>/` before it
+removes that source. The watcher syncs updates; editing does not start a sync.
 
 ## The CLI
 
 ```bash
 omagenda describe /path/from/agenda/event.ics --json
 omagenda edit /path/from/agenda/event.ics "Dentist on Sep 17 at 3pm for 1h at Main St Clinic" --dry-run --json
+omagenda move /path/from/agenda/event.ics work --dry-run --json
 ```
 
-Remove `--dry-run` to save. An unchanged sentence writes nothing. Edit keeps
-the event's calendar and metadata; calendar moves and changes to recurrence
-or alerts are refused. Changed times use the local timezone.
+Remove `--dry-run` to save. An unchanged sentence writes nothing. Use
+`omagenda edit … --calendar work` (or a `/work` sentence tag) to combine a
+sentence edit with a move. Moves create the target first, then remove the
+source; changing recurrence or alerts is refused. Changed times use the local
+timezone.
 
 The panel uses the same CLI. Data commands support `--json`; interactive
 `account add`, the long-running `watch`, and the internal `resolve-conflict`

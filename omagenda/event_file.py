@@ -7,7 +7,7 @@ from omagenda import vdir
 
 
 def validate_event_file(event_file: str, action: str = "delete") -> tuple:
-    participle = "deleted" if action == "delete" else "edited"
+    participle = {"delete": "deleted", "edit": "edited", "move": "moved"}.get(action, action + "d")
     root_given = vdir.resolve_vdir_root().expanduser().absolute()
     root = root_given.resolve()
     given = Path(event_file).expanduser().absolute()
@@ -43,6 +43,8 @@ def validate_event_file(event_file: str, action: str = "delete") -> tuple:
     events = parsed.walk("VEVENT")
     if len(events) != 1:
         raise ValueError(f"Event file must contain exactly one VEVENT to be {participle}")
-    if action == "edit" and "ATTENDEE" in events[0]:
-        raise ValueError(f"Events with guests can't be edited from Omagenda yet; edit it in {name}'s own app")
+    # Guests are ATTENDEEs. An ORGANIZER alone is common in events Apple wrote
+    # with no invitees at all, and refusing those refuses events with no guests.
+    if action in {"edit", "move"} and "ATTENDEE" in events[0]:
+        raise ValueError(f"Events with guests can't be {participle} from Omagenda yet; {action} it in {name}'s own app")
     return path, calendar, content, events[0]

@@ -706,7 +706,12 @@ function deleteProgressHint(title, waiting) {
 // CALENDAR" when there is one writable calendar teaches the user the
 // feature is broken; withdrawing it teaches them nothing false.
 function quickAddHints(agenda, currentId, editing) {
-  if (editing) return "ENTER SAVE · ESC CANCEL"
+  if (editing) {
+    var editHints = ["ENTER SAVE"]
+    if (cycleUnavailableReason(agenda, currentId) === "") editHints.push("TAB CALENDAR")
+    editHints.push("ESC CANCEL")
+    return editHints.join(" · ")
+  }
   var base = ["ENTER SAVE", "SHIFT+ENTER SAVE AND ADD ANOTHER"]
   if (cycleUnavailableReason(agenda, currentId) === "") base.push("TAB CALENDAR")
   base.push("ESC CANCEL")
@@ -755,6 +760,13 @@ function calendarRows(agenda, queue) {
 function destinationText(agenda, id) {
   var calendar = ((agenda && agenda.calendars) || []).find(function(c) { return c.id === id })
   return "→ " + (calendar ? calendar.name : id) + (calendar && calendar.hidden ? " (hidden)" : "")
+}
+
+function moveDestinationText(agenda, id, sourceId) {
+  var destination = destinationText(agenda, id)
+  if (!sourceId || id === sourceId) return destination
+  var source = ((agenda && agenda.calendars) || []).find(function(c) { return c.id === sourceId })
+  return destination + " (moving from " + (source ? source.name : sourceId) + ")"
 }
 
 // ---------------------------------------------------------------------
@@ -815,6 +827,7 @@ if (typeof module !== "undefined") {
     visibilityFailureAfterLoad: visibilityFailureAfterLoad,
     calendarRows: calendarRows,
     destinationText: destinationText,
+    moveDestinationText: moveDestinationText,
     escapeHtml: escapeHtml,
     highlightedHtml: highlightedHtml,
     previewLine: previewLine,

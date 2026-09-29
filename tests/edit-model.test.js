@@ -12,8 +12,10 @@ test('editing requires a writable, non-recurring event without guests and a file
   assert.equal(M.eventEditable({calendars: [{...agenda.calendars[0], readOnly: true}]}, event), false)
   assert.equal(M.editReason(agenda, {...event, attendees: ['you@example.com']}), "Events with guests can't be edited from Omagenda yet; edit it in Demo's own app")
 })
-test('edit hints omit calendar cycling and save-and-add-another', () => {
+test('edit hints allow moving with Tab but omit save-and-add-another', () => {
   assert.equal(M.quickAddHints(agenda, 'demo', true), 'ENTER SAVE · ESC CANCEL')
+  const twoCalendars = {calendars: [...agenda.calendars, {id: 'work', name: 'Work', readOnly: false}]}
+  assert.equal(M.quickAddHints(twoCalendars, 'demo', true), 'ENTER SAVE · TAB CALENDAR · ESC CANCEL')
   assert.match(M.quickAddHints(agenda, 'demo', false), /SHIFT\+ENTER/)
 })
 test('save progress makes a sync-lock wait visible', () => {
@@ -29,6 +31,7 @@ function overlay() {
   const root = { text: '', prefillDate: '', editFile: '', targetCalendar: '', parsed: null,
     agenda, service: {defaultCalendar: 'demo'}, binPath: '/demo/bin/omagenda' }
   Object.defineProperty(root, 'editing', {get: () => root.editFile !== ''})
+  Object.defineProperty(root, 'effectiveCalendar', {get: () => root.targetCalendar || root.service.defaultCalendar || ''})
   const context = vm.createContext({root, Model: M, Qt: {callLater: f => f()},
     field: {get text() { return root.text }, forceActiveFocus() {}}, parseDebounce: {restart() {}},
     addProc: {running: false}, cycleNoteTimer: {restart() {}}, saveWaitTimer: {restart() {}}})
@@ -36,8 +39,9 @@ function overlay() {
   for (const name of ['open', 'openEdit', 'close', 'sentence', 'setText', 'submit', 'cycleCalendar']) root[name] = context[name]
   return context
 }
-test('Quick Add edit mode omits prefill and rejects cycling and Shift+Enter', () => {
+test('Quick Add edit mode omits prefill, moves with Tab, and passes its target', () => {
   const c = overlay()
+  c.root.agenda = {calendars: [{id: 'demo', name: 'Demo', readOnly: false}, {id: 'work', name: 'Work', readOnly: false}]}
   c.root.openEdit('/demo.ics', 'Dentist on Sep 17 at 3pm', 'demo')
   assert.equal(c.root.editing, true)
   assert.equal(c.field.cursorPosition, c.root.text.length)
@@ -45,11 +49,12 @@ test('Quick Add edit mode omits prefill and rejects cycling and Shift+Enter', ()
   c.root.prefillDate = '2026-09-20'
   assert.equal(c.root.sentence(), 'Dentist on Sep 17 at 3pm')
   c.root.cycleCalendar()
-  assert.equal(c.root.targetCalendar, 'demo')
+  assert.equal(c.root.targetCalendar, 'work')
   c.root.submit(true)
   assert.equal(c.addProc.running, false)
   c.root.submit(false)
-  assert.deepEqual(Array.from(c.addProc.command), ['/demo/bin/omagenda', 'edit', '/demo.ics', 'Dentist on Sep 17 at 3pm', '--json'])
+  assert.deepEqual(Array.from(c.addProc.command), ['/demo/bin/omagenda', 'edit', '/demo.ics', 'Dentist on Sep 17 at 3pm', '--json', '--calendar', 'work'])
+  assert.equal(M.moveDestinationText(c.root.agenda, 'work', 'demo'), '→ Work (moving from Demo)')
 })
 test('cancel makes no write and the next normal Quick Add resets to add mode', () => {
   const c = overlay()
