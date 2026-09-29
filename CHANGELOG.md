@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Move a one-off, guest-free event between writable calendars with `omagenda
+  move`, `omagenda edit --calendar`, or Tab while editing in Quick Add. The
+  destination is created with a fresh identity before the source is removed.
+
 ### Fixed
 
 - The week strip's forward arrow stays in the same place on every page. Hiding
@@ -120,8 +126,8 @@
 
 ### Known limitations
 
-- Moving events between calendars, editing events with guests, and editing or
-  deleting individual recurring occurrences are deferred. The panel/CLI refuse
+- Editing events with guests, and editing or deleting individual recurring
+  occurrences are deferred. The panel/CLI refuse
   recurring edits and deletes; Google writes of series with exception components
   are also refused. Recurrence changes may require a full calendar download.
 - Templates, Microsoft support and inline syntax highlighting are deferred.

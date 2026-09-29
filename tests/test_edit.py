@@ -217,8 +217,9 @@ class EditTest(unittest.TestCase):
         other = self.folder.parent / "other"
         other.mkdir()
         (other / "displayname").write_text("Other")
-        with self.assertRaisesRegex(ValueError, "Moving events between calendars isn't supported yet"):
-            self.edit("Checkup tomorrow 3pm /other")
+        result = self.edit("Checkup tomorrow 3pm /other")
+        self.assertTrue(result["moved"])
+        self.assertFalse(self.file.exists())
 
     def test_cli_json_dry_run_and_no_changes(self):
         # CLI uses today's real local reference, so use an unambiguous future year.

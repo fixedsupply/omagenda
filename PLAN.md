@@ -188,7 +188,6 @@ reviewers who use their own registered client.
 
 ## Backlog
 
-- Move an event to another calendar (requested by the PM 2026-09-16); edit refuses this for now.
 - Edit and delete single occurrences of recurring events.
 - Edit events with guests.
 - A themed README screenshot (the Tokyo Night image was dropped for v0.2.0 because it showed the removed calendar sets).

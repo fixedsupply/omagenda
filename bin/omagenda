@@ -3,7 +3,7 @@
 
 Resolves the omagenda/ package next to this script (so the plugin runs
 in place without installation) and dispatches subcommands: agenda, next,
-parse, add, calendars, set, account, sync, index, watch, doctor. See
+parse, add, edit, move, calendars, set, account, sync, index, watch, doctor. See
 ARCHITECTURE.md §1 and PLAN.md §6.4.
 
 Every command accepts --json for machine output and exits non-zero with a
@@ -238,16 +238,38 @@ def cmd_describe(args) -> int:
 def cmd_edit(args) -> int:
     from omagenda.edit import edit_event
 
-    result = edit_event(args.file, args.sentence, _local_reference(), args.dry_run)
+    result = edit_event(args.file, args.sentence, _local_reference(), args.dry_run, args.calendar)
     name = result.pop("name")
     if args.json:
         print(json.dumps(result))
+    elif result.get("moved"):
+        hidden = " (hidden)" if result.get("hidden") else ""
+        prefix = "Would move" if args.dry_run else "Moved"
+        print(f"{prefix} '{result['title']}' from {result['sourceName']} to {name}{hidden}.")
+    elif result.get("noOp"):
+        print(f"'{result['title']}' is already in {name}; no move needed.")
     elif not result["updated"]:
         print("No changes")
     elif args.dry_run:
         print(f"Would update '{result['title']}' in {name}: {', '.join(result['changed'])} (dry run, not written)")
     else:
         print(f"Updated '{result['title']}' in {name}.")
+    return 0
+
+
+def cmd_move(args) -> int:
+    from omagenda.move import move_event
+
+    result = move_event(args.file, args.calendar, args.dry_run)
+    name = result.pop("name")
+    if args.json:
+        print(json.dumps(result))
+    elif result.get("noOp"):
+        print(f"'{result['title']}' is already in {name}; no move needed.")
+    else:
+        hidden = " (hidden)" if result.get("hidden") else ""
+        prefix = "Would move" if args.dry_run else "Moved"
+        print(f"{prefix} '{result['title']}' from {result['sourceName']} to {name}{hidden}.")
     return 0
 
 
@@ -837,12 +859,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_describe.add_argument("--json", action="store_true")
     p_describe.set_defaults(func=cmd_describe)
 
-    p_edit = sub.add_parser("edit", help="update an event from a sentence, preserving a safety copy")
+    p_edit = sub.add_parser("edit", help="update or move an event from a sentence, preserving a safety copy")
     p_edit.add_argument("file")
     p_edit.add_argument("sentence")
+    p_edit.add_argument("--calendar", default=None, metavar="ID", help="move to this calendar as part of the edit")
     p_edit.add_argument("--dry-run", action="store_true")
     p_edit.add_argument("--json", action="store_true")
     p_edit.set_defaults(func=cmd_edit)
+
+    p_move = sub.add_parser("move", help="move a non-recurring event after creating a safety copy")
+    p_move.add_argument("file", help="event file path from agenda.json")
+    p_move.add_argument("calendar", help="destination calendar id")
+    p_move.add_argument("--dry-run", action="store_true")
+    p_move.add_argument("--json", action="store_true")
+    p_move.set_defaults(func=cmd_move)
 
     p_delete = sub.add_parser("delete", help="delete a non-recurring event after saving a safety copy")
     p_delete.add_argument("file", help="event file path from agenda.json")
