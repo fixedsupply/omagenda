@@ -548,10 +548,15 @@ Panel {
             width: parent.width
             spacing: Style.space(2)
 
+            // Both arrows stay in the Row on every page and fade out instead of
+            // hiding. An invisible item takes no space in a Row, so hiding the
+            // back arrow on the first page shifted the days left and moved the
+            // forward arrow -- clicking through weeks meant chasing it.
             PanelActionButton {
               id: previousPage
-              visible: root.stripStartKey > root.todayKey
-              enabled: visible
+              readonly property bool available: root.stripStartKey > root.todayKey
+              enabled: available
+              opacity: available ? 1 : 0
               iconText: "‹"
               tooltipText: "Previous days"
               foreground: root.foreground
@@ -661,8 +666,9 @@ Panel {
 
             PanelActionButton {
               id: nextPage
-              visible: Model.dateKey(Model.addDays(root.stripStartKey, root.dayCount)) <= root.lastDayKey
-              enabled: visible
+              readonly property bool available: Model.dateKey(Model.addDays(root.stripStartKey, root.dayCount)) <= root.lastDayKey
+              enabled: available
+              opacity: available ? 1 : 0
               iconText: "›"
               tooltipText: "Next days"
               foreground: root.foreground

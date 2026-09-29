@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The week strip's forward arrow stays in the same place on every page. Hiding
+  the back arrow on the first page shifted the days and moved the forward
+  arrow, so paging through weeks meant chasing it.
+
 ## v0.3.2 — 2026-09-19
 
 ### Fixed
